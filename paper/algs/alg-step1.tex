@@ -1,0 +1,86 @@
+\begin{algorithm}[hptb]
+\caption{The Protocol: Stage 1 - Prepare}\label{alg:step1}
+\begin{algorithmic}[1]         
+
+%\LComment{\textbf{\color{black}As an operator for the view:}}
+%\For{$\m{view}.\m{begin}$}
+%    \If{$\m{self} = \msc{operator}(\m{view})$}
+%        %\State Select $\calI_P$ from pool of interactions such that $\m{self} =\m{operator}(\calI_P, \m{view})$
+%        \State $\m{I}_v \gets \m{ixn}$ where $\m{self} =\msc{operator}(P_\m{ixn}, \m{view})$
+%        \State \Broadcast \msg[]{\txt{Prepare}, I_v} to $\msc{ctx}(\m{ixn}_v)$
+%    \EndIf
+%\EndFor
+%\item[] 
+\LComment{\textbf{\color{black}As an operator:}}
+\For{$\m{view}.\m{begin}$}
+	\If{$\m{self} = o_I$ for interaction $I$}
+		\State $\m{I}_v \gets \m{I}$
+		\State \Broadcast \msg[]{\txt{Prepare}, I_v} to $\msc{ctx}(\m{I}_v)$
+	\EndIf
+\EndFor
+\item[]	
+
+\LComment{\textbf{\color{black}As a validator in a participant $p$'s context:}}
+\For{$\m{view}.\m{begin}$}
+    \State $\m{prepares}^p \gets \{\}$
+\EndFor
+\item[]
+
+\While{$\m{prepareTimeout}$ \textbf{upon} \msg[\m{op}]{\txt{Prepare}, I}}
+    \If{$\m{op} = o_I \land p\in P_I$}
+        \State $\m{prepares}^p\gets \m{prepares^p}\cup$ \{\msg[\m{op}]{\txt{Prepare}, I}\}
+    \EndIf    
+\EndWhile
+\item[]
+
+\For{$\m{prepareTimeout}$}
+    \State \msg[\m{op}]{\txt{Prepare}, I} $= \Call{Choose}{\m{prepares}_p}$
+    %\State $\m{lockedQCs}\gets \{\m{lockedQC_v^p}\mid p\in P_I\}$
+    \State \Send \msg[]{\txt{Prepare}, \{\m{lockedQC_v^p}\mid p\in P_I\}} to $\m{op}$
+    \ForAll{\msg[\m{op}']{\txt{Prepare}, I'} $\in \m{prepares}^p\setminus\{\Call{Choose}{\m{prepares}^p}\}$}
+        \State \Send \msg[]{\txt{PrepareNil}, \m{prepares}^p} to $\m{op}'$
+    \EndFor
+\EndFor
+
+% \LComment{\textbf{\color{black}As a validator in the interaction's context:}}
+% \While{$\m{prepareTimeout}$}
+%     \ForAll{$p\in P_\m{self}$}
+%         \State $\m{prepares}_p \gets \{\}$
+%     \EndFor
+%     \For{\msg[\m{op}]{\txt{Prepare}, I}}
+%         \If{$\m{self} \in \msc{ctx}(I) \land \m{op} = \msc{operator}(P_I, \m{view})$}
+%             \ForAll{$p\in P_I\cap P_\m{self}$}
+%                 \State $\m{prepares}_p\gets \m{prepares_p}\cup$ \{\msg[\m{op}]{\txt{Prepare}, I}\}
+%             \EndFor
+%         \EndIf    
+%     \EndFor
+% \EndWhile
+% \item[]
+
+% \For{$\m{prepareTimeout}$}
+%     \State $\m{chosenPrepares}\gets\{\}$
+%     \ForAll{$p\in P_\m{self}$}
+%         \State $\m{prepare}\gets \Call{Choose}{\m{prepares}_p}$
+%         \State $\m{chosenPrepares}\gets \m{chosenPrepares}\cup \{\m{prepare}\}$
+%     \EndFor
+%     \ForAll{\msg[\m{op}]{\txt{Prepare}, I} $\in \m{chosenPrepares}$}    
+%         \State $\m{lockedQCs}\gets \{\m{lockedQC_v^p}\mid p\in P_I\cap P_\m{self}\}$
+%         \State \Send \msg[]{\txt{Prepare}, \m{lockedQCs}} to $\m{op}$
+%     \EndFor
+%     \ForAll{\msg[\m{op}]{\txt{Prepare}, I} $\in \bigcup\limits_{p\in P_\m{self}} \m{prepares_p}\setminus \m{chosenPrepares}$}
+%         \State $\m{preparesReceived} \gets \{\m{prepares}_p\mid p\in P_I\cap P_\m{self}\}$
+%         \State \Send \msg[]{\txt{PrepareNil}, \m{preparesReceived}} to $\m{op}$
+%     \EndFor
+% \EndFor
+
+%\item[]
+% \LComment{\textbf{\color{black}Procedures:}}
+% \Procedure{Choose}{$\m{prepares}$}
+%     \State $\m{operators}\gets\{\}$
+%     \ForAll{\msg[\m{op}]{\txt{Prepare}, I}$\in \m{prepares}$}
+%         \State 
+%     \EndFor
+%     \Return $\m{prepare}$
+% \EndProcedure
+\end{algorithmic}
+\end{algorithm}

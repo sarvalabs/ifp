@@ -1,0 +1,66 @@
+\begin{algorithm}
+\caption{Context Shuffling}\label{alg:shuffle}
+\begin{algorithmic}[1]
+
+% \For{$\m{epoch}.\m{end}$}
+%     \State Remove validators that exited in the previous epoch
+%     \State Assign new validators that joined over the previous epoch to available indices and new indices at the end of the list
+% \EndFor
+% \item[] 
+
+\Procedure{ShuffleContext}{$p, \m{seed}, \bbV$}
+    \State $\calC_{p}^{'} \gets \emptyset$
+    \ForAll{$\m{v} \in \calC_p$}
+        \State $\m{index} \gets \bbV.\m{index}(v)$
+        \State $\m{shuffledValidator} \gets\ $\Call{ShuffleIndex}{$\m{index}, \bbV$} 
+        \State $\calC_{p}^{'} \gets  \calC_{p}^{'} \cup \{\m{shuffledValidator}\}$
+    \EndFor 
+    \State $\calC_{p} \gets \calC_{p}^{'}$
+\EndProcedure
+\item[] 
+
+\Procedure{ShuffleIndex}{$\m{index}, \bbV$}
+    \State $n \gets |\bbV|$
+    \ForAll{$i \in \{1,2,\ldots, \m{numRounds}\}$} %\Comment{$\m{numRounds}$ is a protocol parameter}
+        \State $\m{roundSeed} \gets \m{hash}(\m{seed}||i)$
+        \State $\m{pivot} \gets \m{roundSeed} \mod n$
+        \State $\m{reflection} \gets (\m{pivot} -\m{index} + n)\mod n$
+        \If{$\m{hash}(roundSeed||index) = 1$}
+            \State $\m{swap}(\m{validator}(\m{index}), \m{validator}(\m{reflection}))$
+        \EndIf
+    \EndFor
+    \State \Return $\m{validator}(\m{index})$
+\EndProcedure
+
+
+% \Procedure{SwapOrNotShuffle}{$ \m{roundSeed}, \m{list}$} 
+%     \State $\m{n} \gets \m{len}(list)$
+%     \State $\m{pivot} \gets \m{hash}(\m{roundSeed}) \mod \m{n}$
+%     \State $\m{mirror} \gets \m{pivot}/2$
+%     \State $\m{count} \gets 0$
+%     \ForAll{$i \in (\m{mirror}, \m{pivot})$}
+%         \State $\m{count} \gets \m{count}+1$
+%         \State \Call{SwapOrNot}{$i, \m{mirror}, \m{roundSeed}, \m{count}$}
+%     \EndFor
+%     \State $\m{secondMirror} \gets \m{mirror} + n/2$
+%     \ForAll{$i \in (\m{pivot}, \m{secondMirror})$}
+%         \State $\m{count} \gets \m{count}+1$
+%         \State \Call{SwapOrNot}{$i, \m{secondMirror}, \m{roundSeed}, \m{count}$}
+%     \EndFor
+% \EndProcedure
+% \item[]
+
+% \Procedure{SwapOrNot}{$\m{index}, \m{mirror}, \m{roundSeed}, \m{count}$}
+%     \If{$\m{index} > \m{mirror}$}
+%         \State $\m{reflection} \gets \m{mirror} - (\m{index} - \m{mirror})$
+%     \ElsIf{$\m{index} < \m{mirror}$}
+%         \State $\m{reflection} \gets \m{mirror} + (\m{mirror} - \m{index})$
+%     \EndIf
+%     \State $\m{coinToss} \gets \m{hash}(roundSeed||count)[1]$
+%     \If{$\m{coinToss} \gets 1$}
+%         \State $\m{swap}(\m{validator}(\m{index}), \m{validator}(\m{reflection}))$
+%     \EndIf
+% \EndProcedure
+
+\end{algorithmic}
+\end{algorithm}

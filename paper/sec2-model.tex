@@ -1,0 +1,279 @@
+\section{Preliminaries}\label{sec:preliminaries}
+
+Two actors drive the algorithm in \codename{}. First, validators (denoted by $\bbV$), that run the protocol to reach consensus. Second, Participants ($\bbP$) that submit \textit{interactions} between each other to the validators. Each participant $p \in \bbP$ defines a fixed-size set of validators $C_p \subseteq \bbV$ ($|C_p| = n_c$) that mandatorily participate when achieving consensus for interactions involving the participant $p$. We will refer to this set of validators as its \textit{context}. The context of each participant is public and changes periodically.
+
+% In this section, we establish some definitions that are used in the rest of the paper.
+
+% %\subsection{Preliminaries}
+
+% %\subsubsection{Participant}\label{subsubsec:participant}
+% We have two different types of actors: \emph{validators} and \emph{participants}. 
+% Validators run the Krama protocol and reach consensus on interactions made between participants.
+% Let the sets of validators and participants in the network be denoted as $\bbV$ and $\bbP$, respectively. 
+% Each participant $p\in \bbP$ is assigned a fixed-size set of validators $\calC_p\subseteq \bbV$ called its \emph{context} that participate in achieving consensus on interactions involving the participant. 
+% The size of the context $|\calC_p|$ is denoted as $n_\calC$. 
+% All validators are aware of the context of each participant. 
+% Additionally, the protocol ensures that the context is updated periodically. \todo{'periodically' instead of 'epoch' because epoch not yet def.} 
+
+The state of each participant (capturing the assets of the participant) is stored by each validator. 
+Formally, we define the state of each participant as follows. 
+
+\paragraph{\textbf{State}}
+%Each participant $p\in\bbP$ has a \emph{state} $S_p$ updated through interactions.
+The \emph{state} of a participant $p$ is defined as $S_p = (l_p, \calC_p)$ where $l_p$ is the valuation of its local variables and $\calC_p$ its context as defined earlier. 
+Subsequently, $\bbS_p$ denotes the set of possible states for a participant $p$.
+We define the \emph{global state} of the network as a union of the state of all participants, $S = \bigcup_{p\in\bbP} S_p$. and $\bbS$ is the set of all possible global states.
+
+
+%At the start of the protocol, the participant states are all initialised as the genesis state.%, con with the global state containing information of the 
+
+
+%Each validator $v\in\bbV$ maintains a copy of the global state $S^v$, called its \emph{history}. 
+%Interactions performed by a participant update its participant state, represented by a tesseract, resulting in a chain of tesseracts called its \emph{participant chain}.
+%The number of tesseracts present in a participant $p$'s chain is called its \emph{height} and is denoted by $h_p$.
+
+%Thus, interactions performed by a participant results in a chain of states called its \emph{participant chain}. 
+%Each participant's chain contains a public seed in the latest tesseract that is updated when a new tesseract is committed.
+
+\paragraph{\textbf{Interaction}}
+The state of each participant (and consequently the global state) is updated through \emph{interactions} (analogous to transactions).
+Participants send interactions to the network which are processed by the validators.
+%Old - 26 May 2025
+% An interaction $I$ between a set of participants $P_I$ consists of 
+% \begin{enumerate}
+%     \item The \emph{action} $A_I$, \srinidhi{unclear what you mean here} transitioning the states of the interacting participants. It is given as a set of transition functions $A_I^p:\bbS_p\to\bbS_p$ for each $p\in P_I$. 
+%     \item Optionally, a set of validators $\calP_I$ called \emph{preferential context} \srinidhi{You need to motivate this earlier. Maybe it would make sense to restructure such that the protocol comes first.} \rishal{Yes. But might be difficult to go over the protocol without these definitions in place. Can instead move this to the interaction consensus set defn and say that Additionally, interactions include the preferential context given by the participants...} that are to be included in the consensus process for the interaction.
+% \end{enumerate}
+% \srinidhi{Validators collectively update the global state $S$ by executing an interaction as follows, ...}
+% The execution of an interaction $I$ with current global state $S$ is given by the global state transition function $\delta:\bbS\times\mathbb{I}\to \bbS$ and results in an updated global state $S'=\delta(S, I)$. 
+% Here, $\mathbb{I}$ is the set of possible interactions. \srinidhi{Move this to the definition of interactions}
+% This state transition $\delta$ is defined as follows: 
+% \begin{enumerate}
+%     \item For each $p\in P_I$, $S^{\prime}_p=A_I^p(S_p)$ is the participant state obtained on applying the action $A_I$ on $p$, and  
+%     \item For each $q\notin P_I$, $S'_q=S_q$. 
+% \end{enumerate}
+
+%New - 26 May 2025
+Formally, we define an interaction $I$ between a set of participants $P_I$ as a set of transition functions $\delta_I^p:\bbS_p\to\bbS_p$ for each $p\in P_I$. An interaction abstracts the semantics of the underlying transitions between the states of the participants involved. Naturally, each validator updates the state of all participants $p \in P_I$ by applying the corresponding transition function $S'_p = \delta_I^p(S_p)$.
+
+% For the purpose of simplicity, we assume that an interaction consists of only two participants, i.e., $|P_I|=2$. However, the abstract definition of an interaction allows the protocol to be extended to any number of participants.
+
+% The set of participants in an interaction $I$ is denoted as $P_I$.
+% Validators update the participant states $S_p$ for each interacting participant $p\in P_I$ by executing the interaction as follows. 
+% For a participant $p\in P_I$, the execution of the interaction results in the updated state $S'_p=\delta_I^p(S_p)$ obtained on application of the corresponding transition function present in the interaction. 
+% Thus, the execution of an interaction results in a set of updated participant states for the interacting participants. 
+% This is represented by a \emph{tesseract} and is described in detail below. 
+
+\paragraph{\textbf{Tesseract}}
+From a given global state $S$ and an interaction $I$, a \textit{Tesseract} $T$ represents the set of updated states for each participant involved in the interaction. Formally, $T=\{\delta_I^p(S_p)\mid p\in P_I\}$ and $\bbT$ is the set of all possible Tesseracts. Validators internally log the Tesseract for each interaction and the log serves as snapshots of the global state. The log is stored using a data structure called Multi-Linked DAG.
+
+% \srinidhi{It wouldn't hurt to use known terminology just to help the reader understand. By this point, we've already seen many new terms and the reader is left wondering what maps to what.}
+% A \emph{tesseract} represents the updated state of the interacting participants after executing an interaction, serving as a snapshot of the participant states. 
+% The execution of an interaction $I$ with global state $S$ results in the tesseract $T=\{\delta_I^p(S_p)\mid p\in P_I\}$ consisting of the updated participant states .
+% The tesseracts resulting from execution of interactions by validators result in a growing log of tesseracts called the \emph{multi-linked DAG}.
+
+\begin{figure}
+\tikzfig{mdag}
+\caption{The Multi-Linked DAG. The edge colours represent participants.}
+\label{fig:mdag}
+\end{figure}
+
+\paragraph{\textbf{Multi-Linked DAG}}
+% All validators store the \emph{multi-linked directed acyclic graph} (\emph{mDAG}) locally and is referred to as their \emph{history}. 
+%The execution of interactions result in the creation of tesseracts which are organised into a growing log of tesseracts in the network. 
+%This is organised as a \emph{multi-linked directed acyclic graph} (\emph{mDAG}).
+%Each validator stores this mDAG locally and is referred to as its \emph{history}. 
+% Tesseracts representing these states are linked to tesseracts with previous states for each interacting participant through directed edges to the previous state labeled by the participant. 
+% This graph made with nodes as tesseracts and directed edges labelled by participants forms a DAG and is referred to as the \emph{multi-linked composite DAG} or simply \emph{mDAG}. 
+Multi-Linked DAG (mDAG) of a validator $v$ is a labelled directed graph $\calG_v=(\mathbb{T}, E, \ell)$. The nodes of the graph $\bbT$ are tesseracts and the edges $E \subseteq \bbT \times \bbT$ are labeled by participants (given by $\ell: E \to \bbP$). A Multi-Linked DAG is given in \Cref{fig:mdag}.
+
+% with the set of labels $\bbP$ given by $\calG^v=(\mathbb{T}, E, \ell)$ where $\mathbb{T}$ is the set of tesseracts in the history that act as vertices, $E\subseteq \mathbb{T}\times\mathbb{T}$ is the set of directed edges given as a tuple of vertices, and $\ell:E\to\bbP$ is the edge labeling function that associates each edge with a participant. 
+
+\paragraph{\textbf{Tesseract Relationships}}
+The Tesseracts form intuitive relationships driven by the edges of the mDAG. We say $T$ is a \textit{$p$-parent} of $T'$ if there exists an edge $e=(T', T) \in E$ with the label $l(e)=p$. Conversely, $T'$ is the \textit{$p$-child} of $T$, and $T\preceq_p T'$ is the transitive closure of the \textit{parent} relationship ($T$ is a \textit{$p$-ancestor} of $T'$).
+
+Intuitively, the parent-child relationship defines a partial order on the Tesseracts. The order is crucial to break ties between two competing Tesseracts which are updating the states of a common participant $p$. Formally, we say $T$ conflicts with $T'$ for a given participant $p \in P_T \cap P_{T'}$ if neither is a \textit{$p$-ancestor} to the other.
+
+
+
+% We introduce some notions of relationships between tesseracts in the mDAG that are used in the rest of the paper. 
+% Let $T$ and $T'$ be tesseracts present in the history of a validator.
+% The tesseract $T$ is said to be a \emph{$p$-parent} of $T'$ if there exists an edge $e=(T', T)\in E$ where $\ell(e)=p$ in the mDAG. Here, $T'$ is also called a $p$-child of $T$.
+% The tesseract $T$ is said to be a \emph{$p$-ancestor} to $T'$, denoted by $T\preceq_p T'$, if there exists a path labeled by $p$ from $T'$ to $T$ in the mDAG.
+% The tesseracts $T$ and $T'$ are said to be \emph{conflicting} if there exists $p\in P_{T}\cap P_{T'}$\todo{notation unused} such that neither is a $p$-ancestor to the other. 
+
+%\srinidhi{Motivate why we need to define agree, how can it possibly diverge?}
+A tesseract $T$ corresponding to interaction $I$ is said to \emph{extend} a validator $v$'s state $S$ if $T=\{\delta_I^p(S_p)\mid p\in P_I\}$.
+A tesseract is \emph{committed} to the history of a validator by linking it with directed edges labeled by the participant to the tesseracts with the participant states of each of the interacting participants. 
+More precisely, a tesseract $T$ is committed to the history $\calG_v=(\bbT, E, \ell)$ of validator $v$, resulting in an updated history $\calG'_v=(\bbT', E', \ell')$ where %(1) $\bbT'=\bbT\cup \{T\}$, (2) $E' = E\cup \{(T, T_p)\mid p\in P_T\}$, and (3) $\ell'=\ell\cup\{((T,T_p), p)\mid p\in P_T\}$ 
+\begin{enumerate}
+    \item  $\bbT'=\bbT\cup \{T\}$, 
+    \item  $E' = E\cup \{(T, T_p)\mid p\in P_T\}$, and
+    \item $\ell'=\ell\cup\{((T,T_p), p)\mid p\in P_T\}$.
+\end{enumerate}
+Here, for each $p\in P_T$, $T_p$ is the tesseract with the participant state $S_p$ in $\calG_v$. 
+Thus, for each interacting participant $p$, the tesseracts with the earlier participant states are the $p$-parents of the committed tesseract. 
+
+
+% \paragraph{\textbf{State Retrieval}}
+% The latest state of a participant $p$ is found in the Tesseract $T_p$ that has no $p$-children. As mentioned earlier, the global state $S$ of the system is a composition of the latest Tesseracts $T_p$ for all participants $p$.
+
+% The current state of a participant is found in its latest state transition's tesseract.
+% Similarly, the current global state is the composition of all such participant states. 
+% More precisely, for a participant $p$, its current state $S_p$ in the history $\calG=(\bbT, E,\ell)$ is found in the tesseract $T_p\in\bbT$ having a $p$-parent and no $p$-children. 
+% Similarly, the current global state $S$ in the history is found in the set of such tesseracts $\{T_p\mid p\in \bbP\}$.
+
+
+\paragraph{\textbf{Height}}
+For a given Tesseract $T$, there exists many paths from it to the genesis Tesseract $G$ in the global state. However, only one unique path for a given participant $p$ exists i.e. the path with edges labelled $p$. Therefore, the height of a Tessetact is defined as a function of the participant. Formally, $T.\m{height}(p)$ is the length of the path following the edges labeled by $p$ from the Tesseract $T$ to the genesis Tesseract $G$.
+
+% In a validator's history, a tesseract can have more than one path from it to the genesis tesseract. 
+% However, it has a unique path labeled by a given interacting participant.
+%Thus, the notion of height of a tesseract is restricted to that of its 
+%In Krama, the notion of the height of a tesseract is restricted to that of its interacting participants; there is no notion of a tesseract's height as it can have more than one path to the genesis tesseract. 
+% The \emph{height} of a tesseract for an interacting participant is the length of the path labeled by the participant from the tesseract to genesis. 
+% More precisely, the height of tesseract $T$ for an interacting participant $p$ is given by the function $T.\m{height}:P_T\to\mathbb{N}$, where $T.\m{height}(p)$ for $p\in P_T$ is the height of tesseract $T$ for participant $p$.
+% At genesis, the height of all participants is zero, that is, $G.\m{height}(p)=0$ for all $p\in \bbP$ where $G$ is the genesis tesseract. 
+% The height of a tesseract $T$ for a participant $p$ is the height of its $p$-parent incremented by one, that is, $T.\m{height}(p)=T'.\m{height}(p)+1$ where $T'$ is the $p$-parent of $T$.
+%When a tesseract is committed, the height of each interacting participant is incremented by one.
+
+
+
+% \subsubsection{mDAG Properties}
+% Since the mDAG is built by committing new tesseracts as given above, the history $\calG=(\bbT, E, \ell)$ stored by a validator has the following properties, 
+% \begin{enumerate}
+%     \item If an edge $e=(T_2, T_1)$ is present in $E$ with $\ell(e)=p$ then $p\in P_{T_1}$ and $p\in P_{T_2}$ and further, $T_2$ was committed after $T_1$,
+%     \item If a tesseract $T$ is present in $\bbT$, then there exist edges $e_p$ for each $p\in P_T$ with labels $\ell(e_p)=p$ to the tesseract with the earlier participant state when $T$ was committed,
+%     \item For each tesseract $T\in \bbT$, $T$ has in-edges and out-edges labeled by $p$ if and only if $p\in P_T$.
+% \end{enumerate}
+
+
+\paragraph{\textbf{Interaction Consensus Set}}
+When a new interaction $I$ is proposed, a set of validators communicate to reach consensus on the interaction. We define the set of validators as \emph{Interaction Consensus Set} (ICS) for the interaction $I$ and is denoted as $\mathit{ICS}(I)$.
+
+The ICS consists of,
+\begin{enumerate}
+    \item The context of each interacting participant $p\in P_I$, denoted as $\calC_p$.
+    \item A \emph{stochastic set} of validators randomly sampled from the set of validators, denoted as $\calS$.
+    \item The \emph{initiating} participant of the Interaction is allowed to specify a set of validators called the \emph{preferential context} denoted as $\calP_I$ that are to be included in the consensus process for the interaction.
+\end{enumerate}
+
+The context of each participant $p \in P_I$ is sufficient to ensure that the protocol extends the latest state of each participant. However, the set is fixed and predetermined, and hence allows for bribery attacks \cite{KKZ24}. Therefore, we include as a second component a variable \emph{stochastic set} of validators randomly sampled from the set of validators. This ensures that the interaction is processed by a random subset of validators, preventing collusion and bribery attacks. 
+
+
+% \subsubsection{Interaction Consensus Set}
+% To reach consensus on an interaction $I$, the validators from the context $\calC_p$ of each interacting participant $p\in P_I$ are required to be present. 
+% Providing flexibility to the participant, the sender of an interaction $I$ can additionally provide a set of validators called the \emph{preferential context} 
+% denoted as $\calP_I$ that are to be included in the consensus process for the interaction. 
+% This incorporates the participant's trust preferences in the consensus mechanism.
+% Now, the \emph{context} of an interaction $I$, given as $\msc{ctx}(I)=\bigcup_{p\in P_I} \calC_p \cup \calP_I$ comprises of the interacting participants' contexts as well as the preferential context of the interaction. 
+% However this is vulnerable to collusion and bribery attacks as the relatively static contexts are only updated periodically.
+% Thus, to reach consensus, an \emph{interaction consensus set} (or simply, \emph{ICS}) consisting of (1) the context of each interacting participant, (2) a \emph{stochastic set} of validators randomly sampled from the set of validators, and, if mentioned, (3) the preferential context present in the interaction. 
+% The stochastic set is typically denoted by $\calS$ and is the same size as that of the participants' contexts ($n_\calC$). \todo{is size relevant?}
+% The ICS for an interaction $I$ is thus given by $\mathit{ICS}(I) = \bigcup_{p\in P_I} \calC_p \cup \calS \cup \calP_I$.  
+%In a given view, honest validators cannot engage in consensus for multiple interactions with a common participant.
+%This prevents conflicting tesseracts being committed in the common participant's chain. \srinidhi{unclear what you mean}
+
+% \begin{example}
+%     Consider two interactions $\calI_{P}$ and $\calI_{P'}$ where $P = \{p_1, p_2\}$ and $P' = \{p_3, p_2\}$. 
+%     An honest validator cannot engage in consensus for both $\calI_P$ and $\calI_{P'}$ in a given view.
+% \end{example}
+
+\paragraph{\textbf{Quorum}}
+
+A \emph{quorum} is a set of validators that can reach consensus on an interaction. In the context of our protocol, a quorum is essential for ensuring that the interaction is agreed upon by a sufficient number of validators, thereby providing resilience against Byzantine faults. 
+
+In particular, a quorum consists of supermajorities from (1) the context of each interacting participant, (2) the stochastic set, and (3) the preferential context if present where a \emph{supermajority} is a subset of $2f+1$ unique validators from the set of validators $X$ of size $n=3f+1$.
+
+
+% \subsubsection{Supermajority and Quorum}
+
+% Let $X$ be a set of validators of size $n=3f+1$.
+% For simplicity, let each subset of validators $V\subseteq\bbV$ considered in the rest of the paper be of size $s$ such that $s=3b+1$ for some positive integer $b$.
+% A \emph{supermajority} over the set $X$ is a subset of $2f+1$ unique validators. 
+% A \emph{quorum} over an ICS consists of supermajorities from (1) the context of each interacting participant, (2)  the stochastic set and (3) the preferential context if present. 
+% Similarly, a quorum over an interaction's context consists of only (1) and (3) above.
+%A \emph{quorum certificate} is obtained from a quorum of votes. 
+%A \emph{minority certificate} from an ICS is a collection of votes from one of the sets $X$ constituting the ICS with at least $f+1$ validators and a cumulative context power of $b+1$.
+%To prevent Sybil attacks in the permissionless setting, each validator is assigned a weight. 
+%The actual slightly differs from the above, with each validator having a weight to prevent Sybil attacks in the permissionless setting
+%Therefore, a supermajority is instead a collection of $2f+1$ voting shares. 
+
+\section{Model}
+\label{sec:model}
+
+We now describe the setting and the assumptions under which the protocol operates. 
+
+\subsection{Network Model}
+\subsubsection{Partial Synchrony}
+We model network communication as the partially synchronous model (introduced in \cite{DLS88}) with a known bound $\Delta$ on message delay and an unknown instant called Global Stabilisation Time (GST), such that every message sent by an honest validator at time $t$ to another honest validator arrives within time $\max (t, \m{GST})+\Delta$. 
+ 
+% \subsubsection{Quasi-Permissioned}
+% A validator is represented by its digital key. In Krama, time is divided into epochs of fixed length (say 24 hours).
+% Our protocol works in the \emph{quasi-permissioned} setting, i.e., an individual can create a new digital key pair and the validator with the digital key pair can join the protocol at the start of the next epoch subject to a successful identity verification linking the validator to the individual. 
+% Note that a single individual can have multiple validators participating in the protocol. 
+
+% \subsubsection{Quasi-Permissionless}
+
+% A validator is represented by its digital key. 
+% In Krama, time is divided into fixed-length \emph{epochs}. % of duration, say, 24 hours.
+
+% There is a set of validators running the protocol which is updated every epoch. 
+% At any given moment, individuals can create a new digital key pair and the validator with the digital key pair can join the protocol at the start of the next epoch. 
+% This is captured by the \emph{quasi-permissionless} setting given in \cite{LR24}.
+
+% \subsubsection{Trusted Setup}
+% We assume the presence of an initial participant called \emph{sarga} (Sanskrit for `genesis') with a randomly sampled context set. % generated seed present in its initial tesseract. 
+% This participant's context is used for initialisation of newly joined participants. 
+%\todo[inline]{How is the seed randomly generated? - Algorand does distributed key generation.\\ How is initial context selected?}
+
+\subsubsection{Randomness}
+We assume the presence of a \emph{distributed randomness beacon} that periodically provides random outputs to all validators. 
+
+\subsection{Cryptographic Primitives}
+
+\subsubsection{PKI and Digital Signatures}
+% Each validator has a public and secret key pair.
+% Krama uses BLS signatures introduced in \cite{BLS01} to sign messages. 
+% We assume that every message in the protocol is signed by the sender and that digital signatures are ideal. 
+% A message $m$ sent by a validator $v$ is written as \msg[v]{m}. 
+% We do not mention the sender when it is clear from the context and instead simply write \msg{m}.
+%%% Less Verbose: %%%
+Each validator has a public-secret key pair. 
+\codename{} uses BLS signatures \cite{BLS01} with ideal security assumptions. 
+All protocol messages are signed by their sender. 
+We denote a message $m$ from validator $v$ as \msg[v]{m}, or simply \msg{m} when the sender is clear from context.
+
+ \subsubsection{Verifiable Random Functions}
+% Verifiable random functions (VRFs), introduced in \cite{MVR99}, take a publicly available random seed and a validator's private key as input and generate a pseudo-random number and a corresponding proof as the output. 
+% Any validator can verify that the pseudo-random number generated by a validator corresponds to the random seed using this proof and the public key of the validator that generated the random output.
+% The VRF provides two crucial properties: (1) Pseudo-randomness---the generated number is indistinguishable from a uniformly random string by an efficient adversary when the secret key is unknown, and (2) Verifiability---with the proof given by the VRF, anyone can verify that the pseudo-random number was generated by the validator with the public key for the given seed. 
+% The VRF output is deterministic for a given seed and secret key. 
+% Hence, Byzantine validators cannot bias the randomness.
+%%% Succinct: %%%
+Verifiable random functions (VRFs) \cite{MVR99} take a public random seed and validator's secret key as input, generating a pseudo-random number and corresponding proof. 
+Any validator can verify that the pseudo-random number corresponds to the random seed using the proof and the generator's public key.
+VRFs provide two key properties: (1) Pseudo-randomness---the output is indistinguishable from a uniformly random string to efficient adversaries without the secret key, and (2) Verifiability---anyone can verify that the pseudo-random number was generated by the validator holding the public key for the given seed using the proof given by the VRF.
+The VRF output is deterministic for a given seed and secret key.
+Hence, Byzantine validators cannot bias the randomness. 
+
+% \todo[inline]{ given (1) the publicly available seed is random and cannot be controlled by the adversary and (2) the validator cannot generate new key pairs to provide him an advantage.\\Is condition (2) necessary? I read someplace that despite this VRFs should not give him an advantage.}
+
+
+\subsection{Adversary}
+% A validator is \emph{honest} if it performs tasks in accordance with the protocol and can send and receive messages according to the network model. 
+% A \emph{Byzantine} validator, however, can deviate from the protocol arbitrarily.
+% %We consider a probabilistic polynomial time \emph{adversary} that can corrupt validators, i.e., make them Byzantine. 
+% We assume that the number of Byzantine validators that can be present at any point is at most one-fifth (i.e. 20\%) of the total number of validators. 
+% This, along with our network and participant context size assumptions, ensures that with high probability, the participants' contexts have at most one-third Byzantine validators.
+% We assume the presence of an adversary that can perfectly coordinate the Byzantine nodes in any manner, including sending inconsistent messages and remaining silent. 
+% However, the adversary cannot forge digital signatures of honest validators with non-negligible probability or interfere with the guarantees of message delivery. 
+%%%% Less Verbose: %%%%%
+A validator is \emph{honest} if it follows the protocol and can send and receive messages as per the network model. 
+A \emph{Byzantine} validator deviates arbitrarily from the protocol but cannot forge honest validators' digital signatures or violate message delivery guarantees.
+We assume that every participant context and stochastic set with $n=3f+1$ validators has at most $f$ Byzantine validators. 
+% \todo[inline]{
+% We assume at most 20\% of validators are Byzantine at any time. 
+% Combined with our network and participant context size assumptions, this ensures participants' contexts and stochastic sets contain less than one-third Byzantine validators with high probability.
+% An adversary can perfectly coordinate Byzantine nodes, including sending inconsistent messages or remaining silent, but cannot forge honest validators' digital signatures or violate message delivery guarantees.
+% }

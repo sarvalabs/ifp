@@ -1,0 +1,113 @@
+\begin{breakablealgorithm}
+\caption{The Protocol: Stage 2 - Propose}\label{alg:step2}
+\begin{algorithmic}[1]         
+\LComment{\textbf{\color{black}As an operator:}}
+\For{quorum of \txt{Prepare} or \txt{PrepareNil} messages from $\msc{ctx}(\m{ixn}_v)$}
+    \State $P\gets\{p\mid \mathrm{received\ supermajority\ of\ \txt{Prepare}\ messages\ from\ \calC_p}\}$
+    \State $M\gets$ quorum of \txt{Prepare} messages from $\bigcup\limits_{p\in P}\calC_p$
+    % \ForAll{$p\in P_{\m{ixn}_v}$}
+    %     \If{received supermajority of \txt{Prepare} messages $M'$ from $\calC_p$}
+    %         \State $Q \gets Q\cup \{p\}$
+    %         \State $M\gets M\cup M'$
+    %     \EndIf
+    % \EndFor
+    \State $\m{prepareQC} \gets \msc{QC}(M)$
+    \State $\m{qcSet}_v \gets \msc{LockedQCs}(\m{prepareQC})$
+     \State \Call{RemoveOutdated}{$\m{qcSet}_v$}
+    
+    %\If{$\exists$ distinct $\m{qc}_1, \m{qc}_2 \in \m{qcSet}_v : \m{qc}_1.\m{stage} = \m{qc}_2.\m{stage} = \m{prevote}$}
+        %\LComment{\textbf{\color{black}Conflicting prevote locks detected, propose nil}}
+        %\State $T \gets \m{nil}$
+    \If{$\exists$ unique $\m{qc} \in \m{qcSet}_v : \m{qc}.\m{stage} = \m{vote} \land \m{qc}.\m{participants} = P$}
+        %\LComment{\textbf{\color{black}Single prevote lock matching current participant set}}
+        \State $T \gets \msc{Tesseract}(\m{qc}.\m{ixn})$
+    \ElsIf{$\nexists \m{qc} \in \m{qcSet}_v : \m{qc}.\m{stage} = \m{vote}$}
+        %\LComment{\textbf{\color{black}No prevote locks, extend from highest committed states}}
+        %\State $\m{highQCSet}_v \gets \{\m{qc} \in \m{qcSet}_v \mid \m{qc} = \m{highQC}_p \text{ for some } p \in \msc{participants}(\m{ixn}_v)\}$
+        \State $\calI' \gets \msc{ExtendCommitted}(\m{qcSet}, \calG_v, P)$
+        \State $T \gets \msc{Tesseract}(\calI')$
+    \Else
+        \State $T \gets \m{nil}$
+    \EndIf
+    \State \Call{Propose}{$T, \m{prepareQC}$}
+\EndFor
+\item[] 
+
+\LComment{\textbf{\color{black}As a validator in the ICS:}}
+\For{\msg{\txt{Propose}, T, \m{prepareQC}, \calS, \m{rand}, \m{proof}, \m{view}} from $o_T$}
+    \State $\m{qcSet}_v \gets \msc{UniqueLockedQCs}(\m{prepareQC})$
+    % \If{$T=\m{nil}$}
+        
+    % \EndIf
+    \If{$ T \neq \m{nil} \land \msc{ValidPropose}(T, \m{qcSet}_v, \calS, \m{rand}, \m{proof}, \m{view})$}
+        % \State \Call{UpdateState}{$o_T, T, \msc{ICS}(T, \calS)$}
+        \State \textbf{send} \msg{\txt{Vote}, T, \m{view}_v} to $\m{operator}_v$
+    \EndIf
+    % \State $\msc{UpdateLocks}(\m{prepareQC})$
+\EndFor
+\item[]
+
+\For{\msg{\txt{Propose}, \m{nil}, \m{prepareQC}, \m{view}} from $\m{op}$}
+    % \State $\msc{UpdateLocks}(\m{prepareQC})$
+    \State Terminate engaging in consensus for the interaction
+\EndFor
+\item[]
+
+\LComment{\textbf{\color{black}Procedures:}}
+\Procedure{Propose}{$T, \m{prepareQC}$}
+    \If{$T=\m{nil}$}
+        \State \Broadcast \msg{\txt{Propose}, T, \m{prepareQC}, \m{view}_v} to $\msc{ctx}(T)$   
+    \Else
+        \State $(\calS_v, \m{rand}_v, \m{proof}_v) \gets$ \Call{SelectStochastic}{$T, \m{view}_v$}
+        % \State \Call{UpdateState}{$\m{self}, T, \msc{ICS}(T, \calS_v)$}
+        \State \Broadcast \msg{\txt{Propose}, T, \m{prepareQC}, \calS_v, \m{rand}_v, \m{proof}_v, \m{view}_v} to $\msc{ICS}(T, \calS_v)$   
+    \EndIf
+\EndProcedure
+\item[] 
+
+%\Procedure{UpdateState}{$\m{op}, T, \m{ICS}$}
+%   \State $\m{operator}_v \gets \m{op}$
+%   \State $\m{tesseract}_v \gets T$
+%    \State $\m{ICS}_v \gets \m{ICS}$
+%\EndProcedure
+%\item[]
+
+% \Procedure{RemoveOutdatedQCs}{$\m{qcSet}$}
+%     \State $\msc{ComputeHighQCs}(\m{qcSet})$
+%     %\State $\{\m{maxHeightPrecommit}_p\mid \exists \m{qc}\in \m{qcSet} : p\in \m{qc}.\m{participants}\} \gets \msc{MaxHeight}(\m{qcSet}_v, \m{precommit})$
+%     %\State $\m{maxHeightPrevote}_v \gets \msc{MaxHeight}(\m{qcSet}_v, \m{prevote})$
+%     \ForAll{$\m{qc} \in \m{qcSet}$ such that $\m{qc}.\m{stage} = \m{vote}$}
+%         \ForAll{$p \in \m{qc}.\m{participants}$}
+%             \If{$\m{qc}.\m{height}(p) \leq \m{highCommitQC}_p.\m{height}(p) \lor \m{qc}.\m{height}(p) < \m{highVoteQC}_p.\m{height}(p)$}
+%                 \State $\m{qcSet} \gets \m{qcSet} \setminus \{\m{qc}\}$
+%                 \State \textbf{break}
+%             \ElsIf{$\m{qc}.\m{height}(p) = \m{highVoteQC}_p.\m{height}(p) \land \m{qc}.\m{view} < \m{highVoteQC}_p.\m{view}$}
+%                 \State $\m{qcSet} \gets \m{qcSet} \setminus \{\m{qc}\}$
+%                 \State \textbf{break}
+%             \EndIf
+%         \EndFor
+%     \EndFor
+% \EndProcedure
+%\item[]
+
+% \Procedure{getUniqueLockedQCs}{$\m{prepareQC}$}
+%     \State $\m{qcSet} \gets \emptyset$
+%     \ForAll{$\m{lockedQC} \in \m{prepareQC}$}
+%         \If{$\m{lockedQC}.\m{ixn} \notin \{\m{qc}.\m{ixn} \mid \m{qc} \in \m{qcSet}\}$}
+%             \State $\m{qcSet} \gets \m{qcSet} \cup \{\m{lockedQC}\}$
+%         \EndIf
+%     \EndFor
+%     \State \Return $\m{qcSet}$
+% \EndProcedure
+% \item[]
+% \Procedure{getMaxHeight}{$\m{qcSet}, \m{stage}$}
+%     \State $\m{maxHeight} \gets$ map initializing all heights to $-\infty$
+%     \ForAll{$\m{qc} \in \m{qcSet}$ such that $\m{qc}.\m{stage} = \m{stage}$}
+%         \For{all $p \in \m{qc}.\m{participants}$}
+%             \State $\m{maxHeight}_p \gets \max(\m{maxHeight}_p, \m{qc}.\m{height}(p))$
+%         \EndFor
+%     \EndFor
+%     \State \Return $\m{maxHeight}$
+% \EndProcedure
+\end{algorithmic}
+\end{breakablealgorithm}

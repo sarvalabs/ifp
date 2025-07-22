@@ -1,0 +1,75 @@
+\section{Related Work}
+\label{sec:relatedwork}
+
+% Github copilot generated this section, with some tweaking, from the references.
+
+Recent years have witnessed significant advancements in distributed ledger technologies, particularly in the design of consensus protocols and scalable blockchain architectures. Early systems such as Bitcoin~\cite{Nakamoto09} introduced decentralized payment networks, while Ethereum~\cite{But15} extended this vision to general-purpose smart contracts, enabling a broader range of decentralized applications. As the adoption of blockchains has grown, so has the need for scalable, secure, and decentralized consensus mechanisms.
+
+Consensus protocols in blockchains can be broadly categorized into longest-chain protocols, such as those in the Ouroboros family~\cite{KRDO17, DGKR18, BGKRZ18} and Snow White~\cite{DPS19}, and protocols inspired by classical Byzantine Fault Tolerance (BFT) research~\cite{Bra87, LSP82, CL99}. The latter category includes modern protocols like Tendermint~\cite{BKM18}, Algorand~\cite{GHMVZ17}, Hotstuff~\cite{YMRGA19}, and Fast-Hotstuff~\cite{JNFG23}, primarily motivated by PBFT~\cite{CL99}, which leverage round-based consensus with rotating leaders to improve performance and robustness. Avalanche~\cite{Roc20} represents a distinct approach, employing metastable consensus through repeated sampling without a designated leader. Comprehensive surveys such as~\cite{BS+19} provide an overview of these developments.
+
+AptosBFT~\cite{Aptos22} and Sui~\cite{Sui22} are recent protocols that extend the Hotstuff family, focusing on high throughput and low-latency consensus by leveraging parallel execution and advanced mempool designs. Both systems employ a global consensus protocol to order transactions and achieve scalability by decoupling execution from consensus, allowing for efficient processing of independent transactions. In contrast, \codename{} departs from the global ordering paradigm by associating a set of validators with each participant and maintaining a separate chain per participant. Rather than relying on a single global consensus instance, \codename{} commits multi-participant transactions across the relevant chains, enabling parallelism without requiring a total order on all transactions.
+
+Committee-based consensus protocols have emerged as a means to enhance scalability and efficiency. In these systems, a subset of validators (the committee) is selected to participate in consensus for a given period or instance~\cite{ZMR18, GHMVZ17, PS17}. Dynamic committee formation, as adopted in our protocol, allows multiple consensus instances to proceed in parallel, further improving throughput.
+
+Sharding is another prominent technique for scaling blockchains, wherein the network is partitioned into multiple shards, each processing a subset of transactions independently~\cite{KJ+17, SPW19, Zil17, Har}. While sharding increases throughput, it introduces challenges in cross-shard communication and state management. In contrast, our approach associates a set of validators with each participant, maintaining a separate chain per participant and committing multi-participant transactions across relevant chains. Unlike state sharding, all validators in our protocol maintain the entire system state, simplifying consistency and security guarantees.
+
+Finally, while Krama employs a multi-linked Directed Acyclic Graph (DAG) structure to record validator states, it differs fundamentally from DAG-based consensus protocols such as DAG-Rider~\cite{KKNS21}, Bullshark~\cite{SGSK22}, and Cordial Miners~\cite{KNPS22}, which decouple block dissemination from total ordering. In Krama, the DAG serves as a local log of states to be agreed upon, rather than as a mechanism for achieving consensus itself.
+
+% Additional related works:
+% - HoneyBadgerBFT~\cite{Miller16} for asynchronous BFT consensus.
+% - Red Belly Blockchain~\cite{RedBelly18} for scalable BFT consensus.
+% - Chainspace~\cite{Al-Bassam18} for sharded smart contract platforms.
+% - Elastico~\cite{Luu16} as an early sharding protocol.
+% - Spanner~\cite{Corbett12} and Google’s TrueTime for global consistency in distributed systems.
+% - Hyperledger Fabric~\cite{Androulaki18} as a permissioned blockchain with pluggable consensus.
+% - Libra/DiemBFT~\cite{Baudet20} for production-grade BFT consensus in payment systems.
+% - Narwhal and Tusk~\cite{Danezis22} for separating mempool and consensus layers.
+% - Sui~\cite{Sui22} and Aptos~\cite{Aptos22} for recent advances in parallel execution and consensus.
+
+% \subsection{Blockchains and Consensus}
+% - Vision started with payment systems - Bitcoin \cite{Nakamoto09}. 
+
+% - Then a general purpose smart contracts platform - Say Ethereum whitepaper from 2014/15 \cite{But15}.
+
+% - Adding these above because part of the vision behind Krama is that day to day interactions will be done more in the blockchain and hence more validators joining provides more decentralised trust (Perhaps refer to \cite{DMR20} - not sure how relevant of a paper this is - unfamiliar with that side of literature) 
+
+% - A good survey paper from 2019 is \cite{BS+19}. \rishal{not aware of a similar paper from more recent times.}
+
+% - BFT consensus protocols for blockchains are of largely two types 
+
+% (1) longest chain protocols inspired by nakamoto consensus - Ouroboros family \cite{KRDO17, DGKR18, BGKRZ18}, Snow White \cite{DPS19} 
+
+% (2) protocols inspired by BFT research from the 20th century for a long time with works such as \cite{Bra87}, \cite{LSP82}, PBFT \cite{CL99} - examples include Tendermint\cite{BKM18}, Algorand\cite{GHMVZ17}, Hotstuff\cite{YMRGA19}, Fast-Hotstuff\cite{JNFG23} - typically round based with a rotating leader 
+
+% One interesting family of consensus protocols here is Avalanche\cite{Roc20} which is leaderless and uses repeated sampling to reach a decision - 'metastable consensus'.
+
+% - Our protocol is also in this line of 'BFT-type' protocols, related to the Hotstuff family of protocols, specifically Fast-Hotstuff.
+
+% - Write about Fast-Hotstuff and its two phase normal non-pipelined protocol and how it uses proof of highest QC in the proposal to improve over Hotstuff's three phases during normal operation.
+
+% Among such protocols, in cases, a committee is randomly sampled and the decision is reached among this global committee 
+
+% \subsection{Committees}
+
+% - Committee based consensus - A good survey of this is done in the literature overview of \cite{ZMR18}. Other examples include Algorand\cite{GHMVZ17}, Hybrid Consensus \cite{PS17}
+
+% Our protocol uses committees formed dynamically for each consensus instance several of which can run in parallel. 
+
+% \subsection{Shards}
+
+% One approach to increase throughput as validators increase is to have multiple fixed committees of nodes called shards that process transactions in parallel in different chains with each shard having its own chain whose txns it processes - throughput increase being a multiple (\# of shards) of what it originally was per shard. 
+
+% - Sharding - Examples include Omniledger\cite{KJ+17},  Nightshade\cite{SPW19} - Near protocol's sharding, Zilliqa\cite{Zil17}, Harmony\cite{Har} whitepapers
+% Cross shard communication etc gets really complicated - No issues like that in Krama. 
+% Can only shard communication and transaction validation or shard the blockchain state as well in addition. 
+% Participant agnostic. 
+
+% In Krama, we have a set of validators associated with each participant, with each participant having its own chain and tesseracts with multiple participants being committed in each of their chains unlike sharding where transactions are only processed in its relevant shard. 
+% Krama's consensus naturally involves each of these sets associated with participants. 
+% Further, all validators maintain the entire state unlike state sharding. 
+
+
+% \subsection{DAG-based Consensus}
+% The multi-linked DAG in Krama is not to be confused with DAG based consensus protocols such as DAG-Rider, Bullshark\cite{SGSK22}, and Cordial Miners\cite{KNPS22} that separate the block dissemination mechanism from the task of totally ordering the chain. (\rishal{unsure of latest work in DAG based consensus. I am not very familiar with this in general. }) 
+% The multi-linked DAG is the log of states stored by each validator that is to be agreed upon by the protocol. 
+

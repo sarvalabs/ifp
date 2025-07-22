@@ -1,0 +1,26 @@
+\begin{algorithm}[hptb]
+\caption{The Protocol: Stage 3 - Vote}\label{alg:step3}
+\begin{algorithmic}[1]
+
+\LComment{\textbf{\color{black}As the interaction's operator:}}
+\For{quorum of \txt{Vote} messages $M$ from $\m{ICS}_v$}
+% \msg{\txt{PreVote}, \m{interaction}_v, \m{viewNumber}_v}
+    \State $\m{voteQC} \gets $ \sc{QC}($M$)
+    % \State Aggregate the quorum of votes into $\m{prevoteQC}$
+    \State \Broadcast \msg{\txt{Vote}, \m{tesseract}_v, \m{view}_v, \m{voteQC}} to $\m{ICS}_v$
+\EndFor
+\item[]
+
+\LComment{\textbf{\color{black}As a validator in the ICS:}}
+\For{\msg{\txt{Vote}, \m{tesseract}_v, \m{view}_v, \m{voteQC}} from $\m{operator}_v$}
+    \ForAll{$p\in P_{\m{tesseract}_v}$ such that $\m{self}\in \calC_p$}
+        \State $\m{lockedQC}_v^p \gets \m{voteQC}$
+    \EndFor
+    \State \textbf{send} \msg{\txt{Commit}, \m{tesseract}_v, \m{view}_v} to $\m{operator}_v$
+    %\EndIf
+\EndFor
+
+
+\end{algorithmic}
+\end{algorithm}
+

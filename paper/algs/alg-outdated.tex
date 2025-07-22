@@ -1,0 +1,24 @@
+\begin{algorithm}[hptb]
+\caption{Removing outdated locks}\label{alg:outdated}
+\begin{algorithmic}[1]         
+
+\Procedure{RemoveOutdatedQCs}{$\m{qcSet}$}
+     \State $\msc{ComputeHighQCs}(\m{qcSet})$
+     %\State $\{\m{maxHeightPrecommit}_p\mid \exists \m{qc}\in \m{qcSet} : p\in \m{qc}.\m{participants}\} \gets \msc{MaxHeight}(\m{qcSet}_v, \m{precommit})$
+     %\State $\m{maxHeightPrevote}_v \gets \msc{MaxHeight}(\m{qcSet}_v, \m{prevote})$
+     \ForAll{$\m{qc} \in \m{qcSet}$ such that $\m{qc}.\m{stage} = \m{vote}$}
+         \ForAll{$p \in \m{qc}.\m{participants}$}
+             \If{$\m{qc}.\m{height}(p) \leq \m{highCommitQC}_p.\m{height}(p) \lor \m{qc}.\m{height}(p) < \m{highVoteQC}_p.\m{height}(p)$}
+                 \State $\m{qcSet} \gets \m{qcSet} \setminus \{\m{qc}\}$
+                 \State \textbf{break}
+             \ElsIf{$\m{qc}.\m{height}(p) = \m{highVoteQC}_p.\m{height}(p) \land \m{qc}.\m{view} < \m{highVoteQC}_p.\m{view}$}
+                 \State $\m{qcSet} \gets \m{qcSet} \setminus \{\m{qc}\}$
+                 \State \textbf{break}
+             \EndIf
+         \EndFor
+     \EndFor
+ \EndProcedure
+\item[]
+
+\end{algorithmic}
+\end{algorithm}

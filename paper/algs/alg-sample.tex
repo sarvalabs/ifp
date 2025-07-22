@@ -1,0 +1,19 @@
+\begin{algorithm}[hptb]
+\caption{Sampling the Stochastic Set}\label{alg:sample}
+\begin{algorithmic}[1]         
+
+\Procedure{SelectStochastic}{$T, \m{view}$}
+    %\State $P \gets \msc{participants}(\calT)$
+    \State $\mathit{\bbV'} \gets \bbV\setminus\bigcup\limits_{p\in P_T}\calC_p$
+    \State $\m{seed} \gets \mathrm{XOR}(\,\m{hash}(T), \msc{random}(\m{view})\,)$
+    \State $(\m{rand}, \m{proof}) \gets \mathit{VRF}(\mathit{seed}, \mathit{sk}_\self)$ 
+    \State $\calS \gets \emptyset$
+    \ForAll{$i \in \{1,2,\ldots,n_\calS\}$}
+        \State $\m{index} \gets \m{hash}(\m{rand}||i)$ \Comment{$\m{index} \in [1, n_V]$}
+        \State $\calS \gets \calS \cup \{\m{\bbV'}[\m{index}]\}$
+    \EndFor
+    \State \Return $(\calS, \m{rand}, \m{proof})$
+\EndProcedure
+
+\end{algorithmic}
+\end{algorithm}

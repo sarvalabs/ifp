@@ -1,0 +1,236 @@
+\section{Analysis}
+\label{sec:analysis}
+
+In this section, we describe and prove the safety and liveness properties of \codename{}.
+
+To recall, \codename{} accepts interactions $I$ (analogous to transactions) that result in Tesseracts $T$ (analogous to blocks) being committed by validators. We follow the traditional definitions of safety and liveness in the context of blockchains,
+
+\begin{theorem}[Safety]
+    Between two conflicting Tesseracts $T$ and $T'$, every honest validator will commit at most one of them.
+\end{theorem}
+
+\begin{theorem}[Liveness]
+    In each view beginning after GST, in each maximal set of overlapping consensus instances with honest operators, at least one interaction is successfully committed by all honest validators within a bounded time $\tau$.
+\end{theorem}
+
+To show that \codename{} satisfies both Safety and Liveness, we rely on a key guarantee of the context shuffling and stochastic set sampling mechanisms used in the protocol.
+
+\begin{assumption}[Random Sampling Assumption]
+    The stochastic set sampling and context shuffling mechanisms used in \codename{} ensure that with high probability, the sampled set of validators contains strictly less than one-third Byzantine validators.
+\end{assumption}
+
+We satisfy the above assumption by using a hypergeometric distribution to sample a fixed-size set of validators from the total validator pool. We refer the reader to the Appendix for a detailed probabilistic analysis.
+
+% \subsection{Guarantees}
+% We now define the properties achieved by Krama with respect to the histories stored by validators. 
+
+% The following properties are achieved by Krama when all participant contexts and sampled stochastic sets have less than one-third Byzantine validators. 
+% This setting is obtained with high probability as demonstrated below in \Cref{subsec:probanalysis}.
+
+% \paragraph*{Safety} 
+% Two conflicting tesseracts cannot both be committed by honest validators.
+
+% \paragraph*{Liveness}
+% In each view beginning after GST, in each maximal set of overlapping consensus instances with honest operators, at least one interaction is successfully committed by all honest validators within a bounded time $T$.
+% % \\ In each view after GST, in every set of overlapping interactions for which Prepare messages are sent, at least one interaction is successfully committed by all honest validators.  
+% % \\ After GST, in every set of consensus instances with overlaps where each of the instances is led by an honest operator, at least one of them successfully leads to a consensus decision.
+% % \\ After GST, every proposal by honest operators or a conflicting tesseract is eventually committed by all honest validators. 
+
+% The rest of this section is devoted to showing that the above guarantees are achieved. 
+
+% \subsection{Random Sampling}\label{subsec:probanalysis}
+% We first provide a probabilistic analysis of random sampling used in Krama. 
+% We randomly sample a subset of validators in two key areas: (1) stochastic set formation, and (2) context updation.
+% In both instances, the fundamental process involves randomly sampling a fixed-size set of validators without replacement from the total validator pool.
+% We demonstrate that, with high probability, the sampled set of validators contains strictly less than one-third Byzantine validators.
+
+% Consider a set of $N$ validators with $B$ Byzantine faults. 
+% The number of Byzantine validators $b$ in a random sample of $n$ validators from the above can be given as follows.
+% The probability distribution of the number of Byzantine faults in the sampled set is given by the hypergeometric distribution. The hypergeometric distribution is appropriate in this context as it models the probability of selecting a certain number of "successes" (in this case, Byzantine validators) from a finite population without replacement. 
+% The probability mass function of the hypergeometric distribution for this analysis is given by:
+% $$P(b = k) = \frac{ {B \choose k} {N-B \choose n-k} }{ {N \choose n} }$$
+% The probability that the stochastic set has less than one-third Byzantine faults can be calculated by using the cumulative distribution function of the hypergeometric distribution. On calculating for a network of 1000 validators, of which one-fifth are Byzantine (according to our assumptions), for $n=67$, the required probability is $0.99682$. 
+%The context power used as a weight for each validator in the network can be assumed to be reasonably uniformly distributed among the validators. This is ensured by tokenomics, restricting accumulation of context power by a single individual. Thus, it follows that with high probability, the stochastic set chosen has less than one-third of its context power held by Byzantine validators. 
+
+% Thus, the assumptions made in the protocol to ensure the protocol satisfies safety and liveness are met with high probability for the above parameters.
+% In our implementation, the size of participants' contexts and the stochastic set, $n_\calC = 67$ and hence the above analysis accurately captures the protocol's implementation parameters.
+% In the following analysis, we assume that this is the setting in which the protocol is operating.
+
+\subsection{Safety}
+The analysis of safety of \codename{} is inspired by the analysis of Fast-Hotstuff's safety in \cite{JNFG23}.
+
+Starting from the quorum intersection property, we first show that only one of two conflicting Tesseracts are voted for by honest validators. Then, we show that once a \emph{supermajority} of validators vote for a Tesseract, it is guaranteed that the Tesseract will be committed in either this or later rounds therefore preserving safety.
+
+% In this section, we prove safety of the Krama protocol. 
+% The structure of our analysis is inspired by Fast-Hotstuff's analysis given in \cite{JNFG23}.
+
+\begin{lemma}[Quorum Intersection Property]\label{lem:qcintersection}
+    Let $S$ be a set of $n=3f+1$ validators, with at most $f$ Byzantine faults.
+    For any two supermajorities over the set of validators $S$, we have at least one honest validator in common. 
+\end{lemma}
+
+
+% \begin{proof}
+%     Let $M_1$ and $M_2$ be two supermajorities over $S$. 
+%     Since a vote supermajority consists of $n-f$ validators by definition, $2(n-f)=2n-2f=n+f+1$. Therefore, any two supermajorities have at least $f+1$ validators in common. As the number of Byzantine faults is at most $f$, the result follows. 
+% \end{proof}
+
+\begin{lemma}\label{lem:conflictimpliesdiffslot}
+    If there are two valid $\m{commitQCs}$ for two conflicting tesseracts $T$ and $T'$ then $\msc{view}(T)\neq \msc{view}(T')$.
+\end{lemma}
+\begin{proof}
+    We prove by contradiction. 
+    Suppose, there exist two QCs $\m{commitQC}$ and $\m{commitQC}'$ for the tesseracts $T$ and $T'$ formed during the same view.
+    Since the tesseracts $T$ and $T'$ are conflicting, there exists a participant $p\in P_T\cap P_{T'}$.
+    Therefore, by definition of a Tesseract's ICS, $\calC_p\subseteq ICS(T)$ as well as $\calC_p\subseteq ICS(T')$. 
+    Now, by \Cref{lem:qcintersection}, we have an honest validator $v\in \calC_p$ that is a part of both QCs.
+    However, honest validators do not vote for multiple tesseracts involving the same participant. 
+    Hence, the result follows by contradiction.
+\end{proof}
+
+
+\begin{lemma}\label{lem:highestqc} 
+    If an honest validator has received $\m{precommitQC}$ for tesseract $T$ then the corresponding $\m{prevoteQC}$ will be a $lockedQC$ part of the \txt{Prepare} messages obtained by the operator in the next consensus instance for each participant $p\in P_T$.
+\end{lemma} 
+\begin{proof}
+    If an honest validator received a $\m{precommitQC}$, then the validators whose \txt{PreCommit} messages comprise the quorum certificate have received $\m{prevoteQCs}$. % was received by an honest validator in the view, a quorum of validators from its ICS had sent \txt{PreCommit} messages. 
+    Therefore, a quorum of validators are locked onto the $\m{prevoteQC}$. 
+    Now, consider the next view with a consensus instance containing a participant $p\in P_T$.
+    During the Prepare stage, say the operator obtains a supermajority of \txt{Prepare} messages from $p$'s context.
+    Note that the quorum of validators locked onto the $\m{prevoteQC}$ consists of a supermajority of votes from $p$'s context.
+    Therefore, by \Cref{lem:qcintersection} there exists an honest validator $v\in\calC_p$ that is present in both of the above supermajorities.
+    %Now, for the next view, the operator will receive a quorum of \txt{Prepare} messages containing $\m{lockedQC}$s in the prepare stage. 
+    %Since a quorum contains a supermajority of votes from each interacting participant $p$'s context, by \Cref{lem:qcintersection} there exists an honest validator $v\in\calC_p$ that is present in both of the above quorums.
+    This validator sends the $\m{prevoteQC}$ as its locked QC in the \txt{Prepare} message and is therefore obtained by the operator. 
+\end{proof}
+Thus, tesseracts previously committed by honest validators are learned by operators during the prepare stage at the start of each view.
+
+\begin{theorem}
+    Two conflicting tesseracts cannot both be committed by honest validators.
+\end{theorem}
+\begin{proof}
+    An honest validator commits a tesseract only upon receiving a valid $\m{precommitQC}$. 
+    From \Cref{lem:conflictimpliesdiffslot}, it follows that the conflicting tesseracts' $\m{precommitQC}$s were formed in different views. 
+    Thus, without loss of generality, consider two conflicting tesseracts $T$ and $T'$ with a participant $p\in P_T\cap P_{T'}$ where $\msc{view}(T)<\msc{view}(T')$. 
+    For tesseract $T'$ to conflict with $T$, it has to extend an ancestor of $T$. 
+    However, by \Cref{lem:highestqc}, we know that the operator for the subsequent view with an interaction for participant $p$ after $\msc{view}(T)$ will have the $\m{prevoteQC}$ formed for tesseract $T$ as part of its $\m{prepareQC}$
+    The operator, while determining which interaction to propose, thus considers the above $\m{prevoteQC}$ as well. 
+    In this procedure by the operator, there are two outcomes for this QC: it can be removed from the set of locked QCs or it can stay as part of the set. %, the operator can either remove this QC be removed from the set of locked QCs or not. 
+    If it is not removed, then the proposal has to be a $p$-child to tesseract $T$ based on the protocol rules that proposals must satisfy. 
+    If it is removed, then the proposal has to extend the latest state of each of the interacting participants, and therefore it will be a $p$-child of the committed tesseract $T$.
+    Thus in both cases the resulting proposal is a $p$-child of $T$ and therefore $T'$ cannot extend an ancestor of $T$.
+    Moreover, operators cannot forge a $\m{prepareQC}$ for $T'$ since validators verify the quorum certificates. 
+    Hence, the result follows.
+    % From \Cref{lem:highestqc}, we know that the $\m{prepareQC}$ for the tesseract $T'$ contains at least one $\m{prevoteQC}$ for the previously committed tesseract $T$. 
+    % This $\m{prevoteQC}$ would have been obtained by the operator from the participant $p$'s context.
+    % In the procedure for determining the interaction to propose, either the $\m{prevoteQC}$ would be filtered or not. 
+    % If the $\m{prevoteQC}$ is not filtered, then the proposal has to be a $p$-child to tesseract $T$. 
+    % However, if the $\m{prevoteQC}$ is filtered, then the proposal has to extend the latest state of each of the interacting participants, and therefore it will be a $p$-child of the committed tesseract $T$. 
+    % Thus in both cases the tesseract $T'$ is a $p$-child of $T$ and hence cannot be conflicting with $T$. 
+    % Note that operators cannot forge a $\m{prepareQC}$ for $T'$ since validators verify the quorum certificates and digital signatures are assumed to be ideal. 
+    % Further, honest validators send a \txt{PreVote} only if the proposed tesseract is valid based on the proposal procedure undertaken by the operator with $\m{prepareQC}$.
+    % Hence, the result follows.
+\end{proof}
+
+% \begin{theorem}
+%     Two conflicting tesseracts cannot be committed by honest validators.
+% \end{theorem}
+% \begin{proof}
+%     Case 1: The validators are the same. Follows from above lemma.
+%     Case 2: Validators are different. By \Cref{lem:conflictimpliesdiffslot}, T was committed in a view earlier than T'. Thus, in a view between v and v', during the next active view, By \Cref{lem:highestqc}, the proposal has to extend T. Therefore, the view in which T' would have been committed, has to extend the proposal that extended T, if it was present. However, this implies that T' is a descendant of T. Thus, no conflicts. 
+
+%     Just make this the above lemma. 
+% \end{proof}
+
+%Thus, Krama satisfies safety given that at least one set of validators in the ICS have strictly less than one-third of its validators Byzantine. This is achieved with high probability as given in \Cref{subsec:probanalysis}.
+
+\subsection{Liveness}
+\label{subsec:liveness}
+
+A key novelty of \codename{} is the use of consensus instances that are updating disconnected parts of the global states - or participant sets. Therefore, a global liveness property should ensure first that among the many overlapping consensus instances, at least one succeeds in committing a Tesseract.
+
+To illustrate, consider a set of overlapping consensus instances, each with a different set of participants. As described in~\cref{fig:overlaps}, we have 4 concurrent consensus instances with participants $p,q,r,$ and $s$ -- $\{p,q\}, \{q,r\}, \{p,r\},$ and $\{r,s\}$. Here, the consensus instances $\{p,q\}$, $\{q,r\}$, and $\{p,r\}$ overlap with each other. Yet, \codename{} cannot ensure that among these set of overlapping consensus instances, at least one instance will successfully commit. Since the validators associated with $p$, $q$, and $r$ can choose to respond to the consensus instance $\{p,q\}$, $\{q,r\}$, or $\{p,r\}$, they may not all agree on a single instance required to achieve a quorum.
+
+However, the maximal set of overlapping consensus instances is $\{p,q\}, \{q,r\}, \{p,r\},$ and $\{r,s\}$, as the instance $\{r,s\}$ overlaps with $\{q,r\}$ and $\{p,r\}$. In this case, \codename{} ensures that at least one of the consensus instances in the maximal set will successfully commit a Tesseract. Recall that in the \txt{Prepare} phase of \codename{}, validators pick a prepare message to respond from the set of overlapping consensus instances using the $\msc{Choose}()$ function. By ensuring that the $\msc{Choose}()$ function deterministically orders the consensus instances and picks the highest one among them, we can guarantee that at least one consensus instance in a maximal set of overlapping consensus instances will be chosen by all participants in the context of the participants in the maximal set.
+
+Formally, we define overlapping consensus instances and maximal sets of overlapping consensus instances as follows.
+
+\begin{definition}[Overlapping Consensus Instance]
+    A consensus instance is said to be overlapping with another if they share at least one participant in their participant sets.
+\end{definition}
+
+\begin{definition}[Maximal Set of Overlapping Consensus Instances]
+    A maximal set of overlapping consensus instances is a set of consensus instances such that every instance in the set overlaps with at least one other instance in the set, and no additional instance can be added to the set without violating the overlap condition.
+\end{definition}
+
+% \begin{example}\label{ex:overlaps}
+% 	Consider a set of four participants $p,q,r$ and $s$ with consensus instances defined by the participant sets $\{p,q\}, \{q,r\}, \{p,r\},$ and $\{r,s\}$ (See \Cref{fig:overlaps}).
+% 	Here, for instance, the consensus instances given by $\{p,q\}$ and $\{q,r\}$ overlap as they have $q$ in common. 
+% 	The set of consensus instances given by $\{p,q\}, \{q,r\},$ and $\{p,r\}$ is not maximal here as the consensus instance with $\{r,s\}$ can be added as it overlaps with $\{q,r\}$ and $\{p,r\}$.
+% \end{example}
+
+\begin{figure}
+
+\tikzfig{overlaps}
+\caption{A maximal set of overlapping consensus instances. Vertices represent participants and edges represent consensus instances. Here, the set of black consensus instances is not maximal.}
+\label{fig:overlaps}
+\end{figure}
+
+% Toward guaranteeing that at least a single consensus instance achieves a quorum among a maximal set of overlaps, the $\msc{Choose}()$ function used by validators is as follows.
+% Among a set of overlapping consensus instances, $\msc{Choose}()$ deterministically orders the consensus instances and picks the highest one.
+% To demonstrate how this achieves the guarantee, consider a maximal set of overlapping consensus instances. 
+% Here, each participant's context, chooses from the subset of instances containing the participant. 
+% Therefore, among a maximal set of overlaps, the highest instance in the order defined by $\msc{Choose}()$ is chosen by each of its participants' contexts.  
+% However, this is not true among a non-maximal set of overlaps.
+% For instance, in \Cref{ex:overlaps}, let the order among the consensus instances be $I_{pq}< I_{qr}< I_{pr}<I_{rs}$.
+% Here, validators in the context of participants $p, q, r$, and $s$ choose $I_{pr}, I_{qr}, I_{rs},$ and $I_{rs}$ respectively. 
+% Note that among the non-maximal set of instances given in black, none are chosen by both its participants.
+% This leads to the below result. 
+
+Prior to proving liveness, we first show that in each maximal set of overlapping consensus instances with honest operators, at least one consensus instance successfully obtains a quorum of \txt{Prepare} messages from each of its participants' contexts. Subsequently, we use the lemma to show that at least one interaction among a maximal set will eventually be successfully committed by all honest validators.
+
+\begin{lemma}\label{lem:prepareOverlap}
+    In each maximal set of overlapping consensus instances with honest operators, at least one consensus instance successfully obtains a quorum of \txt{Prepare} messages from each of its participants' contexts. 
+\end{lemma}
+\begin{proof}
+    Consider a view after GST with a maximal set of overlapping consensus instances led by honest operators. 
+    Let $P$ be the union of all the participant sets in the consensus instances. 
+    Validators in each context $\calC_p$ for $p\in P$, choose a single consensus instance from the \txt{Prepare} messages they have received. 
+    Let $\m{prepares}_p$ be the set of \txt{Prepare} messages received by validators in $\calC_p$.
+    Since the operators are honest, all validators in a participant's context receive the same set of \txt{Prepare} messages as operators broadcast them to the entire context. 
+    Validators make the choice of a consensus instance to respond to by ordering the \txt{Prepare} messages that they have received. 
+    This order is based on view randomness and is thus common to all context validators for participants in $P$. 
+    Consider the consensus instance that is the maximum element in the order. 
+    Each of its participant set context validators will choose it as it is the highest among the \txt{Prepare} messages they have received as it is the maximum element. 
+    Further, since the set of overlapping consensus instances is maximal, there is no other consensus instance that intersects with any of the instances in the given set. 
+    Therefore, the consensus instance that is maximum in the order successfully obtains a quorum.
+\end{proof}
+
+\input{algs/alg-outdated}
+
+Additionally, during the \txt{Prepare} stage for a given participant set $P$, Byzantine validators can send outdated \txt{Vote} locks in whose place other tesseracts have been committed in participants not in $P$ to prevent the operator from making a proposal due to the presence of more than one \txt{Vote} locked tesseract. 
+Therefore, it is crucial for liveness that such outdated information is removed from the locks obtained. 
+This is accomplished by the $\msc{RemoveOutdated}()$ procedure given in \Cref{alg:outdated} that we describe below.
+The outdated locks are removed by comparing with the maximum height locks obtained for each participant present in the locked tesseracts. 
+The outdated vote QCs are filtered by removing those where:
+     \begin{enumerate}
+         \item A participant $p$ in the QC has a commit QC with atleast the same height for the participant
+         %the same height or higher in some precommit stage QC by comparing with $maxHeightPrecommit_p$ for the participant, or
+         \item A participant $p$ in the QC has a vote QC higher for the participant
+         %higher height in some other prevote stage QC by comparing with $maxHeightPrevote_p$.
+     \end{enumerate}
+This ensures that vote locks that have been superseded by committed tesseracts are ignored.
+
+\begin{theorem} 
+    %In a view after GST, every tesseract proposed by honest operators, or another conflicting tesseract is eventually committed by all honest validators. 
+    In each view beginning after GST, in each maximal set of overlapping consensus instances with honest operators, at least one interaction is successfully committed by all honest validators within a bounded time $T$.
+\end{theorem}
+\begin{proof}
+    By \Cref{lem:prepareOverlap}, in the given scenario, at least one consensus instance obtains a quorum of \txt{Prepare} messages and therefore proceeds to make a proposal. 
+    The outdated locked QCs received in the quorum of \txt{Prepare} messages are removed by the operator using the $\msc{RemoveOutdatedQCs}()$ procedure.
+    This ensures that Byzantine validators cannot prevent proposals being made by sending outdated locks for tesseracts with different participant sets.
+    Therefore, a tesseract extending the latest locks is proposed as per the $\msc{ExtendCommitted}()$ function ensuring safety. 
+    During this view, validators in the ICS can successfully commit the proposal as supermajorities of \txt{Vote} and \txt{Commit} messages are formed during the respective stages, since message delay is bounded by $\Delta$ and the length of the view is assumed to be sufficiently long for the voting rounds' communication to occur between the operator and validators. 
+    Here, supermajority of votes are formed as validators send \txt{Vote} messages if the proposed tesseract is the result of the proposal determining procedure run by the operator, as given in \Cref{validpropose}
+        Validators not in the ICS commit the tesseract upon receiving it from the operator.
+\end{proof}

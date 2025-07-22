@@ -1,0 +1,188 @@
+%Written by Rishal S P 
+%Almost the entire document's text was edited slightly and rewritten based on suggestions by Notion AI to improve clarity.
+%This was done on 18th Oct 2024 and 21st Oct 2024. 
+
+\documentclass[acmsmall, screen, nonacm, anonymous]{acmart}
+%review,
+%\documentclass[acmsmall,nonacm,anonymous]{acmart}
+
+\usepackage[capitalise]{cleveref}
+\usepackage{graphicx}
+\let\Bbbk\relax
+\usepackage{amsmath, amssymb}
+\usepackage{amsthm}
+
+%\usepackage[hidelinks]{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocodex} 
+%both packages for making algorithm figs
+\usepackage{caption}
+\usepackage{todonotes} %[disable]
+%\usepackage[appendix=inline]{apxproof}
+\usepackage{apxproof}
+%\renewcommand{\appendixprelim}{\clearpage \section*{Appendix}} 
+\usepackage{tikz}
+ \usepackage{tikzit}
+ \input{figures/styles.tikzstyles}
+
+
+\bibliographystyle{alpha}% the mandatory bibstyle
+
+\title{Krama: Participant-Centric Consensus for Blockchains}
+
+%Listed Alphabetically on last name
+%\author{Rahul Lenkala}{Sarva Labs}{rahul@sarva.ai}{}{}
+
+%\author{Srinidhi Nagendra}{Max Planck Institute for Software Systems, Germany}{hello@srinidhin.com}{}{}
+
+%\author{S~P~Rishal}{Sarva Labs}{rishal@sarva.ai}{}{}
+
+%\Copyright{Rahul, Srinidhi, and S~P} %TODO mandatory, please use full first names. LIPIcs license is "CC-BY";  http://creativecommons.org/licenses/by/3.0/
+
+%\keywords{Blockchain, Byzantine-fault tolerance, State machine replication, Consensus, Participant-centric consensus, Context }
+%
+%\category{} %optional, e.g. invited paper
+%
+%\relatedversion{} %optional, e.g. full version hosted on arXiv, HAL, or other respository/website
+%%\relatedversiondetails[linktext={opt. text shown instead of the URL}, cite=DBLP:books/mk/GrayR93]{Classification (e.g. Full Version, Extended Version, Previous Version}{URL to related version} %linktext and cite are optional
+%
+%%\supplement{}%optional, e.g. related research data, source code, ... hosted on a repository like zenodo, figshare, GitHub, ...
+%%\supplementdetails[linktext={opt. text shown instead of the URL}, cite=DBLP:books/mk/GrayR93, subcategory={Description, Subcategory}, swhid={Software Heritage Identifier}]{General Classification (e.g. Software, Dataset, Model, ...)}{URL to related version} %linktext, cite, and subcategory are optional
+%
+%%\funding{(Optional) general funding statement \dots}%optional, to capture a funding statement, which applies to all authors. Please enter author specific funding statements as fifth argument of the \author macro.
+%
+%%\acknowledgements{I want to thank \dots}%optional
+%
+%%\nolinenumbers %uncomment to disable line numbering
+%
+%%Editor-only macros:: begin (do not touch as author)%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\EventEditors{John Q. Open and Joan R. Access}
+%\EventNoEds{2}
+%\EventLongTitle{42nd Conference on Very Important Topics (CVIT 2016)}
+%\EventShortTitle{CVIT 2016}
+%\EventAcronym{CVIT}
+%\EventYear{2016}
+%\EventDate{December 24--27, 2016}
+%\EventLocation{Little Whinging, United Kingdom}
+%\EventLogo{}
+%\SeriesVolume{42}
+%\ArticleNo{23}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\calP}{\mathcal{P}}
+\newcommand{\calC}{\mathcal{C}}
+\newcommand{\calV}{\mathcal{V}}
+\newcommand{\calI}{\mathcal{I}}  
+\newcommand{\calO}{\mathcal{O}}  
+\newcommand{\calH}{\mathcal{H}}
+\newcommand{\calE}{\mathcal{R}}
+\newcommand{\calR}{\mathcal{R}}
+\newcommand{\calD}{\mathcal{P}}
+\newcommand{\cald}{\mathcal{C}}
+\newcommand{\calS}{\mathcal{S}}
+\newcommand{\calB}{\mathcal{B}}
+\newcommand{\calT}{\mathcal{T}}
+\newcommand{\calG}{\mathcal{G}}
+\newcommand{\ICS}{\mathit{ICS}}
+\newcommand{\cnt}{\mathit{cnt}}
+\newcommand{\stake}{\mathit{power}}
+\newcommand{\QC}{\mathit{QC}}
+\newcommand{\self}{\mathit{self}}
+\newcommand{\success}{\mathit{success}}
+\newcommand{\failure}{\mathit{failure}}
+\newcommand{\seed}{\mathit{seed}}
+\newcommand{\rand}{\mathit{rand}}
+\newcommand{\hash}{\mathit{hash}}
+%\newcommand{\proof}{\mathit{proof}}
+\newcommand{\VRF}{\mathit{VRF}}
+\newcommand{\totalStake}{\mathit{totalPower}}
+\newcommand{\power}{\mathit{power}}
+\newcommand{\totalPower}{\mathit{totalPower}}
+\newcommand{\economicValue}{\mathit{economicValue}}
+\newcommand{\socialValue}{\mathit{socialValue}}
+\newcommand{\work}{\mathit{work}}
+\newcommand{\workDelta}{\mathit{workDelta}}
+\newcommand{\socialDelta}{\mathit{socialValueDelta}}
+\newcommand{\sk}{\mathit{sk}}
+\newcommand{\pk}{\mathit{pk}}
+\newcommand{\ang}[1]{$\langle \mathrm{#1} \rangle$}
+\newcommand{\msg}[2][]{$\langle #2 \rangle_{#1}$}
+\newcommand{\txt}[1]{\texttt{#1}}
+\newcommand{\m}[1]{\mathit{#1}}
+\newcommand{\msc}[1]{\mathrm{\textsc{#1}}}
+\newcommand{\tsc}[1]{\textsc{#1}}
+\newcommand{\msgt}[2][]{$\langle \texttt{#2} \rangle_{#1}$}
+\newcommand{\angt}[1]{$\langle \mathrm{\texttt{#1}} \rangle$}
+\newcommand{\twothird}{\frac{2}{3}}
+%\newcommand{\Pr}{\mathit{Pr}}
+\newcommand{\GST}{\mathit{GST}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+
+\newcommand{\Upon}{\textbf{upon }}
+\newcommand{\From}{\textbf{from }}
+\newcommand{\while}{\textbf{while }}
+\newcommand{\Do}{\textbf{do }}
+\newcommand{\Respond}{\textbf{respond }}
+\newcommand{\Start}{\textbf{start }}
+\newcommand{\Broadcast}{\textbf{broadcast }}
+\newcommand{\Send}{\textbf{send }}
+\newcommand{\Schedule}{\textbf{schedule }}
+\newcommand{\true}{\textbf{true }}
+\newcommand{\false}{\textbf{false }}
+\newcommand{\IndState}[1][1]{\State\hspace{#1\algorithmicindent}}
+\algrenewcommand\algorithmicfor{\textbf{upon}}
+\algrenewcommand\algorithmicwhile{\textbf{until}}
+%\algrenewcommand\algorithmicforall{\textbf{for}}
+\mathchardef\mhyphen="2D
+\newcommand{\bbV}{\mathbb{V}}
+\newcommand{\bbP}{\mathbb{P}}
+\newcommand{\bbS}{\mathbb{S}}
+\newcommand{\bbT}{\mathbb{T}}
+\newcommand{\frakP}{\frak{P}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+
+\makeatletter
+\newenvironment{breakablealgorithm}
+  {% \begin{breakablealgorithm}
+   \begin{center}
+     \refstepcounter{algorithm}% New algorithm 
+     \hrule height.8pt depth0pt \kern2pt% \@fs@pre for \@fs@ruled
+     \renewcommand{\caption}[2][\relax]{% Make a new \caption
+       {\raggedright\textbf{\fname@algorithm~\thealgorithm} ##2\par}%
+       \ifx\relax##1\relax % #1 is \relax
+         \addcontentsline{loa}{algorithm}{\protect\numberline{\thealgorithm}##2}%
+       \else % #1 is not \relax
+         \addcontentsline{loa}{algorithm}{\protect\numberline{\thealgorithm}##1}%
+       \fi
+       \kern2pt\hrule\kern2pt
+     }
+  }{% \end{breakablealgorithm}
+     \kern2pt\hrule\relax% \@fs@post for \@fs@ruled
+   \end{center}
+  }
+\makeatother
+\setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
+\setlength{\parindent}{0pt}
+
+\input{macros}
+%%%%%%END OF PREAMBLE%%%%%%%%%%
+\begin{document}
+    \begin{abstract}
+    \end{abstract}
+    \maketitle
+    \input{sec1-intro}
+    \input{sec2-model}
+    \input{sec3-protocol}
+    \input{sec4-blockchain}
+    \input{sec5-analysis}
+    \input{sec6-relatedwork}
+    \input{sec7-conclusion}
+    \bibliography{references}
+\end{document}
+\endinput

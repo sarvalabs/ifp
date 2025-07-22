@@ -1,0 +1,25 @@
+\subsection{Blockchain Semantics}
+\label{sec:blockchain} 
+
+The protocol described above is agnostic to the underlying blockchain semantics. Here we describe the semantics of \emph{interactions} and \emph{Tesseracts} in the context of a blockchain.
+
+\subsubsection{Genesis tesseract}
+
+The genesis tesseract introduces a special participant $\msc{Sarga}$ (Sanskrit for `genesis') that is responsible for maintaining the state of the blockchain. The context of $\msc{Sarga}$ is involved in initialising the context of new participants joining the system. %contains the contexts of all the participants in the system.
+
+\subsubsection{New participants}
+
+%When a new participant $p$ joins the system, it is added to the context of $\msc{Sarga}$ via an interaction that updates the state of $\msc{Sarga}$ to include the context of $p$. When the interaction is committed, the new participant is allowed to be part of further interactions.
+When a new participant $p$ joins the system, its context is initialised via an interaction agreed upon by the context of $\msc{Sarga}$.% that updates the state of $\msc{Sarga}$ to include the context of $p$. 
+When the interaction is committed, the new participant is allowed to be part of further interactions.
+
+\subsubsection{Context updates between epochs}
+
+\codename{} pre-determines the context of each participant at the start of an epoch. However, when validators fail and no longer participant in \emph{consensus instances}, 
+the interactions of the corresponding participants may get blocked due to the lack of a quorum. To mitigate such scenarios, \codename{} allows for special interactions - \emph{context updates} - on $\msc{Sarga}$ to update the context of a participant $p$ in the middle of an epoch. This is done by creating a new interaction that updates the context of $p$ in $\msc{Sarga}$'s state.
+
+Validators when voting on \emph{context updates}, additionally verify that marked validators are indeed faulty or unresponsive.
+
+\subsubsection{Quasi-permissionless}
+
+The reconfiguration protocol allows for validators to be added or removed from the system during epoch transitions, with the entire set of validators $\bbV$ in an epoch considered active. Therefore, \codename{} is characterized as a \emph{quasi-permissionless} blockchain as per the definition in~\cite{LR24}.

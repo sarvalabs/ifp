@@ -1,0 +1,588 @@
+\section{The Protocol}
+\label{sec:protocol}
+
+\codename{} protocol proceeds in a sequence of \emph{epochs}, each lasting for a fixed duration. Within each epoch, validators operate in a \emph{normal mode} where they reach consensus on Tesseracts containing the latest state of interacting participants.
+Between epochs, validators enter a \emph{reconfiguration mode} to update the validator list and prepare for the next epoch.
+
+In this section, we first describe the normal operation of the protocol, detailing how validators reach consensus on Tesseracts within an epoch. Subsequently, we outline the reconfiguration mode, which occurs between epochs to update the validator list and prepare for the next epoch. At the begining of each epoch, the validators are ordered globally and synchronized to the same view.
+
+\subsection{Normal mode}
+
+Each epoch is divided into a sequence of fixed-length \emph{views}, where each view lasts for a duration of $\m{viewLength}$. Validators determine their current view using their local clock, referencing the time of the previous epoch transition. Validators receive interactions from participants and attempty to reach consensus on Tesseracts within each view.
+
+Unlike other consensus protocols, \codename{} allows for multiple interactions to be executed and agreed upon within a single view, provided that the participant sets of these interactions are mutually disjoint. This means that validators can reach consensus on multiple Tesseracts in parallel, each involving different participants i.e. have multiple \emph{consensus instances} running simultaneously. Note that executing multiple consensus instances in parallel is different from batching them together as a single block, as is done in traditional blockchain protocols. In \codename{}, each interaction results in a Tesseract that is agreed upon and committed independently.
+
+\subsubsection{Operators}
+
+Each \textit{consensus instance}, involving an interaction $I$ is driven by a designated \emph{operator} $O_I$. \codename{} picks operators deterministically, thereby ensuring that all validators agree on the same operator. For example, one method would be to choose the operator from the context of the participants in a round-robin manner with a deterministic tie breaker among the participants.
+
+Once an operator is chosen, each \textit{consensus instance} proceeds in a sequence of four stages: \txt{Prepare}, \txt{Propose}, \txt{Vote}, and \txt{Commit}.
+
+\input{algs/alg-step1}
+\subsubsection{Prepare}
+
+As defined in~\cref{alg:step1}, the operator initiates the \txt{Prepare} phase by sending a \txt{Prepare} message to the \emph{interaction's context}. This message contains the interaction and serves as a discovery mechanism for validators in the context to respond with their latest state information. We refer to the participant contexts of an interaction $I$ together as the \emph{interaction's context} denoted $\msc{ctx}(I)$. In the \txt{Prepare} phase, each validator (in the context of a participant $p$) collects \txt{Prepare} messages from operators and until a timeout is reached, at which point it chooses a single \txt{Prepare} message to respond to, ensuring that they are participating in a single consensus instance for participant $p$. This is accomplished by the $\msc{Choose}()$ function. However, note that the validator may have responded to multiple \txt{Prepare} messages for different participants in other consensus instances. For the remaining messages, validators respond with a \txt{PrepareNil} message. 
+
+The operator collects responses from validators until a quorum of either \txt{Prepare} or \txt{PrepareNil} messages are obtained, at which point it can propose a Tesseract that extends the latest states of the participants from whose contexts a quorum of successful \txt{Prepare} responses are obtained. 
+
+
+\subsubsection{Propose}
+
+\cref{alg:step2} describes the \txt{Propose} stage of the protocol. Among the responses to the \txt{Prepare} messages obtained, the operator identifies the highest states and removes the outdated state information. This is accomplished by the function $\msc{RemoveOutdated}()$. The operator then proposes a Tesseract that extends these states and sends a \txt{Propose} message by forming an ICS by sampling a stochastic set along with the interaction's context. 
+
+In the first view of the very first epoch, the operator may not have any previous state information to extend. In this case, the operator can propose a Tesseract that contains only the interaction itself, without extending any previous states.
+
+Note that the extension is possible if there is no existing Tesseract that has been already agreed upon by the validators in prior views. If such a Tesseract exists, then the operator will re-propose the same Tesseract, ensuring that the consensus instance is consistent with the previous state. 
+Further, the proposal is made only for Tesseracts with the same participant set from which the latest state information was obtained.
+
+Validators accept the proposal only if it is \emph{valid}, resulting from the extension of states after removing outdated ones. %They respond to the operator with a \txt{Vote} message.
+%Once the operator receives a \emph{supermajority} of \txt{Propose} messages, it forms a \emph{quorum certificate} (QC) and sends a \txt{Vote} message to the interaction's context. This QC represents the operator's commitment to the proposed Tesseract.
+
+% In this section, we describe our protocol Krama in detail. 
+% Krama operates in one of two modes: normal mode within each epoch and a reconfiguration mode between epoch transitions. 
+% % We first detail the normal operation of our protocol and then the epoch reconfiguration procedure. 
+% In what follows, we first establish some basic terminology and proceed to describe the protocol during normal operation and we conclude by detailing epoch reconfiguration. %describe the two modes in detail after establishing some basic terminology.
+\input{algs/alg-step2}
+
+\input{algs/alg-step3}
+
+\input{algs/alg-step4}
+
+\subsubsection{Vote and Commit}
+
+
+The next two stages of the protocol are \txt{Vote} and \txt{Commit} phases, as described in \cref{alg:step3} and \cref{alg:step4} respectively. Validators that accept a proposal respond with a \txt{Vote} message and refrain from voting on other tesseracts with the same participant set. Once a quorum of validators accept the proposal, the operator forms a \emph{quorum certificate} (QC) of the \txt{Vote} responses and broadcasts it to the ICS. Validators on receiving this \emph{lock} onto the Tesseract and pass it in any subsequent \txt{Prepare} phases. This lock represents the validator's commitment to the proposed Tesseract. 
+They further respond to the operator with a \txt{Commit} message and the operator, upon receiving a quorum of such messages, forms a quorum certificate and sends a \txt{Commit} message to the ICS as well as the entire validator set. 
+Validators then commit the Tesseract to their histories and lock onto the QC. 
+
+\subsection{Reconfiguration mode}
+
+At the beginning of each epoch, validators enter a \emph{reconfiguration mode} to update the validator list and prepare for the next epoch. This reconfiguration process is crucial for maintaining the integrity and security of the protocol, as it allows validators to join or leave the network and ensures that the validator set remains up-to-date.
+
+Two steps outline the reconfiguration process: validator list updation and context shuffling. The former updates the list of validators for the next epoch, while the latter ensures that the contexts of the validators are shuffled to prevent collusion and bribery attacks.
+
+\subsubsection{Validator list updation}
+
+During the epoch, validators may signal to the network their intent to leave or join. The requests are registered and updated in the local state at the beginning of the next epoch. Additionally, the ordering between validators are updated based on the latest validator list.
+
+\subsubsection{Context shuffling}
+
+The context of each participant will remain fixed for the duration of the epoch. However, at the beginning of each epoch, the context of each validator is shuffled to ensure that validators cannot collude with each other or engage in bribery attacks.
+The shuffling procedure follows the swap-or-not shuffle described in \cite{HMR12}, which is also detailed in the Ethereum 2.0 specifications and technical handbook \cite{Edg25}. This shuffle allows for the computation of the shuffled position of a single index in a list without requiring the entire list to be shuffled, making it efficient for the protocol's needs.
+% \input{algs/alg-shuffle}
+% This section describes the reconfiguration procedure during epoch transitions. 
+% This procedure is initiated towards the end of each epoch. 
+% %Validators joining after the start of this procedure are included only at the subsequent epoch's end.
+
+
+% \subsubsection{Validator List Updation}
+% The epoch reconfiguration procedure begins by removing validators who expressed a desire to leave Krama from the validator list. Simultaneously, validators who wished to join are added. This process results in a new list of validators, denoted as $\bbV$, for the upcoming epoch. This list is determined by the validator changes observed during the epoch.
+
+% \subsubsection{Context Shuffling}
+% When a participant performs its first interaction in a new epoch, the interaction's operator modifies it to include an updated context as part of the state transition. 
+% An ICS formed using the interacting participants' contexts from the previous epoch is used to agree upon the resulting tesseract.
+% %The resulting tesseract is agreed upon by an ICS formed using the interacting participants' contexts from the previous epoch. 
+% This updated context is then employed for the remainder of the epoch to agree on the participant's interactions.
+% The procedure done by the operator to compute the new context is given below. 
+% The remainder of this section details the procedure undertaken by the operator to compute the new context. 
+
+% The swap-or-not shuffle described in \cite{HMR12} is used to update the context. 
+% %The context is updated by the swap-or-not shuffle described in \cite{HMR12} originally in the context of building enciphering schemes. 
+% A description of the same is also present in the Ethereum 2.0 specifications and its technical handbook \cite{Edg25}. 
+% An important property of this shuffle is that it can compute the shuffled position of a single index in a list without requiring to shuffling the entire list.  
+% This is particularly advantageous as the protocol shuffles only a single participant's context at any given time, which consists of only a few indices. 
+% The shuffling process requires a pseudo-random seed sourced from the distributed randomness beacon as input.%, which is sourced from the distributed randomness beacon. 
+
+% The shuffle occurs over multiple rounds, with each round proceeding as follows. 
+% First, a pivot index is randomly selected.
+% A mirror index is determined by the pivot along which the reflection of the index to be shuffled is computed.
+% A random decision is made whether or not to swap the index and its mirror.
+% If swapping, the validators in both indices exchange positions; otherwise, the process moves on to the next round.
+% The hash of the input seed concatenated with the round number serves as the randomness required for selecting the pivot. 
+% The randomness required for selecting the pivot each round is given by the hash of the input seed by concatenated with the round number. 
+% The decision to swap or not is determined by the hash of the input seed concatenated with both the round number and the index to be shuffled. 
+% The pseudocode for the above procedure is given in \Cref{alg:shuffle}.
+
+% \subsubsection{Context Reset}
+
+% Participants in Krama can initiate a special interaction requesting their context to be monitored due to inactivity of context validators.
+% %In Krama, participants have the option to initiate a special interaction requesting monitoring of their context due to inactivity of context validators. 
+% This process unfolds as follows. 
+
+% Validators, upon receiving this type of interaction, perform an additional check to determine if the time elapsed since the previous tesseract formation indicates a sufficiently high probability of context validator unavailability.
+% This interaction is agreed upon by an ICS with sarga's context. 
+% Validators, upon receiving the resulting tesseract monitor the liveness of the participant's context validators at regular intervals for a specified period. 
+% During this monitoring period, if the context validators are found unavailable, validators broadcast a vote for resetting the participant's context.
+% Otherwise, they vote against it.
+% A separate context reset logic present with each validator manages this process.
+% The participant can query the context reset logic to determine if a supermajority of votes favour resetting their context.
+% On receiving a supermajority, the participant can broadcast a \emph{context reset} interaction. 
+% This interaction includes sarga and similar to the regular context shuffling procedure during epoch reconfiguration, the participant's context is shuffled, agreed upon, and the resulting tesseract is committed.
+
+% \subsubsection{Validator Weights}
+% In the actual implementation of Krama, validators have weights that determine their voting power to prevent Sybil attacks, see \cite{PS17b}. 
+% Thus, the protocol slightly differs from the above, with the definition of a supermajority, and the stochastic set sampling and context shuffling procedures using the validators' weights.
+% %Thus, a supermajority over a set of validators with total weight $w=3b+1$ is a subset of validators with total weight $2b+1$.
+% %Further, the protocol slightly differs from above with the stochastic set sampling and context shuffling procedures using the validators' weights.
+% This gives validators with more weight a higher chance to participate in consensus.
+
+\subsection{Utility methods}
+
+\subsubsection{Operator selection}
+
+Deterministic selection of the operator for an interaction is crucial for ensuring that all validators agree on the same operator. This selection is based on the participant set of the interaction and the current view. The operator is chosen from the context of the participants in a round-robin manner, ensuring that each participant has a chance to drive consensus in different views.
+
+% Each participant is designated a publicly known validator called an \emph{operator} to drive consensus in each view. 
+% Operators for a view are selected from the participant's context validators using round-robin assignment to views within an epoch. 
+% This mapping is established during reconfiguration at the epoch's beginning.
+% We denote the operator for participant $p$ in view $v$ as $\msc{operator}(p,v)$.
+% For an interaction $I$ in view $v$, the set of operators for the interacting participants is $\mathcal{O}_I=\{\msc{operator}(p,v)\mid p\in P_I\}$.
+% A deterministic procedure selects a single operator from $\mathcal{O}_I$ to drive consensus for interaction $I$, denoted by $\msc{operator}(P_I, v)$.
+
+\subsubsection{Stochastic set of validators}
+
+\input{algs/alg-sample}
+
+To decide on an interaction, the operator needs to form an ICS. A key component is the stochastic set of validators. The operator samples uniformly according to~\cref{alg:sample} after excluding the validators part of a participant's context. The sample is associated with a proof obtained from a verifiable random function (VRF) to ensure that the sampling is verifiable by other validators.
+
+
+% is sampled uniformly at random from all validators excluding those in the interacting participants' contexts. 
+% This random sampling minimizes bribery and collusion attacks by requiring attackers to corrupt a significant proportion of the entire validator set.
+% %Further, the condition requiring a quorum to consist of a supermajority of votes from each set in the ICS including the stochastic set ensures that such attacks made only towards the participants' contexts do not affect safety.
+
+% The stochastic set is sampled as follows. 
+% First, eligible validators are computed by excluding those in the interacting participants' contexts. 
+% A seed is generated by XORing the tesseract hash with the view's random number from the distributed randomness beacon.
+% The operator runs a VRF with this seed, producing a pseudo-random output and proof. 
+% The stochastic set of $n_\calC$ validators is selected from eligible validators using $n_\calC$ random numbers generated by hashing the pseudo-random output concatenated with sequential digits. 
+
+% Validators can verify the stochastic set by repeating the operator's steps using the pseudo-random output. 
+% The VRF's verifiability property allows verification of the pseudo-random output using the proof and operator's public key.
+
+\subsubsection{Accepting the proposal for an interaction}\label{validpropose}
+
+Each validator that is part of a \emph{consensus instance} receives a proposal from the operator and has to decide whether to accept or reject the proposal. 
+The decision is based on the following criteria:
+
+\begin{enumerate}
+    \item The validator belongs to the corresponding ICS formed with the interacting participants' contexts and the stochastic set. 
+    %\item The quorum certificate $\m{prepareQC}$ is valid.
+    \item The sender is the valid operator for the tesseract. 
+    \item The validator did not \txt{Vote} on a different tesseract with any of the interacting participants during the current view. 
+    \item The proposed tesseract is the valid output of the state extension procedure undertaken by the operator. 
+    %\item The proposed tesseract extends the validator's state.
+    \item The proposed stochastic set contains validators sampled according to the stochastic set selection procedure. 
+\end{enumerate}
+
+The logic for checking the criteria is abstracted in the function $\msc{ValidPropose}()$ in the pseudocode.
+
+% \subsubsection{Initialisation of New Participants}
+
+% A newly joined participant's context is initialised through a special interaction agreed upon by sarga's operator, who forms an ICS with sarga's context and a stochastic set. 
+% This stochastic set becomes the new participant's context. 
+% Upon agreement, the tesseract is committed by linking it to sarga's latest state with edges for both participants.
+
+% The operator undertakes the following procedure to determine a proposal to participant set $P$ that maintains safety and liveness. 
+% First, the operator obtains all the $\m{lockedQCs}$ present in $\m{prepareQC}$ corresponding to prevote and precommit stage locks on tesseracts, and stores them in a set $\m{qcSet}$. 
+% This is done by the function $\msc{LockedQCs}(\m{prepareQC})$ in the pseudocode.
+% %For each participant $p$ involved in an interaction within $\m{qcSet}$, the prevote and precommit stage QCs of the highest height and latest view are identified.
+% The operator identifies the prevote and precommit stage QCs of the highest height and latest view for each participant $p$ involved in an interaction within $\m{qcSet}$.
+% %This is denoted as $maxHeightPrevote_p$ and $maxHeightPrecommit_p$ for a participant $p$.
+% This is denoted as $highPrevoteQC_p$ and $highPrecommitQC_p$ for a participant $p$. 
+% Now, the operator removes prevote x	 locks from $\m{qcSet}$ that are superseded by committed tesseracts or locks from later views. 
+% This is ascertained for a prevote stage $\m{lockedQC}$ by comparing the height of each participant in the corresponding tesseract with the heights of the previously identified highest QCs as well as the view number of the highest prevote QCs. 
+% This is done as follows for a tesseract $T$ corresponding to a prevote stage $\m{lockedQC}$.
+% If there exists a participant $p\in P_T$ such that $T.\m{height}(p)\leq \m{highPrecommitQC}_p.\m{height}(p)$ or $T.\m{height}(p)<\m{highPrevoteQC}_p.\m{height}(p)$, then a committed tesseract is present at the same height for participant $p$ and thus, the tesseract $T$ is removed from $\m{qcSet}$. 
+% Here, for a quorum certificate $\m{qc}$, $\m{qc}.\m{height}(p)$ refers to the height for the tesseract corresponding to the quorum certificate. 
+% Also, as a liveness rule, if the tesseract $T$ has a participant $p\in P_T$ such that the prevote stage QC for $T$ was formed at an earlier view than $highPrevoteQC_p$, then the prevote stage QC is removed from $\m{qcSet}$.
+% Thus, we safely ignore such locks and remove them from $\m{qcSet}$
+% It is crucial for liveness to perform this procedure. 
+% The procedure $\msc{RemoveOutdatedQCs}()$ in the pseudocode encapsulates this process. 
+% Based on the remaining QCs in $qcSet$, the operator selects an interaction to propose according to the following rules:
+% \begin{enumerate}
+%     \item If exactly one prevote stage QC remains in $qcSet$ and it has participant set $P$, the operator proposes the interaction associated with this QC.
+%     \item If no prevote stage QCs remain in $qcSet$, the operator proposes a new interaction that is a $p$-child of the tesseract with the current state of each participant $p\in P$. This involves taking the highest $\m{precommitQC}$/committed tesseract for each participant and proposing an interaction that extends these states. This is done by the function $\msc{ExtendCommitted}()$.
+%     \item If neither of the above conditions are met, the operator refrains from proposing any interactions and instead sends the propose message with the $\m{nil}$ tesseract as given in more detail below.
+% \end{enumerate}
+% The operator cannot propose an interaction with a different participant set due to its lack of knowledge about the latest lock information of other participants and the participant context being on a different consensus instance. 
+% If the above procedure results in a valid interaction, the operator executes it and proposes the resulting tesseract. 
+% The proposal is broadcast to an ICS formed by sampling a stochastic set as described in \Cref{subsubsec:randsetsample}. 
+% This \txt{Propose} message contains (1) the tesseract, (2) the quorum certificate $\m{prepareQC}$, (3) the randomly selected stochastic set, and (4) the corresponding pseudo-random number and its proof. 
+% However, if the above procedure does not result in an interaction for proposal, the operator broadcasts a \txt{Propose} message with the $\m{nil}$ tesseract and quorum certificate $\m{prepareQC}$ to the interaction’s context.
+% This message serves to share the $\m{prepareQC}$ with the interaction’s context
+% so that the validators are aware of the latest locked QCs of the interacting participants. 
+% The operator can only propose a single tesseract with a given participant involved during a view, preventing conflicting interaction proposals.
+
+% A validator, on receiving a \txt{Propose} message with a valid tesseract, verifies whether the following conditions ($\dagger$) are satisfied.
+% \begin{enumerate}
+%     \item The validator belongs to the corresponding ICS formed with the interacting participants' contexts and the stochastic set.
+%     %\item The quorum certificate $\m{prepareQC}$ is valid.
+%     \item The sender is the operator for the tesseract during the current view.
+%     \item The validator did not \txt{PreVote} on a different tesseract with any of the interacting participants during the current view. 
+%     \item The proposed tesseract is the valid output of the procedure undertaken by the operator.
+%     %\item The proposed tesseract extends the validator's state.
+%     \item The proposed stochastic set contains validators sampled according to the stochastic set selection procedure.
+% \end{enumerate}
+% The $\msc{validPropose}$ predicate in \Cref{alg:step2} evaluates to true if the above conditions are satisfied. 
+% On satisfying the above, the validator responds to the operator with a \txt{PreVote} message. 
+% Now, during the current view, the validator cannot engage in consensus (i.e. send \txt{PreVote} or \txt{PreCommit} messages) for any other tesseracts whose participant set overlaps with the current interaction's participant set.
+% This restriction maintains the following invariant: A validator votes (\txt{PreVote} and \txt{PreCommit}) for at most one tesseract with a given participant in each view. 
+% %cannot vote (\txt{PreVote} and \txt{PreCommit}) for two different interactions with a common interacting participant in a given view. 
+% However the validator refrains from voting if the \txt{Propose} message contains the $\m{nil}$ tesseract.
+
+% The validator concludes by updating its locks using $\m{prepareQC}$. 
+% If any tesseracts corresponding to precommit stage QCs are missing, the validator retrieves them from other validators in the network.
+% For each participant $p$, if the validator is present in its context and the current $\m{lockedQC}_p$ is from the prevote stage and a prevote stage QC from a higher view is present in $\m{prepareQC}$, then the validator updates $\m{lockedQC}_p$ to the higher view QC.
+% The function $\msc{UpdateLocks}(\m{prepareQC})$ performs this updation.
+
+
+% -----
+% Old text below this.
+
+% \subsection{The Basics}
+
+% \subsubsection{Validator List}
+% There is a total order on the set of validators $\bbV$ and is therefore maintained as a list.
+% This list is updated during epoch transitions as part of the reconfiguration procedure. % by shuffling the positions of the validators in the order. 
+%During epoch transitions, this set and the total order is updated
+%As defined in the preliminaries, $\bbV$ is the set of validators that participate in consensus.  \srinidhi{Is it important to mention that it is a list?}
+%Between epoch transitions, the set may receive updates as part of the reconfiguration procedure.
+% list undergoes updates during each epoch transition as part of the reconfiguration procedure. 
+
+% \subsubsection{View}
+% The normal mode of Krama proceeds in a sequence of monotonically increasing views where the duration of each view \srinidhi{is this symbolic time like ticks or actual wall clock time?} is $\m{viewLength}$. 
+% Validators determine the current view using their local clock, referencing the time of the previous epoch transition. 
+% Each validator receives a random number from the distributed randomness beacon at the start of each view.
+% Validators attempt to reach consensus on tesseracts within each view. %, and attempt to reach consensus. 
+% This consensus process is limited to the view, at the end of which validators stop participating in consensus on tesseracts.
+%The consensus process for each tesseract is governed by a timeout called $\m{consensusTimeout}$, which determines how long validators will attempt to reach agreement.
+%The duration of this timeout is initially set to $\m{viewLength}$.
+%Ideally, validators achieve consensus on a tesseract within the $\m{consensusTimeout}$ duration. 
+%The initial timeout of $\m{viewLength}$ duration is set to be sufficient for achieving consensus within a view after GST. 
+%Once this timeout is reached, validators stop participating in consensus on a tesseract. 
+%\srinidhi{Is this fair to say?} For future interactions involving the same participant set, the consensus timeout duration is increased by one $\m{viewLength}$. 
+%This extended duration helps validators combat potential network delays within the interaction's context.
+%Views in Krama synchronize the entry of validators into consensus instances. 
+% Since multiple such procedures can run simultaneously in Krama, validators need coordinated entry points.
+% As views drive this consensus procedure, all validators are available for future participation at the beginning of each view, in sync.
+%validators enter new consensus instances in sync, ensuring availability for future participation.
+%As consensus duration is always a multiple of $\m{viewLength}$, validators enter new consensus instances in sync, ensuring availability for future participation.
+
+% The consensus duration for a tesseract is determined by a timeout called $\m{consensusTimeout}$, whose duration is initially set to $\m{viewLength}$. 
+% If validators are unable to achieve consensus within the stipulated time, they retry after incrementing the timeout by $\m{viewLength}$ \srinidhi{Is this fair to say?} 
+% Validators stop participating in consensus on the tesseract once this timeout is triggered. 
+
+% When the consensus timeout is reached, all validators stop participating in consensus for that interaction. Since consensus duration is always a multiple of $\m{viewLength}$, validators enter into achieving consensus on new interactions in sync, ensuring their availability for participating in consensus on future interactions.
+% If consensus is not achieved on the proposed tesseract within the allocated time, any future interaction with the same participant set will have its consensus timeout duration increased by one $\m{viewLength}$. This extended duration helps validators combat potential network delays among the interaction's context.
+
+% \subsubsection{Operator}
+% A publicly known validator, called an \emph{operator}, is designated for each participant to drive the consensus procedure in a view.
+% These operators are obtained from the participant's context. 
+% Thus, for each participant, validators from its context are mapped to views of the epoch in a round-robin manner to act as operators.
+% Each participant's context validators are assigned to act as operators for each view in an epoch, in a round-robin fashion. 
+% This mapping is set at the beginning of the epoch during reconfiguration.
+% The operator for a participant $p$ during view $v$ is given by $\msc{operator}(p,v)$.
+% Thus, for an interaction $I$ during view $v$, there is a set of operators $\mathcal{O}_I=\{\msc{operator}(p,v)\mid p\in P_I\}$ associated with the interacting participants. 
+% A deterministic procedure selects a single operator from the set $\mathcal{O}_I$ to drive the consensus procedure for the interaction $I$. 
+% This is denoted as $\msc{operator}(P_I, v)$ in the pseudocode.
+%%% Succinct: %%%
+
+
+%The operator is fixed for a given epoch and changes in a round-robin fashion among the validators of a given participant. 
+% This mapping is established during epoch reconfiguration and follows a round-robin pattern among the validators in the participant's context.
+%The operator for a given view and participant is publicly known. 
+
+%At the start of each view, a random output is obtained from the distributed randomness beacon, given by $\msc{random}(\m{view})$. 
+%The duration for achieving consensus on a tesseract is a multiple of $\m{viewLength}$, at the end of which, the validators terminate engaging in consensus on the tesseract.
+%This is given by a timeout called $\m{consensusTimeout}$ whose length is typically $\m{viewLength}$ but is increased by multiples of $\m{viewLength}$ if network delays are observed among validators in the interaction's context in order to combat it.
+
+% \subsubsection{Operator Selection for an Interaction}
+% %In each view, interactions can be executed and their resulting tesseracts agreed upon and committed by honest validators. \srinidhi{passive voice}
+% We now describe how a single operator is selected to drive the consensus procedure for an interaction $I$ during a view $v$. 
+% As given above, for an interaction $I$ in a view $v$, there is an operator associated with each participant $p\in P_I$.
+% An operator is selected to drive the consensus procedure on an interaction as follows.
+% %This consensus procedure to agree on an interaction $I$ is driven by an operator selected as follows.  
+% The operator for an interaction $I$ is determined by its participant set $P_I$ and the current view $v$.
+% As mentioned earlier, for each participant $p\in P_I$, there is an operator associated with it for view $v$ given as $\msc{operator}(p,v)$.
+% Thus, we have a 
+
+% An operator is deterministically selected from the set of operators associated with the participant set for the view, $\{\msc{operator}(p, v)\mid p\in P_I\}$.
+% The function $\msc{operator}(\m{I}, \m{v})$ returns the operator for the interaction in the view. 
+% The function can also be invoked with the tesseract resulting from an interaction. 
+% \srinidhi{passive voice. Who invokes and how?}
+
+% \subsubsection{Highest QC}
+% Each validator in a participant's context stores the quorum certificate for the highest stage of the highest interaction involving the participant as $\m{highestQC}$.
+% This $\m{highestQC}$ is different for each participant as each participant has its own chain.
+
+% During the Prepare phase, validators respond with their $\m{highestQC}$ which gives the highest QC that they have seen for their associated participant. 
+% The operator, on receiving a quorum of responses, computes the $\m{highestQC}_p$ for each of the interacting participants as the highest QC found among the responses. 
+% The operator then has to propose a block that agrees with the highest QCs for each of the interacting participants. 
+
+%\srinidhi{The whole subsection needs a story, right now it reads like a set of disjoint and disconnected sectences all grouped together. Try starting with a topic sentence to set the context for the paragraph and follow from there. Is this meant to just be a set of definitions? You need to motivate each of them.}
+
+
+% \subsection{Normal Operation}
+
+% \subsubsection{The Upshot}
+% We first present an overview of Krama's normal operation. 
+% Validators reach consensus on individual tesseracts containing updated state from executing interactions. 
+% In a single view, validators can reach consensus on multiple tesseracts with mutually disjoint participant sets. 
+% At the start of each view, operators start a \emph{consensus instance} by sending a message to an interaction's context. 
+% This consensus instance ideally leads to a decision with the resulting tesseract committed. 
+% This is in contrast to traditional blockchain protocols where several interactions are batched into a single block and agreed upon one at a time in a single global consensus instance.
+% Moreover, Krama generates tesseracts only when interactions occur between participants. 
+% Normal operation has four stages: Prepare, Propose, Prevote, and Precommit. 
+%The Prepare stage is partly governed by a timeout whereas validator actions in the remaining stages are triggered by message reception as well as view timeouts.
+% A timeout partly governs the Prepare stage, while validator actions in the remaining stages are triggered by message reception and view timeouts.
+%Validator actions are triggered by message reception and view timeouts.
+% All validators know the interaction's operator for a given view.
+% In the consensus procedure for an interaction, communication occurs only between the designated operator and the interaction's context/ICS. 
+% Unlike PBFT-like protocols, Krama uses predetermined views with leaders changing for each new tesseract. 
+% Since tesseracts aren't continuously generated, validators cannot predetermine the next consensus-driving operator cannot be ---it exists only when participants send interactions to validators. 
+% Thus, each operator requires a communication round-trip with the participants' contexts to propose a safe tesseract extending the interacting participants' latest state.
+% The Prepare stage handles this: the operator learns each participant's latest state from the interaction's context and proposes a tesseract extending it. 
+% Further, validators in a participant's context receive \txt{Prepare} messages from operators until a timeout is reached. 
+% A participant's context can receive multiple such \txt{Prepare} messages and upon reaching the timeout, the validators choose a single \txt{Prepare} message to respond to with the latest state information.
+% This ensures that among a set of Prepare messages with overlapping participant sets, at least one consensus instance can successfully reach a decision during the view. 
+% The operator makes the proposal to the participants from whose contexts a quorum of successful responses was received. 
+% The operator forms an ICS by randomly sampling a stochastic set using VRFs to make this proposal. 
+%On receiving a quorum of responses, the operator makes the proposal to an ICS formed by randomly sampling a stochastic set using VRFs. 
+%The view's random number is used as the seed for the VRF. 
+% Proposals include justification in the form of the latest states obtained.
+% Validators respond to valid proposals with \txt{PreVote} messages. 
+% Upon receiving a quorum, the operator forms a QC and sends a \txt{PreVote} message with the QC back to the ICS. 
+% Validators then lock onto the tesseract and respond with \txt{PreCommit} messages. 
+% They persistently store this QC representing the lock for each participant context they belong to. %, sending locked QCs to operators during prepare phases.
+% Validators persistently store this lock by storing the corresponding QC for each participant whose context they belong to. 
+% This locked QC is sent to the operator during the prepare phase so that the operator is aware of the latest locks. 
+% Now, operators on receiving a quorum of \txt{PreCommit} messages form a QC and respond with a \txt{PreCommit} message containing the QC. 
+% Validators then commit the tesseract to their histories and lock onto the QC. 
+% If the view ends, validators terminate participating in consensus for any tesseracts.
+% To ensure liveness, operators include locked QCs from the Prepare phase in \txt{Propose} messages.
+% Validators update their locks when encountering higher-view locks in these QCs. 
+% If the operator cannot find a tesseract extending the obtained locks during prepare, it sends a \txt{Propose} message without a tesseract but containing the locked QCs for validators to update their locks.
+
+
+
+
+% We now describe the protocol under normal operation in detail. 
+
+% Algorithms 1, 2, 3, and 4 delineate the entire protocol during normal operation, covering each of the four stages. 
+% The protocol description is divided according to stages. 
+% The protocol's specification is divided into two parts for validators and operators. 
+% In the protocol description, signature and quorum certificate verification is implicit on message reception.
+% Further, validators only accept messages from the current view.
+% %The protocol described below focuses on achieving consensus on a single tesseract.
+% %Multiple instances of the below procedure can run simultaneously for different tesseracts with disjoint participant sets. 
+% The protocol below focuses on a single tesseract, but multiple instances of the  procedure can run simultaneously for different tesseracts with disjoint participant sets.
+
+
+% \subsubsection{Notation}
+% Before proceeding, we introduce some common notation used in the pseudocode. 
+% In the pseudocode, $\m{self}$ refers to the validator performing the operations. 
+% Validators maintain several state variables for consensus on a tesseract including: the tesseract itself, the current operator, and the ICS, denoted with a subscript $v$. 
+% $\msc{ICS}(T, \calS)$ represents the ICS for a tesseract $T$ with a stochastic set $\calS$.
+% The function $\msc{tesseract}()$ returns the tesseract from executing an interaction.
+% The function $\msc{QC}()$ returns a \emph{quorum certificate} from a quorum of votes.
+% $\msc{view}(T)$ gives the view in which a tesseract $T$ is committed. \todo{This notation is only used in the safety pf and not in the algo.}
+
+% \subsubsection{Prepare Stage}
+
+% %%%OLD: Till 29th May 2025
+% The prepare stage serves as the initial phase of each view, functioning as a discovery mechanism. 
+% This stage is conceptually similar to the view-change phase in protocols such as PBFT \cite{CL99} and Fast-HotStuff \cite{JNFG23}.
+% However, Krama's approach differs in several key aspects:
+% \todo[inline]{Need to introduce the specifics of this earlier in the protocol section}
+% (1) Views in Krama are predetermined, unlike PBFT-like protocols where view changes occur only when the current leader fails to make progress. 
+% (2) As consensus is achieved for each tesseract individually, there is no guarantee that a tesseract shall be extended in the future; Thus, the next consensus-driving operator cannot be predetermined as such an operator shall exist only when a corresponding interaction is sent to the validators by the participants. 
+% %and therefore, a round of communication must be dedicated for an interaction's operator to learn about the latest state of the interacting participants each time. 
+% %Due to the presence of multiple participant chains and dynamic consensus based on interacting participants, the next consensus-driving operator cannot be predetermined and hence cannot learn about the current consensus state of the participants. 
+% Consequently, a round of communication must be dedicated for the operator to acquire the latest state of the participants a each view's commencement.
+% This is achieved in the Prepare stage of the protocol. 
+% %Hence, the operator obtains knowledge about previously locked tesseracts during the prepare stage at the start of the view.
+% %The above passage was rewritten using Notion AI to make it more readable. Date: 18th Oct 2024
+
+% %The pseudocode for this stage is given in \Cref{alg:step1}.
+
+% \subsubsection{As an operator for the view}
+% At the start of a view, operators for the view select an interaction ($\m{ixn}$) from the pool of interactions for which they are the operator, given by $\msc{operator}(P_\m{ixn}, \m{view})$. 
+% When an interaction corresponding to a prevote stage $\m{lockedQC}$ is present in the pool of interactions, it takes priority on being chosen from the pool.
+% This aids in ensuring liveness. \srinidhi{takes priority over what?}
+% %The operator proceeds to send a \txt{Prepare} message containing the interaction to the interaction's context.
+% The operator proceeds to send a \txt{Prepare} message to the interaction's context.
+
+% \subsubsection{As a validator in the interaction's context}
+% Upon receiving a \txt{Prepare} message for an interaction whose context they belong to, validators respond with a \txt{Prepare} message containing their $\m{lockedQC}^p$ from previous views. Here, (1) $p$ is an interacting participant whose context they belong to, and (2) the quorum certificate $\m{lockedQC}^p$ is either a prevote or precommit stage QC, corresponding to the highest view the validator has obtained for participant $p$.
+% The validator is essentially \emph{locked} on to the tesseract corresponding to the $\m{lockedQC}$.
+% Validators persistently store $\m{lockedQC}^p$ for each participant $p$ whose context they belong to.
+% %The above passage was rewritten using Notion AI to make it more readable. Date: 18th Oct 2024
+% % Validators, upon receiving a \txt{Prepare} message for an interaction whose context they belong to, respond with a \txt{Prepare} message containing its $\m{lockedQC}^p$ from previous views. 
+% % Here, $p$ is the participant in whose context the validator is in where $p$ is an interacting participant for the interaction. 
+% % The quorum certificate $\m{lockedQC}^p$ is the prevote or precommit stage quorum certificate of the highest view the validator has obtained for the participant $p$.
+% % The validator is essentially \emph{locked} on to the tesseract corresponding to the $\m{lockedQC}$.
+% % Validators persistently store $\m{lockedQC}^p$ for each participant $p$ whose context it belongs to.
+%%%%
+%%%% NEW: 30th May 2025
+
+
+%On receiving a \txt{Prepare} message for an interaction in whose context they are present, validators respond with the $\m{lockedQC}$ for each interacting participant in whose context they are present. 
+%On receiving a \txt{Prepare} message in whose interaction's context the validator is present, a response with the $\m{lockedQC}$ for each interacting participant in whose participant context they are present is sent back to the operator. 
+% The prepare stage serves as the initial discovery phase at the start of each view, with context validators deciding on a single operator's ICS to be a part of and sharing their highest locks with the operator.
+% Operators for an interaction send \txt{Prepare} messages to the interaction's context. 
+% Validators in participants' contexts can receive multiple \txt{Prepare} messages from different operators, each corresponding to a different participant set. 
+% For instance, interactions $I_1$ and $I_2$ with participant sets $P_1=\{p_1,p_2\}$ and $P_2=\{p_2, p_3\}$ can have their corresponding operators for a given view from $\calC_{p_1}$ and $\calC_{p_3}$ respectively.
+% Here, the context validators of $p_2$ receive \txt{Prepare} messages for both the participant sets $P_1$ and $P_2$. 
+% Only one of $I_1$ or $I_2$ can be decided successfully in the current view while maintaining safety.
+% Therefore, the context validators of $p_2$ must choose a single consensus instance to participate in to avoid conflicts.
+% Thus, among multiple \txt{Prepare} messages obtained, context validators pick and respond to a single chosen one. 
+% For this, the stage is governed by a timeout starting at the beginning of the view. 
+% Until this timeout, context validators collect \txt{Prepare} messages from operators.
+% Context validators choose a single \txt{Prepare} message to respond to when this timeout is triggered.
+% Validators order the \txt{Prepare} messages deterministically and choose the highest one. 
+%This is given by the \textsc{Sort}() function which sorts the \txt{Prepare} messages obtained, with the highest one being chosen. 
+% This results in all context validators with the same set of \txt{Prepare} messages deciding on the same message to respond to. 
+% Further, since the messages are totally ordered, the highest element in the order among a set of such overlapping interactions is chosen by all of its interacting participants' contexts. 
+% We capture this more precisely as follows. 
+% A set of consensus instances are \emph{overlapping} if in its corresponding family of participant sets, for each participant set there exists another participant set whose intersection is non-empty and neither is a subset of another. 
+% Note that there cannot be two identical participant sets in a given view as each participant set has a single operator during a view and hence it would form a single consensus instance. 
+% A \emph{maximal} set of overlapping consensus instances is maximal with respect to the inclusion order among all sets of overlapping consensus instances. 
+% Validators ordering the \txt{Prepare} messages obtained and choosing the highest one ensures the following. %that among a maximal set of overlapping consensus instances, 
+% \begin{lemma}\label{lem:prepareOverlap}
+%     In each maximal set of overlapping consensus instances with honest operators, at least one consensus instance successfully obtains a quorum of \txt{Prepare} messages from each of its participants' contexts. 
+% \end{lemma}
+
+% The proof of the above is given in \Cref{sec:analysis}. 
+% Validators respond to the chosen operator with a \txt{Prepare} message containing their $\m{lockedQC}$ for the interacting participant whose context they belong to.
+% For all other operators, validators send a \txt{PrepareNil} message signifying that they chose a different operator. 
+% This message contains the set of \txt{Prepare} messages received, using which the operator can verify that the \textsc{Choose}() function resulted in a  different message.
+% Further, this choice prioritises interactions with a prevote stage $\m{lockedQC}$
+% This ensures liveness as locked interactions eventually get committed as operators rotate.
+
+
+
+% \subsubsection{Propose Stage}
+
+% We now elaborate on the Propose stage of the protocol.
+
+% %%%OLD: 29th May 2025
+% \subsubsection{As an operator for the view:}
+% Upon receiving a quorum of \txt{Prepare} messages from the interaction's context, the operator aggregates them into a quorum certificate $\m{prepareQC}$.
+% From this QC, the operator identifies the unique lockedQCs (with unique interactions associated with them) present in prepareQC and stores them in a set $qcSet$. \srinidhi{At this point it is unclear why lockedQC is unique? The way quorum certificates are set needs to be explained earlier, this is different from other family of protocols}
+% To determine which interaction to propose such that it maintains safety, the operator follows a systematic process:
+% \begin{enumerate}
+%     \item The operator identifies the maximum height from precommit stage QCs \srinidhi{We haven't got to the precommit stage yet, so there is no way to know what this means.} \rishal{Shall I postpone the description of this process to after describing the normal case operation completely?} for each participant involved in any interaction within $qcSet$, denoted by $maxHeightPrecommit_p$ for participant $p$. Similarly, the maximum height from prevote stage QCs for each participant is identified and is denoted by $maxHeightPrevote_p$. This is done by the function $\msc{ComputeMaxHeights()}$.
+%     \item  The operator then filters outdated prevote QCs by removing any prevote stage QC where:
+%     \begin{enumerate}
+%         \item A participant $p$ in the QC has the same height or higher in some precommit stage QC by comparing with $maxHeightPrecommit_p$ for the participant, or
+%         \item A participant $p$ in the QC has a higher height in some other prevote stage QC by comparing with $maxHeightPrevote_p$.
+%     \end{enumerate}
+%     This filtering ensures that prevote locks that have been superseded by committed tesseracts are ignored.
+%     \item Based on the remaining QCs in $qcSet$, the operator selects an interaction to propose according to the following rules:
+%     \begin{enumerate}
+%         %\item If multiple distinct prevote stage QCs remain in qcMap, the operator proposes nil (no interaction). This occurs when there are conflicting prevote locks that cannot be resolved, preventing progress on either interaction.
+%         \item If exactly one prevote stage QC remains in $qcSet$ and its participant set matches the current interaction's participant set, the operator proposes the interaction associated with this QC.
+%         \item If no prevote stage QCs remain in $qcSet$, the operator proposes a new interaction that is a $p$-child of the tesseract with the current state of each participant $p\in P$. This involves taking the highest $\m{precommitQC}$/committed tesseract for each participant and proposing an interaction that extends these states. This is done by the function $\msc{ExtendCommitted}()$.
+%         \item If neither of the above conditions are met, the operator refrains from proposing any interactions and instead sends the propose message with the $\m{nil}$ tesseract as given in more detail below. 
+%     \end{enumerate}
+% \end{enumerate}
+
+% Note that the operator cannot propose an interaction with a different participant set as the latest lock information of other participants are not known to the operator. 
+
+% If an interaction satisfying the above conditions is present, it is executed and the resulting tesseract is agreed upon by the protocol as follows.
+% To propose the tesseract, an interaction consensus set is formed by sampling a stochastic set as described in \Cref{subsubsec:randsetsample}.
+% The operator broadcasts a \txt{Propose} message to the ICS containing (1) the tesseract, (2) the quorum certificate $\m{prepareQC}$, (3) the current view, (4) the randomly selected stochastic set, and (5) the corresponding pseudo-random number and its proof. 
+% However, if such an interaction is not present, then the \txt{Propose} message is broadcast to the interaction's context containing (1) the $\m{nil}$ tesseract, the quorum certificate $\m{prepareQC}$, and (3) the current view.
+% This message serves to share the $\m{prepareQC}$ with the interaction's context so that the validators are aware of the highest locked QCs of the interacting participants. 
+% The operator is limited to proposing a single tesseract with a given participant involved during a view, preventing conflicting interaction proposals. 
+% %This prevents conflicting interactions being proposed by the operator. 
+% When agreeing on a tesseract, communication occurs only to and from the operator.
+
+
+%%%NEW: 30th May 2025
+% \noindent\paragraph{As an operator for the view}
+
+% When the operator receives a quorum of \txt{Prepare} or \txt{PrepareNil} responses from the interaction's context, it aggregates the \txt{Prepare} messages into a quorum certificate $\m{prepareQC}$ from participant set $P$. 
+% Here, the participant set $P$ is the maximal subset of interacting participants from which a quorum of \txt{Prepare} messages are obtained.
+% Note that by \Cref{lem:prepareOverlap}, atleast one consensus instance will have received \txt{Prepare} messages from all of its participants' contexts. 
+% However, to allow for potentially more interactions to successfully reach a consensus decision, operators can proceed by proposing to a subset $P$ of the initial participant set for which the \txt{Prepare} message is sent. 
+
+
+% \paragraph{As a validator in the ICS}\label{subsubsec:invariant}
+
+
+
+% \subsubsection{PreVote Stage}
+
+% Upon receiving a quorum of \txt{PreVote} messages from the ICS, the operator aggregates them into a quorum certificate $\m{prevoteQC}$
+% and broadcasts a \txt{PreVote} message containing it to the ICS. Validators in the ICS respond with \txt{PreCommit} messages and set their $\m{lockedQC}^p$ as $\m{prevoteQC}$ for interacting participants whose context they belong to.
+% This step is crucial for safety.
+
+% \subsubsection{PreCommit Stage} 
+
+% Upon receiving a quorum of \txt{PreCommit} messages from the ICS, the operator aggregates them into a quorum certificate $\m{precommitQC}$ and broadcasts a \txt{PreCommit} message containing it to the ICS. 
+% Validators in the ICS commit the tesseract to their history on receiving the message and set their $\m{lockedQC}^p$ as $\m{precommitQC}$ for each interacting participant $p$ whose context they belong to.
+% The operator then asynchronously broadcasts the tesseract to all validators, who commit it upon reception. 
+% This message includes the quorum certificate, randomly sampled stochastic set, corresponding pseudo-random number, and its proof for validators to verify the message.
+
+
+% \subsubsection{End of the view}
+
+% At the end of the view, all validators stop participating in consensus for interactions.
+% \rishal{Should I remove the following text? I have already mentioned this in sec 5.1.2.}
+% Since consensus duration is always a multiple of $\m{viewLength}$, validators enter into achieving consensus on new interactions in sync, ensuring their availability for participating in consensus on future interactions.
+% If consensus is not achieved on the proposed tesseract within the allocated time, any future interaction with the same participant set will have its consensus timeout duration increased by one $\m{viewLength}$. This extended duration helps validators combat potential network delays among the participants' contexts.
+%This is to make progress during the epoch in the face of network delays among the validators in the interacting participants' contexts. 
+
+% \subsubsection{Conflicting Participant Sets}
+
+% A key difference between Krama and most blockchain consensus protocols is that Krama reaches consensus on individual tesseracts by forming a committee of validators from the participants' contexts.% for each participant and consensus is achieved by forming a set of validators consisting of the interacting participants' contexts. 
+% This difference gives rise to the following scenario.
+% \begin{example}[Overlapping Participant Sets]\label{ex:conflictingixns}
+%     Consider two tesseracts $T_1$ and $T_2$ with participant sets $P_1 = \{p_1, p_2\}$ and $P_2 = \{p_2, p_3\}$.
+%     Let the current view be $v$ where $\msc{operator}(P_1, v)\in \calC_{p_1}$ and $\msc{operator}(P_2, v) \in \calC(p_3)$.
+%     Here, since the operators for both tesseracts are different, both can propose the respective tesseracts. 
+%     However, honest validators in $p_2$'s context can only vote for either of the two tesseracts as they have a common participant. 
+%     Hence, it can be the case that neither of the operators obtain a supermajority of prevotes from $p_2$'s context, hence failing to reach consensus on both the tesseracts.
+%     Note that this can occur in a view after GST with honest operators for both tesseracts.
+% \end{example}
+
+% We see that different operators can propose tesseracts with unequal participant sets and a nonempty intersection in the same view.
+% Thus, Krama's normal operation described above has the following modifications to eventually resolve such conflicting proposals resulting in failure to reach consensus. 
+% First, we introduce some notation. 
+% For a validator $v$, let $P_v$ denote the set of participants in whose contexts the validator belongs to. 
+% The power set of $P_v$ is written as $\frakP_v$.
+
+% Over consecutive views, context validators of the overlapping participants arrive at a single tesseract among the conflicting ones for each participant. 
+% A validator $v$ on obtaining more than one valid proposal for conflicting tesseracts from different operators, store them in a set $\m{conflicts}_P$ called the \emph{conflict set} for the set of participants $P$.
+% Here, $P\in \frakP_v$ is the intersection of the tesseracts' participant sets along with $P_v$. 
+% More precisely, $P=\bigcap\limits_{T\in \bar{T}}P_T \cap P_v$ where $\bar{T}$ denotes the tesseracts obtained by the validator in proposals. 
+% Additionally, the validator stores the \txt{Propose} message obtained from the operator as justification.
+% Note that two conflicting proposals from the same operator signifies Byzantine behaviour by the validator and hence validators ignore the second proposal and take it as proof of Byzantine behaviour for penalisation.
+% Validators deterministically obtain a single tesseract from a conflict set by the function $\msc{Tesseract}(\m{conflicts}_P)$.
+% %A single tesseract from a participant's conflict set is deterministically obtained by validators by the function $\msc{Tesseract}(\m{conflicts}_p)$. 
+% Thus, validators with the same conflict set arrive at the same tesseract. 
+% During the Prepare stage for an interaction $I$, in addition to sharing the locked QCs, the validator shares its conflict set for the set of participants $P_I\cap P_v$. 
+% \rishal{This is currently being updated.}
+% The operator, on receiving them from the interaction's context, combines them into a single conflict set for each such set of participants. 
+% The operator shares this as part of the \txt{Propose} message and validators on receiving it, verify it and update their corresponding conflict set for the set of participants $P_I\cap P_v$.
+% %Validators verify and update their conflict sets after receiving the proposed message.
+% Operators can only Propose the determined tesseract from the set of conflicts. 
+% Validators only vote in Prevote and Precommit stages to the tesseract obtained from the set of conflicting ones. 
+% Note that all tesseracts in a participant's conflict set stored by a validator have the same height for the participant. 
+% When a tesseract for this height for the participant is agreed upon, the validator empties the participant's conflict set. 
+
+
+
+% \subsection{Utilities}\label{subsec:utility}
+% In this section, we describe the procedures used in Krama to select the stochastic set, and initialise new participants.
+% The procedure for stochastic set selection by the operator is given in \Cref{alg:sample}.
+
+
+% \subsubsection{Formation of the Stochastic Set}\label{subsubsec:randsetsample}
+
+
+
+
+
+

@@ -1,0 +1,707 @@
+@article{Lamport01,
+author = {Lamport, Leslie},
+title = {Paxos Made Simple},
+year = {2001},
+month = {December},
+abstract = {At the PODC 2001 conference, I got tired of everyone saying how difficult it was to understand the Paxos algorithm, published in [122]. Although people got so hung up in the pseudo-Greek names that they found the paper hard to understand, the algorithm itself is very simple. So, I cornered a couple of people at the conference and explained the algorithm to them orally, with no paper. When I got home, I wrote down the explanation as a short note, which I later revised based on comments from Fred Schneider and Butler Lampson. The current version is 13 pages long, and contains no formula more complicated than n1 > n2.},
+url = {https://www.microsoft.com/en-us/research/publication/paxos-made-simple/},
+pages = {51-58},
+journal = {ACM SIGACT News (Distributed Computing Column) 32, 4 (Whole Number 121, December 2001)},
+edition = {ACM SIGACT News (Distributed Computing Column) 32, 4 (Whole Number 121, December 2001)},
+}
+
+@techreport{CL99-2,
+author = {Castro, M. and Liskov, B.},
+title = {A Correctness Proof for a Practical Byzantine-Fault-Tolerant Replication Algorithm},
+year = {1999},
+publisher = {Massachusetts Institute of Technology},
+address = {USA}
+}
+
+@article{LSP82,
+author = {Lamport, Leslie and Shostak, Robert and Pease, Marshall},
+title = {The Byzantine Generals Problem},
+year = {1982},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {4},
+number = {3},
+issn = {0164-0925},
+url = {https://doi.org/10.1145/357172.357176},
+doi = {10.1145/357172.357176},
+journal = {ACM Trans. Program. Lang. Syst.},
+month = {jul},
+pages = {382–401},
+numpages = {20}
+}
+
+@article{DLS88,
+author = {Dwork, Cynthia and Lynch, Nancy and Stockmeyer, Larry},
+title = {Consensus in the presence of partial synchrony},
+year = {1988},
+issue_date = {April 1988},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {35},
+number = {2},
+issn = {0004-5411},
+url = {https://doi.org/10.1145/42282.42283},
+doi = {10.1145/42282.42283},
+abstract = {The concept of partial synchrony in a distributed system is introduced. Partial synchrony lies between the cases of a synchronous system and an asynchronous system. In a synchronous system, there is a known fixed upper bound Δ on the time required for a message to be sent from one processor to another and a known fixed upper bound Φ on the relative speeds of different processors. In an asynchronous system no fixed upper bounds Δ and Φ exist. In one version of partial synchrony, fixed bounds Δ and Φ exist, but they are not known a priori. The problem is to design protocols that work correctly in the partially synchronous system regardless of the actual values of the bounds Δ and Φ. In another version of partial synchrony, the bounds are known, but are only guaranteed to hold starting at some unknown time T, and protocols must be designed to work correctly regardless of when time T occurs. Fault-tolerant consensus protocols are given for various cases of partial synchrony and various fault models. Lower bounds that show in most cases that our protocols are optimal with respect to the number of faults tolerated are also given. Our consensus protocols for partially synchronous processors use new protocols for fault-tolerant “distributed clocks” that allow partially synchronous processors to reach some approximately common notion of time.},
+journal = {J. ACM},
+month = {apr},
+pages = {288–323},
+numpages = {36}
+}
+
+@article{DS83,
+author = {Dolev, D. and Strong, H. R.},
+title = {Authenticated Algorithms for Byzantine Agreement},
+journal = {SIAM Journal on Computing},
+volume = {12},
+number = {4},
+pages = {656-666},
+year = {1983},
+doi = {10.1137/0212045},
+ abstract = { Reaching agreement in a distributed system in the presence of faulty processors is a central issue for reliable computer systems. Using an authentication protocol, one can limit the undetected behavior of faulty processors to a simple failure to relay messages to all intended targets. In this paper we show that, in spite of such an ability to limit faulty behavior, and no matter what message types or protocols are allowed, reaching (Byzantine) agreement requires at least \$t + 1\$ phases or rounds of information exchange, where t is an upper bound on the number of faulty processors. We present algorithms for reaching agreement based on authentication that require a total number of messages sent by correctly operating processors that is polynomial in both t and the number of processors, n. The best algorithm uses only \$t + 1\$ phases and \$O(nt)\$ messages. }
+}
+
+@article{FLP85,
+author = {Fischer, Michael J. and Lynch, Nancy A. and Paterson, Michael S.},
+title = {Impossibility of distributed consensus with one faulty process},
+year = {1985},
+issue_date = {April 1985},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {32},
+number = {2},
+issn = {0004-5411},
+url = {https://doi.org/10.1145/3149.214121},
+doi = {10.1145/3149.214121},
+abstract = {The consensus problem involves an asynchronous system of processes, some of which may be unreliable. The problem is for the reliable processes to agree on a binary value. In this paper, it is shown that every protocol for this problem has the possibility of nontermination, even with only one faulty process. By way of contrast, solutions are known for the synchronous case, the “Byzantine Generals” problem.},
+journal = {J. ACM},
+month = {apr},
+pages = {374–382},
+numpages = {9}
+}
+
+@misc{BKM18,
+      title={The latest gossip on BFT consensus}, 
+      author={Ethan Buchman and Jae Kwon and Zarko Milosevic},
+      year={2018},
+      eprint={1807.04938},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC}
+}
+
+@article{Nakamoto09,
+author = {Nakamoto, Satoshi},
+year = {2009},
+month = {03},
+pages = {},
+title = {Bitcoin: A Peer-to-Peer Electronic Cash System},
+journal = {Cryptography Mailing list at https://metzdowd.com}
+}
+
+@misc{GKL14,
+      author = {Juan Garay and Aggelos Kiayias and Nikos Leonardos},
+      title = {The Bitcoin Backbone Protocol: Analysis and Applications},
+      howpublished = {Cryptology ePrint Archive, Paper 2014/765},
+      year = {2014},
+      note = {\url{https://eprint.iacr.org/2014/765}},
+      url = {https://eprint.iacr.org/2014/765}
+}
+
+@inproceedings{KNPS22,
+  doi = {10.4230/LIPICS.DISC.2023.26},
+  
+  url = {https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.DISC.2023.26},
+  
+  author = {Keidar, Idit and Naor, Oded and Poupko, Ouri and Shapiro, Ehud},
+  
+  keywords = {Byzantine Fault Tolerance, State Machine Replication, DAG, Consensus, Blockchain, Blocklace, Cordial Dissemination, Computing methodologies → Distributed algorithms},
+  
+  language = {en},
+  
+  title = {Cordial Miners: Fast and Efficient Consensus for Every Eventuality},
+  
+  publisher = {Schloss Dagstuhl – Leibniz-Zentrum für Informatik},
+  
+  year = {2022},
+  
+  copyright = {Creative Commons Attribution 4.0 International license}
+}
+
+@inproceedings{SGSK22,
+author = {Spiegelman, Alexander and Giridharan, Neil and Sonnino, Alberto and Kokoris-Kogias, Lefteris},
+title = {Bullshark: DAG BFT Protocols Made Practical},
+year = {2022},
+isbn = {9781450394505},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3548606.3559361},
+doi = {10.1145/3548606.3559361},
+abstract = {We present Bullshark, the first directed acyclic graph (DAG) based asynchronous Byzantine Atomic Broadcast protocol that is optimized for the common synchronous case. Like previous DAG-based BFT protocols [19, 25], Bullshark requires no extra communication to achieve consensus on top of building the DAG. That is, parties can totally order the vertices of the DAG by interpreting their local view of the DAG edges. Unlike other asynchronous DAG-based protocols, Bullshark provides a practical low latency fast-path that exploits synchronous periods and deprecates the need for notoriously complex view-change and view-synchronization mechanisms. Bullshark achieves this while maintaining all the desired properties of its predecessor DAG-Rider [25]. Namely, it has optimal amortized communication complexity, it provides fairness and asynchronous liveness, and safety is guaranteed even under a quantum adversary.In order to show the practicality and simplicity of our approach, we also introduce a standalone partially synchronous version of Bullshark, which we evaluate against the state of the art. The implemented protocol is embarrassingly simple (200 LOC on top of an existing DAG-based mempool implementation). It is highly efficient, achieving for example, 125,000 transactions per second with a 2 seconds latency for a deployment of 50 parties. In the same setting, the state of the art pays a steep 50\% latency increase as it optimizes for asynchrony.},
+booktitle = {Proceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security},
+pages = {2705–2718},
+numpages = {14},
+keywords = {consensus protocol, byzantine fault tolerant},
+location = {Los Angeles, CA, USA},
+series = {CCS '22}
+}
+
+@article{Lamport94,
+author = {Lamport, Leslie},
+title = {The temporal logic of actions},
+year = {1994},
+issue_date = {May 1994},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {16},
+number = {3},
+issn = {0164-0925},
+url = {https://doi.org/10.1145/177492.177726},
+doi = {10.1145/177492.177726},
+abstract = {The temporal logic of actions (TLA) is a logic for specifying and reasoning about concurrent systems. Systems and their properties are represented in the same logic, so the assertion that a system meets its specification and the assertion that one system implements another are both expressed by logical implication. TLA is very simple; its syntax and complete formal semantics are summarized in about a page. Yet, TLA is not just a logician's toy; it is extremely powerful, both in principle and in practice. This report introduces TLA and describes how it is used to specify and verify concurrent algorithms. The use of TLA to specify and reason about open systems will be described elsewhere.},
+journal = {ACM Trans. Program. Lang. Syst.},
+month = {may},
+pages = {872–923},
+numpages = {52},
+keywords = {safety properties, liveness properties, concurrent programming}
+}
+
+@book{Lamport02,
+author = {Lamport, Leslie},
+title = {Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers},
+year = {2002},
+isbn = {032114306X},
+publisher = {Addison-Wesley Longman Publishing Co., Inc.},
+address = {USA},
+}
+
+@book{Lynch96,
+author = {Lynch, Nancy A.},
+title = {Distributed Algorithms},
+year = {1996},
+isbn = {9780080504704},
+publisher = {Morgan Kaufmann Publishers Inc.},
+address = {San Francisco, CA, USA},
+}
+
+@inproceedings{GHMVZ17,
+author = {Gilad, Yossi and Hemo, Rotem and Micali, Silvio and Vlachos, Georgios and Zeldovich, Nickolai},
+title = {Algorand: Scaling Byzantine Agreements for Cryptocurrencies},
+year = {2017},
+isbn = {9781450350853},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3132747.3132757},
+doi = {10.1145/3132747.3132757},
+abstract = {Algorand is a new cryptocurrency that confirms transactions with latency on the order of a minute while scaling to many users. Algorand ensures that users never have divergent views of confirmed transactions, even if some of the users are malicious and the network is temporarily partitioned. In contrast, existing cryptocurrencies allow for temporary forks and therefore require a long time, on the order of an hour, to confirm transactions with high confidence.Algorand uses a new Byzantine Agreement (BA) protocol to reach consensus among users on the next set of transactions. To scale the consensus to many users, Algorand uses a novel mechanism based on Verifiable Random Functions that allows users to privately check whether they are selected to participate in the BA to agree on the next set of transactions, and to include a proof of their selection in their network messages. In Algorand's BA protocol, users do not keep any private state except for their private keys, which allows Algorand to replace participants immediately after they send a message. This mitigates targeted attacks on chosen participants after their identity is revealed.We implement Algorand and evaluate its performance on 1,000 EC2 virtual machines, simulating up to 500,000 users. Experimental results show that Algorand confirms transactions in under a minute, achieves 125x Bitcoin's throughput, and incurs almost no penalty for scaling to more users.},
+booktitle = {Proceedings of the 26th Symposium on Operating Systems Principles},
+pages = {51–68},
+numpages = {18},
+location = {Shanghai, China},
+series = {SOSP '17}
+}
+
+@inproceedings{CL99,
+author = {Castro, Miguel and Liskov, Barbara},
+title = {Practical Byzantine fault tolerance},
+year = {1999},
+isbn = {1880446391},
+publisher = {USENIX Association},
+address = {USA},
+booktitle = {Proceedings of the Third Symposium on Operating Systems Design and Implementation},
+pages = {173–186},
+numpages = {14},
+location = {New Orleans, Louisiana, USA},
+series = {OSDI '99}
+}
+
+@inproceedings{MVR99,
+author = {Micali, Silvio and Vadhan, Salil and Rabin, Michael},
+title = {Verifiable Random Functions},
+year = {1999},
+isbn = {0769504094},
+publisher = {IEEE Computer Society},
+address = {USA},
+abstract = {We efficiently combine unpredictability and verifiability by extending the Goldreich-Goldwasser-Micali construction of pseudorandom functions fs from a secret seed s, so that knowledge of s not only enables one to evaluate fs at any point x, but also to provide an NP-proof that the value fs(x) is indeed correct without compromising the unpredictability of fs at any other point for which no such a proof was provided.},
+booktitle = {Proceedings of the 40th Annual Symposium on Foundations of Computer Science},
+pages = {120},
+keywords = {RSA, pseudorandom functions, signature schemes},
+series = {FOCS '99}
+}
+
+@InProceedings{PS17,
+  author =	{Pass, Rafael and Shi, Elaine},
+  title =	{{Hybrid Consensus: Efficient Consensus in the Permissionless Model}},
+  booktitle =	{31st International Symposium on Distributed Computing (DISC 2017)},
+  pages =	{39:1--39:16},
+  series =	{Leibniz International Proceedings in Informatics (LIPIcs)},
+  ISBN =	{978-3-95977-053-8},
+  ISSN =	{1868-8969},
+  year =	{2017},
+  volume =	{91},
+  editor =	{Richa, Andr\'{e}a},
+  publisher =	{Schloss Dagstuhl -- Leibniz-Zentrum f{\"u}r Informatik},
+  address =	{Dagstuhl, Germany},
+  URL =		{https://drops-dev.dagstuhl.de/entities/document/10.4230/LIPIcs.DISC.2017.39},
+  URN =		{urn:nbn:de:0030-drops-80040},
+  doi =		{10.4230/LIPIcs.DISC.2017.39},
+  annote =	{Keywords: Distributed Consensus, Permissionless, Responsiveness}
+}
+
+@INPROCEEDINGS{PS17b,
+  author={Pass, Rafael and Shi, Elaine},
+  booktitle={2017 IEEE 30th Computer Security Foundations Symposium (CSF)}, 
+  title={Rethinking Large-Scale Consensus}, 
+  year={2017},
+  volume={},
+  number={},
+  pages={115-129},
+  keywords={Protocols;Delays;Computational modeling;Authentication;Upper bound;Currencies;blockchains;permissionless;distributed consensus;state machine replication},
+  doi={10.1109/CSF.2017.37}}
+
+
+@inproceedings{DSW16,
+author = {Decker, Christian and Seidel, Jochen and Wattenhofer, Roger},
+title = {Bitcoin meets strong consistency},
+year = {2016},
+isbn = {9781450340328},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/2833312.2833321},
+doi = {10.1145/2833312.2833321},
+abstract = {The Bitcoin system only provides eventual consistency. For everyday life, the time to confirm a Bitcoin transaction is prohibitively slow. In this paper we propose a new system, built on the Bitcoin blockchain, which enables strong consistency. Our system, PeerCensus, acts as a certification authority, manages peer identities in a peer-to-peer network, and ultimately enhances Bitcoin and similar systems with strong consistency. Our extensive analysis shows that PeerCensus is in a secure state with high probability. We also show how Discoin, a Bitcoin variant that decouples block creation and transaction confirmation, can be built on top of PeerCensus, enabling real-time payments. Unlike Bitcoin, once transactions in Discoin are committed, they stay committed.},
+booktitle = {Proceedings of the 17th International Conference on Distributed Computing and Networking},
+articleno = {13},
+numpages = {10},
+keywords = {byzantine agreement, blockchain, bitcoin},
+location = {Singapore, Singapore},
+series = {ICDCN '16}
+}
+
+@InProceedings{AMNRS17,
+  author =	{Abraham, Ittai and Malkhi, Dahlia and Nayak, Kartik and Ren, Ling and Spiegelman, Alexander},
+  title =	{{Solida: A Blockchain Protocol Based on Reconfigurable Byzantine Consensus}},
+  booktitle =	{21st International Conference on Principles of Distributed Systems (OPODIS 2017)},
+  pages =	{25:1--25:19},
+  series =	{Leibniz International Proceedings in Informatics (LIPIcs)},
+  ISBN =	{978-3-95977-061-3},
+  ISSN =	{1868-8969},
+  year =	{2018},
+  volume =	{95},
+  editor =	{Aspnes, James and Bessani, Alysson and Felber, Pascal and Leit\~{a}o, Jo\~{a}o},
+  publisher =	{Schloss Dagstuhl -- Leibniz-Zentrum f{\"u}r Informatik},
+  address =	{Dagstuhl, Germany},
+  URL =		{https://drops-dev.dagstuhl.de/entities/document/10.4230/LIPIcs.OPODIS.2017.25},
+  URN =		{urn:nbn:de:0030-drops-86409},
+  doi =		{10.4230/LIPIcs.OPODIS.2017.25},
+  annote =	{Keywords: Cryptocurrency, Blockchain, Byzantine fault tolerance, Reconfiguration}
+}
+
+@misc{KMMM23,
+      author = {Aniket Kate and Easwar Vivek Mangipudi and Siva Mardana and Pratyay Mukherjee},
+      title = {FlexiRand: Output Private (Distributed) VRFs and Application to Blockchains},
+      howpublished = {Cryptology ePrint Archive, Paper 2023/1339},
+      year = {2023},
+      note = {\url{https://eprint.iacr.org/2023/1339}},
+      url = {https://eprint.iacr.org/2023/1339}
+}
+
+@inproceedings{OO14,
+author = {Ongaro, Diego and Ousterhout, John},
+title = {In search of an understandable consensus algorithm},
+year = {2014},
+isbn = {9781931971102},
+publisher = {USENIX Association},
+address = {USA},
+abstract = {Raft is a consensus algorithm for managing a replicated log. It produces a result equivalent to (multi-)Paxos, and it is as efficient as Paxos, but its structure is different from Paxos; this makes Raft more understandable than Paxos and also provides a better foundation for building practical systems. In order to enhance understandability, Raft separates the key elements of consensus, such as leader election, log replication, and safety, and it enforces a stronger degree of coherency to reduce the number of states that must be considered. Results from a user study demonstrate that Raft is easier for students to learn than Paxos. Raft also includes a new mechanism for changing the cluster membership, which uses overlapping majorities to guarantee safety.},
+booktitle = {Proceedings of the 2014 USENIX Conference on USENIX Annual Technical Conference},
+pages = {305–320},
+numpages = {16},
+location = {Philadelphia, PA},
+series = {USENIX ATC'14}
+}
+
+@article{Lamport98,
+author = {Lamport, Leslie},
+title = {The part-time parliament},
+year = {1998},
+issue_date = {May 1998},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {16},
+number = {2},
+issn = {0734-2071},
+url = {https://doi.org/10.1145/279227.279229},
+doi = {10.1145/279227.279229},
+abstract = {Recent archaeological discoveries on the island of Paxos reveal that the parliament functioned despite the peripatetic propensity of its part-time legislators. The legislators maintained consistent copies of the parliamentary record, despite their frequent forays from the chamber and the forgetfulness of their messengers. The Paxon parliament's protocol provides a new way of implementing the state machine approach to the design of distributed systems.},
+journal = {ACM Trans. Comput. Syst.},
+month = {may},
+pages = {133–169},
+numpages = {37},
+keywords = {voting, three-phase commit, state machines}
+}
+
+@inproceedings{ZMR18,
+author = {Zamani, Mahdi and Movahedi, Mahnush and Raykova, Mariana},
+title = {RapidChain: Scaling Blockchain via Full Sharding},
+year = {2018},
+isbn = {9781450356930},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3243734.3243853},
+doi = {10.1145/3243734.3243853},
+abstract = {A major approach to overcoming the performance and scalability limitations of current blockchain protocols is to use sharding which is to split the overheads of processing transactions among multiple, smaller groups of nodes. These groups work in parallel to maximize performance while requiring significantly smaller communication, computation, and storage per node, allowing the system to scale to large networks. However, existing sharding-based blockchain protocols still require a linear amount of communication (in the number of participants) per transaction, and hence, attain only partially the potential benefits of sharding. We show that this introduces a major bottleneck to the throughput and latency of these protocols. Aside from the limited scalability, these protocols achieve weak security guarantees due to either a small fault resiliency (e.g., 1/8 and 1/4) or high failure probability, or they rely on strong assumptions (e.g., trusted setup) that limit their applicability to mainstream payment systems. We propose RapidChain, the first sharding-based public blockchain protocol that is resilient to Byzantine faults from up to a 1/3 fraction of its participants, and achieves complete sharding of the communication, computation, and storage overhead of processing transactions without assuming any trusted setup. RapidChain employs an optimal intra-committee consensus algorithm that can achieve very high throughputs via block pipelining, a novel gossiping protocol for large blocks, and a provably-secure reconfiguration mechanism to ensure robustness. Using an efficient cross-shard transaction verification technique, our protocol avoids gossiping transactions to the entire network. Our empirical evaluations suggest that RapidChain can process (and confirm) more than 7,300 tx/sec with an expected confirmation latency of roughly 8.7 seconds in a network of 4,000 nodes with an overwhelming time-to-failure of more than 4,500 years.},
+booktitle = {Proceedings of the 2018 ACM SIGSAC Conference on Computer and Communications Security},
+pages = {931–948},
+numpages = {18},
+keywords = {distributed consensus, public blockchain protocols, sharding},
+location = {Toronto, Canada},
+series = {CCS '18}
+}
+
+@InProceedings{AMNRS17,
+  author =	{Abraham, Ittai and Malkhi, Dahlia and Nayak, Kartik and Ren, Ling and Spiegelman, Alexander},
+  title =	{{Solida: A Blockchain Protocol Based on Reconfigurable Byzantine Consensus}},
+  booktitle =	{21st International Conference on Principles of Distributed Systems (OPODIS 2017)},
+  pages =	{25:1--25:19},
+  series =	{Leibniz International Proceedings in Informatics (LIPIcs)},
+  ISBN =	{978-3-95977-061-3},
+  ISSN =	{1868-8969},
+  year =	{2018},
+  volume =	{95},
+  editor =	{Aspnes, James and Bessani, Alysson and Felber, Pascal and Leit\~{a}o, Jo\~{a}o},
+  publisher =	{Schloss Dagstuhl -- Leibniz-Zentrum f{\"u}r Informatik},
+  address =	{Dagstuhl, Germany},
+  URL =		{https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.OPODIS.2017.25},
+  URN =		{urn:nbn:de:0030-drops-86409},
+  doi =		{10.4230/LIPIcs.OPODIS.2017.25},
+  annote =	{Keywords: Cryptocurrency, Blockchain, Byzantine fault tolerance, Reconfiguration}
+}
+
+@INPROCEEDINGS{KJ+18,
+  author={Kokoris-Kogias, Eleftherios and Jovanovic, Philipp and Gasser, Linus and Gailly, Nicolas and Syta, Ewa and Ford, Bryan},
+  booktitle={2018 IEEE Symposium on Security and Privacy (SP)}, 
+  title={OmniLedger: A Secure, Scale-Out, Decentralized Ledger via Sharding}, 
+  year={2018},
+  volume={},
+  number={},
+  pages={583-598},
+  keywords={Protocols;Throughput;Bitcoin;Scalability;blockchain;sharding;distributed ledger;cross shard;decentralization;Byzantine Fault Tolerant;trust but verify;scalable;ByzCoinX;Atomix;ledger pruning;state blocks;randomness},
+  doi={10.1109/SP.2018.000-5}}
+
+@InProceedings{BLS01,
+author="Boneh, Dan
+and Lynn, Ben
+and Shacham, Hovav",
+editor="Boyd, Colin",
+title="Short Signatures from the Weil Pairing",
+booktitle="Advances in Cryptology --- ASIACRYPT 2001",
+year="2001",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="514--532",
+abstract="We introduce a short signature scheme based on the Computational Diffie-Hellman assumption on certain elliptic and hyper-elliptic curves. The signature length is half the size of a DSA signature for a similar level of security. Our short signature scheme is designed for systems where signatures are typed in by a human or signatures are sent over a low-bandwidth channel.",
+isbn="978-3-540-45682-7"
+}
+
+@InProceedings{HMR12,
+author="Hoang, Viet Tung
+and Morris, Ben
+and Rogaway, Phillip",
+editor="Safavi-Naini, Reihaneh
+and Canetti, Ran",
+title="An Enciphering Scheme Based on a Card Shuffle",
+booktitle="Advances in Cryptology -- CRYPTO 2012",
+year="2012",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="1--13",
+abstract="We introduce the swap-or-not shuffle and show that the technique gives rise to a new method to convert a pseudorandom function (PRF) into a pseudorandom permutation (PRP) (or, alternatively, to directly build a confusion/diffusion blockcipher). We then prove that swap-or-not has excellent quantitative security bounds, giving a Luby-Rackoff type result that ensures security (assuming an ideal round function) to a number of adversarial queries that is nearly the size of the construction's domain. Swap-or-not provides a direct solution for building a small-domain cipher and achieving format-preserving encryption, yielding the best bounds known for a practical scheme for enciphering credit-card numbers. The analysis of swap-or-not is based on the theory of mixing times of Markov chains.",
+isbn="978-3-642-32009-5"
+}
+
+@inproceedings{BDN18,
+author = {Boneh, Dan and Drijvers, Manu and Neven, Gregory},
+title = {Compact Multi-signatures for Smaller Blockchains},
+year = {2018},
+isbn = {978-3-030-03328-6},
+publisher = {Springer-Verlag},
+address = {Berlin, Heidelberg},
+url = {https://doi.org/10.1007/978-3-030-03329-3_15},
+doi = {10.1007/978-3-030-03329-3_15},
+abstract = {We construct new multi-signature schemes that provide new functionality. Our schemes are designed to reduce the size of the Bitcoin blockchain, but are useful in many other settings where multi-signatures are needed. All our constructions support both signature compression and public-key aggregation. Hence, to verify that a number of parties signed a common message m, the verifier only needs a short multi-signature, a short aggregation of their public keys, and the message m. We give new constructions that are derived from Schnorr signatures and from BLS signatures. Our constructions are in the plain public key model, meaning that users do not need to prove knowledge or possession of their secret key.In addition, we construct the first short accountable-subgroup multi-signature (ASM) scheme. An ASM scheme enables any subset  of a set of n parties to sign a message m so that a valid signature discloses which subset generated the signature (hence the subset  is accountable for signing\&nbsp;m). We construct the first ASM scheme where signature size is only  bits over the description of , where  is the security parameter. Similarly, the aggregate public key is only  bits, independent of n. The signing process is non-interactive. Our ASM scheme is very practical and well suited for compressing the data needed to spend funds from a t-of-n Multisig Bitcoin address, for any (polynomial size)\&nbsp;t and\&nbsp;n.},
+booktitle = {Advances in Cryptology – ASIACRYPT 2018: 24th International Conference on the Theory and Application of Cryptology and Information Security, Brisbane, QLD, Australia, December 2–6, 2018, Proceedings, Part II},
+pages = {435–464},
+numpages = {30},
+location = {Brisbane, QLD, Australia}
+}
+
+@article{JNFG23,
+author = {Jalalzai, Mohammad M. and Niu, Jianyu and Feng, Chen and Gai, Fangyu},
+title = {Fast-HotStuff: A Fast and Robust BFT Protocol for Blockchains},
+year = {2023},
+issue_date = {July-Aug. 2024},
+publisher = {IEEE Computer Society Press},
+address = {Washington, DC, USA},
+volume = {21},
+number = {4},
+issn = {1545-5971},
+url = {https://doi.org/10.1109/TDSC.2023.3308848},
+doi = {10.1109/TDSC.2023.3308848},
+abstract = {The HotStuff protocol is a recent breakthrough in Byzantine Fault Tolerant (BFT) consensus that enjoys both responsiveness and linear view change by creatively adding a round to classic two-round BFT protocols like PBFT. Despite its great advantages, HotStuff has a few limitations. First, the additional round of communication during normal cases results in higher latency. Second, HotStuff is vulnerable to certain performance attacks, which can significantly deteriorate its throughput and latency. To address these limitations, we propose a new two-round BFT protocol called Fast-HotStuff, which enjoys responsiveness and efficient view change that is comparable to the linear view-change in terms of performance. Our Fast-HotStuff has lower latency and is more robust against the performance attacks that HotStuff is susceptible to.},
+journal = {IEEE Trans. Dependable Secur. Comput.},
+month = aug,
+pages = {2478–2493},
+numpages = {16}
+}
+
+@misc{LR24,
+      title={Permissionless Consensus}, 
+      author={Andrew Lewis-Pye and Tim Roughgarden},
+      year={2024},
+      eprint={2304.14701},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2304.14701}, 
+}
+
+@misc{Edg25,
+  author = {Edgington, Ben},
+  title = "Upgrading Ethereum",
+  abstract = "A technical handbook on Ethereum's move to proof of stake and beyond.",
+  url = {https://eth2book.info/},
+  howpublished = "\url{https://eth2book.info/}",
+  note = {Accessed: 2025-7-1},
+  language = "en"
+}
+
+@inproceedings{But15,
+  title={A Next-Generation Smart Contract and Decentralized Application Platform},
+  author={Vitalik Buterin},
+  year={2015},
+  url={https://api.semanticscholar.org/CorpusID:19568665}
+}
+
+@InProceedings{KRDO17,
+author="Kiayias, Aggelos
+and Russell, Alexander
+and David, Bernardo
+and Oliynykov, Roman",
+editor="Katz, Jonathan
+and Shacham, Hovav",
+title="Ouroboros: A Provably Secure Proof-of-Stake Blockchain Protocol",
+booktitle="Advances in Cryptology -- CRYPTO 2017",
+year="2017",
+publisher="Springer International Publishing",
+address="Cham",
+pages="357--388",
+abstract="We present ``Ouroboros'', the first blockchain protocol based on proof of stake with rigorous security guarantees. We establish security properties for the protocol comparable to those achieved by the bitcoin blockchain protocol. As the protocol provides a ``proof of stake'' blockchain discipline, it offers qualitative efficiency advantages over blockchains based on proof of physical resources (e.g., proof of work). We also present a novel reward mechanism for incentivizing Proof of Stake protocols and we prove that, given this mechanism, honest behavior is an approximate Nash equilibrium, thus neutralizing attacks such as selfish mining.",
+isbn="978-3-319-63688-7"
+}
+
+
+@InProceedings{DGKR18,
+author="David, Bernardo
+and Ga{\v{z}}i, Peter
+and Kiayias, Aggelos
+and Russell, Alexander",
+editor="Nielsen, Jesper Buus
+and Rijmen, Vincent",
+title="Ouroboros Praos: An Adaptively-Secure, Semi-synchronous Proof-of-Stake Blockchain",
+booktitle="Advances in Cryptology -- EUROCRYPT 2018 ",
+year="2018",
+publisher="Springer International Publishing",
+address="Cham",
+pages="66--98",
+abstract="We present ``Ouroboros Praos'', a proof-of-stake blockchain protocol that, for the first time, provides security against fully-adaptive corruption in the semi-synchronous setting: Specifically, the adversary can corrupt any participant of a dynamically evolving population of stakeholders at any moment as long the stakeholder distribution maintains an honest majority of stake; furthermore, the protocol tolerates an adversarially-controlled message delivery delay unknown to protocol participants.",
+isbn="978-3-319-78375-8"
+}
+
+@misc{BGKRZ18,
+      author = {Christian Badertscher and Peter Gazi and Aggelos Kiayias and Alexander Russell and Vassilis Zikas},
+      title = {Ouroboros Genesis: Composable Proof-of-Stake Blockchains with Dynamic Availability},
+      howpublished = {Cryptology {ePrint} Archive, Paper 2018/378},
+      year = {2018},
+      url = {https://eprint.iacr.org/2018/378}
+}
+
+@InProceedings{DPS19,
+author="Daian, Phil
+and Pass, Rafael
+and Shi, Elaine",
+editor="Goldberg, Ian
+and Moore, Tyler",
+title="Snow White: Robustly Reconfigurable Consensus and Applications to Provably Secure Proof of Stake",
+booktitle="Financial Cryptography and Data Security",
+year="2019",
+publisher="Springer International Publishing",
+address="Cham",
+pages="23--41",
+abstract="We present the a provably secure proof-of-stake protocol called Snow White. The primary application of Snow White is to be used as a ``green'' consensus alternative for a decentralized cryptocurrency system with open enrollement. We break down the task of designing Snow White into the following core challenges: 1.identify a core ``permissioned'' consensus protocol suitable for proof-of-stake; specifically the core consensus protocol should offer robustness in an Internet-scale, heterogeneous deployment;2.propose a robust committee re-election mechanism such that as stake switches hands in the cryptocurrency system, the consensus committee can evolve in a timely manner and always reflect the most recent stake distribution; and3.relying on the formal security of the underlying consensus protocol, prove the full end-to-end protocol to be secure---more specifically, we show that any consensus protocol satisfying the desired robustness properties can be used to construct proofs-of-stake consensus, as long as money does not switch hands too quickly.",
+isbn="978-3-030-32101-7"
+}
+
+@inproceedings{YMRGA19,
+author = {Yin, Maofan and Malkhi, Dahlia and Reiter, Michael K. and Gueta, Guy Golan and Abraham, Ittai},
+title = {HotStuff: BFT Consensus with Linearity and Responsiveness},
+year = {2019},
+isbn = {9781450362177},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3293611.3331591},
+doi = {10.1145/3293611.3331591},
+abstract = {We present HotStuff, a leader-based Byzantine fault-tolerant replication protocol for the partially synchronous model. Once network communication becomes synchronous, HotStuff enables a correct leader to drive the protocol to consensus at the pace of actual (vs. maximum) network delay--a property called responsiveness---and with communication complexity that is linear in the number of replicas. To our knowledge, HotStuff is the first partially synchronous BFT replication protocol exhibiting these combined properties. Its simplicity enables it to be further pipelined and simplified into a practical, concise protocol for building large-scale replication services.},
+booktitle = {Proceedings of the 2019 ACM Symposium on Principles of Distributed Computing},
+pages = {347–356},
+numpages = {10},
+keywords = {scalability, responsiveness, consensus, byzantine fault tolerance, blockchain},
+location = {Toronto ON, Canada},
+series = {PODC '19}
+}
+
+@article{Bra87,
+title = {Asynchronous Byzantine agreement protocols},
+journal = {Information and Computation},
+volume = {75},
+number = {2},
+pages = {130-143},
+year = {1987},
+issn = {0890-5401},
+doi = {https://doi.org/10.1016/0890-5401(87)90054-X},
+url = {https://www.sciencedirect.com/science/article/pii/089054018790054X},
+author = {Gabriel Bracha},
+abstract = {A consensus protocol enables a system of n asynchronous processes, some of them faulty, to reach agreement. Both the processes and the message system are capable of cooperating to prevent the correct processes from reaching decision. A protocol is t-resilient if in the presence of up to t faulty processes it reaches agreement with probability 1. Byzantine processes are faulty processes that can deviate arbitrarily from the protocol; Fail-Stop processes can just stop participating in it. In a recent paper, t-resilient randomized consensus protocols were presented for t<n5. We improve this to t < n3, thus matching the known lower bound on the number of correct processes necessary for consensus. The protocol uses a general technique in which the behavior of the Byzantine processes is restricted by the use of a broadcast protocol that filters some of the messages. The apparent behavior of the Byzantine processes, filtered by the broadcast protocol, is similar to that of Fail-Stop processes. Plugging the broadcast protocol as a communicating primitive into an agreement protocol for Fail-Stop processes gives the result. This technique, of using broadcast protocols to reduce the power of the faulty processes and then using them as communication primitives in algorithms designed for weaker failure models, was used succesfully in other contexts.}
+}
+
+@misc{Roc20,
+      title={Scalable and Probabilistic Leaderless BFT Consensus through Metastability}, 
+      author={Team Rocket and Maofan Yin and Kevin Sekniqi and Robbert van Renesse and Emin Gün Sirer},
+      year={2020},
+      eprint={1906.08936},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/1906.08936}, 
+}
+
+@inproceedings{BS+19,
+author = {Bano, Shehar and Sonnino, Alberto and Al-Bassam, Mustafa and Azouvi, Sarah and McCorry, Patrick and Meiklejohn, Sarah and Danezis, George},
+title = {SoK: Consensus in the Age of Blockchains},
+year = {2019},
+isbn = {9781450367325},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3318041.3355458},
+doi = {10.1145/3318041.3355458},
+abstract = {The core technical component of blockchains is consensus: how to reach agreement among a distributed network of nodes. A plethora of blockchain consensus protocols have been proposed---ranging from new designs, to novel modifications and extensions of consensus protocols from the classical distributed systems literature. The inherent complexity of consensus protocols and their rapid and dramatic evolution makes it hard to contextualize the design landscape. We address this challenge by conducting a systematization of knowledge of blockchain consensus protocols. After first discussing key themes in classical consensus protocols, we describe: (i) protocols based on proof-of-work; (ii) proof-of-X protocols that replace proof-of-work with more energy-efficient alternatives; and (iii) hybrid protocols that are compositions or variations of classical consensus protocols. This survey is guided by a systematization framework we develop, to highlight the various building blocks of blockchain consensus design, along with a discussion on their security and performance properties. We identify research gaps and insights for the community to consider in future research endeavours.},
+booktitle = {Proceedings of the 1st ACM Conference on Advances in Financial Technologies},
+pages = {183–198},
+numpages = {16},
+keywords = {Byzantine Fault Tolerance, blockchains, consensus, proof-of-stake, proof-of-work},
+location = {Zurich, Switzerland},
+series = {AFT '19}
+}
+
+
+@article{DMR20,
+title = {Blockchain as a confidence machine: The problem of trust and challenges of governance},
+journal = {Technology in Society},
+volume = {62},
+pages = {101284},
+year = {2020},
+issn = {0160-791X},
+doi = {https://doi.org/10.1016/j.techsoc.2020.101284},
+url = {https://www.sciencedirect.com/science/article/pii/S0160791X20303067},
+author = {Primavera {De Filippi} and Morshed Mannan and Wessel Reijers},
+keywords = {Trust, Confidence, Blockchain, Governance, Rule of law, Polycentricity},
+abstract = {Blockchain technology was created as a response to the trust crisis that swept the world in the wake of the 2008 financial crisis. Bitcoin and other blockchain-based systems were presented as a “trustless” alternative to existing financial institutions and even governments. Yet, while the trustless nature of blockchain technology has been heavily questioned, little research has been done as to what blockchain technologies actually bring to the table in place of trust. This article draws from the extensive academic discussion on the concepts of “trust” and “confidence” to argue that blockchain technology is not a ‘trustless technology’ but rather a ‘confidence machine’. First, the article provides a review of the multifaceted conceptualisations of trust and confidence, and the relationship between these two concepts. Second, the claim is made that blockchain technology relies on cryptographic rules, mathematics, and game-theoretical incentives in order to increase confidence in the operations of a computational system. Yet, such an increase in confidence ultimately relies on the proper operation and governance of the underlying blockchain-based network, which requires trusting a variety of actors. Third, the article turns to legal, constitutional and polycentric governance theory to explore the governance challenges of blockchain-based systems, in light of the tension between procedural confidence and trust.}
+}
+
+@misc{KJ+17,
+      author = {Eleftherios Kokoris-Kogias and Philipp Jovanovic and Linus Gasser and Nicolas Gailly and Ewa Syta and Bryan Ford},
+      title = {{OmniLedger}: A Secure, Scale-Out, Decentralized Ledger via Sharding},
+      howpublished = {Cryptology {ePrint} Archive, Paper 2017/406},
+      year = {2017},
+      url = {https://eprint.iacr.org/2017/406}
+}
+
+
+@misc{Har,
+      title={Harmony: Technical Whitepaper}, 
+      author={Team Harmony},
+      year={2020},
+      url={https://harmony.one/whitepaper.pdf}
+}
+
+
+@misc{SPW19,
+      title={Nightshade: Near Protocol Sharding Design 2.0}, 
+      author={Alex Skidano and Illia Polosukhin},
+      year={2019},
+      url={https://pages.near.org/downloads/Nightshade.pdf}
+}
+
+
+
+@misc{Zil17,
+      title={The ZILLIQA Technical Whitepaper}, 
+      author={The ZILLIQA Team},
+      year={2017},
+      url={https://docs.zilliqa.com/whitepaper.pdf}
+}
+
+
+@inproceedings{KKZ24,
+author = {Karakostas, Dimitris and Kiayias, Aggelos and Zacharias, Thomas},
+title = {Blockchain Bribing Attacks and the Efficacy of Counterincentives},
+year = {2024},
+isbn = {9798400706363},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3658644.3670330},
+doi = {10.1145/3658644.3670330},
+abstract = {We analyze bribing attacks in Proof-of-Stake distributed ledgers from a game theoretic perspective. In bribing attacks, an adversary offers participants a reward in exchange for instructing them how to behave, with the goal of attacking the protocol's properties. Specifically, our work focuses on adversaries that target blockchain safety. We consider two types of bribing, depending on how the bribes are awarded: i) guided bribing, where the bribe is given as long as the bribed party behaves as instructed; ii) effective bribing, where bribes are conditional on the attack's success, w.r.t. well-defined metrics. We analyze each type of attack in a game theoretic setting and identify relevant equilibria. In guided bribing, we show that the protocol is not an equilibrium and then describe good equilibria, where the attack is unsuccessful, and a negative one, where all parties are bribed such that the attack succeeds. In effective bribing, we show that both the protocol and the "all bribed" setting are equilibria. Using the identified equilibria, we then compute bounds on the Prices of Stability and Anarchy. Our results indicate that additional mitigations are needed for guided bribing, so our analysis concludes with incentive-based mitigation techniques, namely slashing and dilution. Here, we present two positive results, that both render the protocol an equilibrium and achieve maximal welfare for all parties, and a negative result, wherein an attack becomes more plausible if it severely affects the ledger's token's market price.},
+booktitle = {Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security},
+pages = {1031–1045},
+numpages = {15},
+keywords = {blockchain, bribing, decentralization, penalties, slashing},
+location = {Salt Lake City, UT, USA},
+series = {CCS '24}
+}
+
+@misc{Aptos22,
+  title        = {The Aptos Blockchain: Safe, Scalable, and Upgradeable Web3 Infrastructure},
+  author       = {Aptos Labs},
+  year         = {2022},
+  howpublished = {\url{https://aptosfoundation.org/whitepaper/aptos-whitepaper_en.pdf}},
+  note         = {Accessed: 2024-06-01}
+}
+
+@misc{Sui22,
+  title        = {The Sui Smart Contracts Platform},
+  author       = {Mysten Labs},
+  year         = {2022},
+  howpublished = {\url{https://docs.sui.io/paper/sui.pdf}},
+  note         = {Accessed: 2024-06-01}
+}
+
+@inproceedings{KKNS21,
+author = {Keidar, Idit and Kokoris-Kogias, Eleftherios and Naor, Oded and Spiegelman, Alexander},
+title = {All You Need is DAG},
+year = {2021},
+isbn = {9781450385480},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3465084.3467905},
+doi = {10.1145/3465084.3467905},
+abstract = {We present DAG-Rider, the first asynchronous Byzantine Atomic Broadcast protocol that achieves optimal resilience, optimal amortized communication complexity, and optimal time complexity. DAG-Rider is post-quantum safe and ensures that all values proposed by correct processes eventually get delivered. We construct DAG-Rider in two layers: In the first layer, processes reliably broadcast their proposals and build a structured Directed Acyclic Graph (DAG) of the communication among them. In the second layer, processes locally observe their DAGs and totally order all proposals with no extra communication.},
+booktitle = {Proceedings of the 2021 ACM Symposium on Principles of Distributed Computing},
+pages = {165–175},
+numpages = {11},
+keywords = {asynchrony, atomic broadcast, byzantine smr, quantum safe},
+location = {Virtual Event, Italy},
+series = {PODC'21}
+}
