@@ -1,0 +1,2 @@
+# ifp
+Interaction finality protocol
