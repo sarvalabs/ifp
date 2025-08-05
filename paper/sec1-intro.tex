@@ -17,7 +17,7 @@ Driven by the scalability challenge, alternative consensus mechanisms that relie
 
 Both class of systems involved two distinct actors interacting with the blockchain - a participant who submits transactions and a validator who orders these transactions globally among all participants. However, the validator's core ordering mechanism (proof-of-work or proof-of-stake) is agnostic to the participant and the context of the particular transactions. 
 
-Consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. Together, they submit two distinct transactions as given in \Cref{fig:intro} - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. In a traditional proof-of-stake blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. However, since the transactions involves a disjoint set of participants, any ordering of the transaction will result in the same global state, an optimization that is not possible to exploit in current blockchain systems. 
+Yet, most everyday \textit{interactions} between participants, financial or otherwise, typically involves sharing some context between the participants. For example, consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. Together, they submit two distinct interactions as given in \Cref{fig:intro} - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. In a traditional proof-of-stake blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. Being aware of the context of the participants, however, allows the blockchain to optimize the ordering of the transactions. For instance, the two interactions in \Cref{fig:intro} can be ordered independently since they involve disjoint sets of participants.
 
 \begin{figure}[h!]
 \tikzfig{intro}
@@ -25,7 +25,7 @@ Consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact w
 \label{fig:intro}
 \end{figure}
 
-In general, incorporating the context of the participants under an interaction-centric consensus mechanism can lead to significant performance improvements in terms of throughput and latency.
+% In general, incorporating the context of the participants under an interaction-centric consensus mechanism can lead to significant performance improvements in terms of throughput and latency.
 
 In this work, we present \codename{}, a novel blockchain powered by a new consensus algorithm that fundamentally integrates the different actors into the decision mechanism. \codename{} is a proof-of-stake based blockchain where each participant has its respective separate chains that intersect only when an interaction occurs between the participants. This decouples consensus between different participants, allowing for multiple interactions among different participants to be agreed upon simultaneously.
 
@@ -33,7 +33,9 @@ However, when multiple interactions, occurring concurrently, involve a common pa
 % When a participant interacts with other participants, their respective contexts ensure that the interaction is ordered globally among all other concurrent interactions.
 Every interaction forms a unique \emph{Interaction Consensus Set} (\emph{ICS}) consisting of the contexts of the interacting participants, along with a randomly chosen set of validators from the network that order the interaction together. The ICS ensures that the validators maintaining the participant's chains order the interaction globally among all other concurrent interactions.
 
-Having a public and small context for each participant makes \codename{} more prone to bribery and collusion attacks. Validators that are part of a participant's context will order transactions preferentially in favour of the participant for a fee. A key feature of \codename{} that mitigates bribery and collusion attacks is its ability to update the context of a participant dynamically. Specifically, the context of each participant is stored in a special chain where transactions on this participant updates the context.
+The resulting data structure of the participant's chains in \codename{} is a Directed Acyclic Graph (\emph{mDAG}) that grows with each interaction. Each validator is responsible for extending and tracking the chains in the mDAG of the corresponding participants. 
+
+Unlike with traditional BFT algorithms, having a public and small context for each participant makes \codename{} more prone to bribery and collusion attacks. Validators that are part of a participant's context will order transactions preferentially in favour of the participant for a fee. A key feature of \codename{} that mitigates bribery and collusion attacks is its ability to update the context of a participant dynamically. Specifically, the context of each participant is stored in a special chain where transactions on this participant updates the context.
 
 %\srinidhi{I'm not happy with this introduction. It lacks a concrete contribution and is very handwavy. We say we can gain something but don't back it up. We say here is a cool new algorithm but don't say what we gain from it. I'll take another pass at this later if we can position it better. Even writing it feels very shallow.}
 
