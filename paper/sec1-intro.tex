@@ -20,9 +20,9 @@ Both class of systems involved two distinct actors interacting with the blockcha
 Yet, most everyday \textit{interactions} between participants, financial or otherwise, typically involves sharing some context between the participants. For example, consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. Together, they submit two distinct interactions as given in \Cref{fig:intro} - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. In a traditional proof-of-stake blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. Being aware of the context of the participants, however, allows the blockchain to optimize the ordering of the transactions. For instance, the two interactions in \Cref{fig:intro} can be ordered independently since they involve disjoint sets of participants.
 
 \begin{figure}[h!]
-\tikzfig{intro}
-\caption{Interactions between Alice, Bob, Charlie, and David}
-\label{fig:intro}
+	\tikzfig{intro}
+	\caption{Interactions between Alice, Bob, Charlie, and David}
+	\label{fig:intro}
 \end{figure}
 
 % In general, incorporating the context of the participants under an interaction-centric consensus mechanism can lead to significant performance improvements in terms of throughput and latency.
@@ -41,25 +41,25 @@ Unlike with traditional BFT algorithms, having a public and small context for ea
 
 % This is a draft story to motivate and position this work. Will fill it with concrete text later
 % \todo[inline]{
-% - Traditional blockchain systems evolved from (expert only) running your own node to mine currency to a general consumer driven service driving financial inclusion
-% - To bridge the gap, two distinct roles emerged in modern blockchain systems - a participant and a validator
-% - A participant engages with the blockchain to submit transactions that exchange currency and other assets (in the form of smart contracts)
-% - A validator/node accepts transactions and orders them globally among all participants
-
-% - In order to ensure total ordering of transaction, validators typically relied on a proof of work scheme. Validators play a computation game and the node that wins the game decides the order of the next set of transactions (blocks).
-% - However this does not scale.
-% - Alternatively, proof of stake schemes involve a selected validator proposing a set of transactions and use a standard off the shelf consensus algorithm to ensure all other validators order transactions as proposed.
-% - However, the core consensus mechanism is agnostic to the different actors - participant and validator - that engage with the blockchain
-
-% - In this work, we present \codename{}, a novel blockchain powered by a new consensus algorithm that fundamentally integrates the different actors into the decision mechanism
-% - \codename{} is a proof of stake based blockchain where different participants their respective separate chains that only interact with each other if the transaction involves them.
-% - <Example diagram and an accompanying text>
-
-% - \srinidhi{What do we concretely gain? Can we give guarantees about that and later evaluate? - Performance in terms of throughput of the transactions? If not, we can just present the algorithm but we should be saying something about asymptotic gains then. Essentially the question is - What is our contribution with the new algorithm? Other than its unique and different.}
-
-% - A short explanation of normal mode working and motivating the different terms
-% - <Here we should introduce and intuitively explain the DAG and Interaction-Centric Consensus>
-% }
+	% - Traditional blockchain systems evolved from (expert only) running your own node to mine currency to a general consumer driven service driving financial inclusion
+	% - To bridge the gap, two distinct roles emerged in modern blockchain systems - a participant and a validator
+	% - A participant engages with the blockchain to submit transactions that exchange currency and other assets (in the form of smart contracts)
+	% - A validator/node accepts transactions and orders them globally among all participants
+	
+	% - In order to ensure total ordering of transaction, validators typically relied on a proof of work scheme. Validators play a computation game and the node that wins the game decides the order of the next set of transactions (blocks).
+	% - However this does not scale.
+	% - Alternatively, proof of stake schemes involve a selected validator proposing a set of transactions and use a standard off the shelf consensus algorithm to ensure all other validators order transactions as proposed.
+	% - However, the core consensus mechanism is agnostic to the different actors - participant and validator - that engage with the blockchain
+	
+	% - In this work, we present \codename{}, a novel blockchain powered by a new consensus algorithm that fundamentally integrates the different actors into the decision mechanism
+	% - \codename{} is a proof of stake based blockchain where different participants their respective separate chains that only interact with each other if the transaction involves them.
+	% - <Example diagram and an accompanying text>
+	
+	% - \srinidhi{What do we concretely gain? Can we give guarantees about that and later evaluate? - Performance in terms of throughput of the transactions? If not, we can just present the algorithm but we should be saying something about asymptotic gains then. Essentially the question is - What is our contribution with the new algorithm? Other than its unique and different.}
+	
+	% - A short explanation of normal mode working and motivating the different terms
+	% - <Here we should introduce and intuitively explain the DAG and Interaction-Centric Consensus>
+	% }
 
 
 % To ensure total ordering of interactions, Bitcoin relied on a proof of work scheme. 

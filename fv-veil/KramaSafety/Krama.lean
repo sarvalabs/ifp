@@ -2,16 +2,16 @@ import Veil
 
 veil module Krama
 
+type view
+instantiate tot : TotalOrder view
+
 type participant
 type node
 type interaction
-type view
--- type quorum
 type context
--- What are these new types that are sshown in InfoView when I create these?
---def context := List node
+-- What are these new types that are shown in InfoView when I create these?
 
---instantiate tot : TotalOrder view
+
 
 --immutable relation is_byz : node →  Prop
 variable (is_byz : node → Prop)
