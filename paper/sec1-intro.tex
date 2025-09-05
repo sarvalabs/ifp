@@ -11,19 +11,13 @@
 \section{Introduction}
 \label{sec:contribution}
 
-Blockchain systems starting with Bitcoin~\cite{Nakamoto09}, democratized the ability to maintain a global and shared distributed ledger of transactions without the need for a trusted third party.
-Ethereum~\cite{But15} further built on this vision, building an open-access general purpose decentralised application platform - a functionality which most modern blockchains provide. 
-In the modern world, human interactions are becoming increasingly digital. 
-Such interactions are highly contextual - for instance, an interaction where a person pays for a coffee is different from the person buying real estate although both involve a money transfer. 
-Therefore, a network for such digital human interactions must integrate their contextual nature. 
-However, in today’s general purpose smart contract platforms, the state intelligence of participants for each application is siloed with the contracts themselves.
-%This results in inflexibility as the largely context sensitive real world interactions cannot be seamlessly catered to based on their requirements as the intelligence is not present to do so. 
-This results in inflexibility as the intelligence to seamlessly cater to the largely context-sensitive real world interactions is not available.
-For instance, in the example interactions given earlier, the contextual difference between the two cannot be leveraged in traditional blockchains to incorporate more trust in the latter interaction due to the siloed nature of intelligence.
-If the contextual intelligence of a participant is leveraged across all applications, a participant-centric network is created whose functionality powers the digitally interacting future for humans.
-This requires a fundamental infrastructure shift, moving the intelligence from applications hosted on smart contracts to the network itself. 
-This intelligence in the network is anchored to the participants, making participant preferences at the centre of applications built on the network. 
-This is captured by the \emph{context object} (analogous to state) of participants, having four dimensions of Value, Logic, Files, and Trust.  
+Blockchain systems, starting with Bitcoin~\cite{Nakamoto09} and Ethereum~\cite{But15}, democratized the ability to maintain a global and shared distributed ledger of transactions without the need for a trusted third party. These systems rely on the ability of participants to demonstrate sufficient proof of work (computational effort) to ensure resilience against malicious actors. However, the requirements imposed by the proof-of-work mechanism constrains the scalability of these systems, making it difficult to handle a large number of transactions efficiently. 
+
+Driven by the scalability challenge, alternative consensus mechanisms that relied on traditional Byzantine fault tolerance (BFT) algorithms were developed. Systems such as Tendermint~\cite{BKM18}, Algorand~\cite{GHMVZ17}, and Hotstuff~\cite{YMRGA19} introduced proof-of-stake based consensus mechanisms motivated by traditional BFT algorithms such as PBFT~\cite{CL99} and its variants. 
+
+Both class of systems involved two distinct actors interacting with the blockchain - a participant who submits transactions and a validator who orders these transactions globally among all participants. However, the validator's core ordering mechanism (proof-of-work or proof-of-stake) is agnostic to the participant and the context of the particular transactions. 
+
+Yet, most everyday \textit{interactions} between participants, financial or otherwise, typically involves sharing some context between the participants. For example, consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. Together, they submit two distinct interactions as given in \Cref{fig:intro} - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. In a traditional proof-of-stake blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. Being aware of the context of the participants, however, allows the blockchain to optimize the ordering of the transactions. For instance, the two interactions in \Cref{fig:intro} can be ordered independently since they involve disjoint sets of participants.
 
 \begin{figure}[h!]
 	\tikzfig{intro}
@@ -31,51 +25,17 @@ This is captured by the \emph{context object} (analogous to state) of participan
 	\label{fig:intro}
 \end{figure}
 
-Consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. 
-Together, they submit two distinct transactions as given in Figure 1 - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. 
-In a traditional blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. 
-Here, the consensus mechanism is participant agnostic and only concerns the global state. 
+% In general, incorporating the context of the participants under an interaction-centric consensus mechanism can lead to significant performance improvements in terms of throughput and latency.
 
-In this work, we present the Interaction Finality Protocol (IFP) - a consensus protocol powering participant-centric blockchains which fundamentally integrates the participant into the consensus mechanism. 
-IFP achieves consensus on updated context objects of participants involved in interactions. 
-It powers a blockchain where each participant has its respective separate chains that intersect only when an \emph{interaction} (analogous to transaction) occurs between the participant. 
-Here, the current context object of a participant can be found in the head of its respective chain. 
-This decouples consensus, providing the ability to integrate participants’ trust preferences into the consensus mechanism. 
-However, when multiple concurrently occurring interactions involve a common participant, it is crucial to ensure that they are ordered globally among all other concurrent interactions. 
+In this work, we present \codename{}, a novel blockchain powered by a new consensus algorithm that fundamentally integrates the different actors into the decision mechanism. \codename{} is a proof-of-stake based blockchain where each participant has its respective separate chains that intersect only when an interaction occurs between the participants. This decouples consensus between different participants, allowing for multiple interactions among different participants to be agreed upon simultaneously.
 
-To achieve this, IFP’s consensus mechanism associates a committee of validators with each participant.
-Every interaction forms a unique Interaction Consensus Set (ICS) consisting of the committees of the interacting participants, along with a randomly chosen set of validators from the network that order the interaction together. 
-The ICS ensures that the validators maintaining the participant’s chains order the interaction globally among all other concurrent interactions. 
-The randomly chosen set of validators provides the power of the entire network, having to corrupt a significant portion of the entire network to affect IFP’s safety. 
-Further, this ability to concurrently process interactions can lead to significant performance improvements in terms of throughput.
+However, when multiple interactions, occurring concurrently, involve a common participant, ensuring that the interactions are ordered globally among all other concurrent interactions is crucial. To achieve this, \codename{}'s consensus mechanism associates with each participant a context which is a set of validators that are associated with the participant. 
+% When a participant interacts with other participants, their respective contexts ensure that the interaction is ordered globally among all other concurrent interactions.
+Every interaction forms a unique \emph{Interaction Consensus Set} (\emph{ICS}) consisting of the contexts of the interacting participants, along with a randomly chosen set of validators from the network that order the interaction together. The ICS ensures that the validators maintaining the participant's chains order the interaction globally among all other concurrent interactions.
 
+The resulting data structure of the participant's chains in \codename{} is a Directed Acyclic Graph (\emph{mDAG}) that grows with each interaction. Each validator is responsible for extending and tracking the chains in the mDAG of the corresponding participants. 
 
-%Intro written by Srinidhi:%%%%%%
-%
-%Blockchain systems, starting with Bitcoin~\cite{Nakamoto09} and Ethereum~\cite{But15}, democratized the ability to maintain a global and shared distributed ledger of transactions without the need for a trusted third party. These systems rely on the ability of participants to demonstrate sufficient proof of work (computational effort) to ensure resilience against malicious actors. However, the requirements imposed by the proof-of-work mechanism constrains the scalability of these systems, making it difficult to handle a large number of transactions efficiently. 
-%
-%Driven by the scalability challenge, alternative consensus mechanisms that relied on traditional Byzantine fault tolerance (BFT) algorithms were developed. Systems such as Tendermint~\cite{BKM18}, Algorand~\cite{GHMVZ17}, and Hotstuff~\cite{YMRGA19} introduced proof-of-stake based consensus mechanisms motivated by traditional BFT algorithms such as PBFT~\cite{CL99} and its variants. 
-%
-%Both class of systems involved two distinct actors interacting with the blockchain - a participant who submits transactions and a validator who orders these transactions globally among all participants. However, the validator's core ordering mechanism (proof-of-work or proof-of-stake) is agnostic to the participant and the context of the particular transactions. 
-%
-%Consider 4 distinct participants, Alice, Bob, Charlie, and David, who interact with each other in a blockchain system. Together, they submit two distinct transactions as given in \Cref{fig:intro} - Alice sends 10 coins to Bob and Charlie sends 5 coins to David. In a traditional proof-of-stake blockchain, validators that receive both these transactions ignore the context of the interacting participants and communicate with all other validators to decide on the order of the transactions. However, since the transactions involves a disjoint set of participants, any ordering of the transaction will result in the same global state, an optimization that is not possible to exploit in current blockchain systems. 
-%
-%\begin{figure}[h!]
-%\tikzfig{intro}
-%\caption{Interactions between Alice, Bob, Charlie, and David}
-%\label{fig:intro}
-%\end{figure}
-%
-%In general, incorporating the context of the participants under an interaction-centric consensus mechanism can lead to significant performance improvements in terms of throughput and latency.
-%
-%In this work, we present \codename{}, a novel blockchain powered by a new consensus algorithm that fundamentally integrates the different actors into the decision mechanism. \codename{} is a proof-of-stake based blockchain where each participant has its respective separate chains that intersect only when an interaction occurs between the participants. This decouples consensus between different participants, allowing for multiple interactions among different participants to be agreed upon simultaneously.
-%
-%However, when multiple interactions, occurring concurrently, involve a common participant, ensuring that the interactions are ordered globally among all other concurrent interactions is crucial. To achieve this, \codename{}'s consensus mechanism associates with each participant a context which is a set of validators that are associated with the participant. 
-%% When a participant interacts with other participants, their respective contexts ensure that the interaction is ordered globally among all other concurrent interactions.
-%Every interaction forms a unique \emph{Interaction Consensus Set} (\emph{ICS}) consisting of the contexts of the interacting participants, along with a randomly chosen set of validators from the network that order the interaction together. The ICS ensures that the validators maintaining the participant's chains order the interaction globally among all other concurrent interactions.
-%
-%Having a public and small context for each participant makes \codename{} more prone to bribery and collusion attacks. Validators that are part of a participant's context will order transactions preferentially in favour of the participant for a fee. A key feature of \codename{} that mitigates bribery and collusion attacks is its ability to update the context of a participant dynamically. Specifically, the context of each participant is stored in a special chain where transactions on this participant updates the context.
-%%%%%%%%%%%%%%%%%%%
+Unlike with traditional BFT algorithms, having a public and small context for each participant makes \codename{} more prone to bribery and collusion attacks. Validators that are part of a participant's context will order transactions preferentially in favour of the participant for a fee. A key feature of \codename{} that mitigates bribery and collusion attacks is its ability to update the context of a participant dynamically. Specifically, the context of each participant is stored in a special chain where transactions on this participant updates the context.
 
 %\srinidhi{I'm not happy with this introduction. It lacks a concrete contribution and is very handwavy. We say we can gain something but don't back it up. We say here is a cool new algorithm but don't say what we gain from it. I'll take another pass at this later if we can position it better. Even writing it feels very shallow.}
 

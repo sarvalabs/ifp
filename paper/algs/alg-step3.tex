@@ -7,7 +7,7 @@
 % \msg{\txt{PreVote}, \m{interaction}_v, \m{viewNumber}_v}
     \State $\m{voteQC} \gets $ \sc{QC}($M$)
     % \State Aggregate the quorum of votes into $\m{prevoteQC}$
-    \State \Broadcast \msg{\txt{Vote}, \m{tesseract}_v, \m{view}_v, \m{voteQC}} to $\m{ICS}_v$
+    \State \textbf{multicast} \msg{\txt{Vote}, \m{tesseract}_v, \m{view}_v, \m{voteQC}} to $\m{ICS}_v$
 \EndFor
 \item[]
 

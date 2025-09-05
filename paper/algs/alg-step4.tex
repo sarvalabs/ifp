@@ -7,7 +7,7 @@
 % \msg{\txt{PreCommit}, \m{interaction}_v, \m{viewNumber}_v}
     \State $\m{commitQC} \gets $\Call{QC}{$M$}
     % \State Aggregate the quorum of votes into $\m{precommitQC}$
-    \State \Broadcast \msg{\txt{Commit}, \m{tesseract}_v, \m{view}_v, \m{commitQC}} to $\m{ICS}_v$
+    \State \textbf{multicast} \msg{\txt{Commit}, \m{tesseract}_v, \m{view}_v, \m{commitQC}} to $\m{ICS}_v$
     %\State Execute $\calI_P$ and commit the resulting tesseract
     \State \Call{commit}{$\m{tesseract}_v$}
     %\State Terminate engaging in consensus for $\calI_P$

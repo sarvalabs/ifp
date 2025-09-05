@@ -56,11 +56,11 @@
 \LComment{\textbf{\color{black}Procedures:}}
 \Procedure{Propose}{$T, \m{prepareQC}$}
     \If{$T=\m{nil}$}
-        \State \Broadcast \msg{\txt{Propose}, T, \m{prepareQC}, \m{view}_v} to $\msc{ctx}(T)$   
+        \State \textbf{multicast} \msg{\txt{Propose}, T, \m{prepareQC}, \m{view}_v} to $\msc{ctx}(T)$   
     \Else
         \State $(\calS_v, \m{rand}_v, \m{proof}_v) \gets$ \Call{SelectStochastic}{$T, \m{view}_v$}
         % \State \Call{UpdateState}{$\m{self}, T, \msc{ICS}(T, \calS_v)$}
-        \State \Broadcast \msg{\txt{Propose}, T, \m{prepareQC}, \calS_v, \m{rand}_v, \m{proof}_v, \m{view}_v} to $\msc{ICS}(T, \calS_v)$   
+        \State \textbf{multicast} \msg{\txt{Propose}, T, \m{prepareQC}, \calS_v, \m{rand}_v, \m{proof}_v, \m{view}_v} to $\msc{ICS}(T, \calS_v)$   
     \EndIf
 \EndProcedure
 \item[] 
