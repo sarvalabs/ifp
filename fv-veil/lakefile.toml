@@ -1,6 +1,6 @@
-name = "krama-safety"
+name = "ifp-safety"
 version = "0.1.0"
-defaultTargets = ["KramaSafety"]
+defaultTargets = ["IFPSafety"]
 
 [[require]]
 name = "veil"
@@ -8,4 +8,4 @@ git = "https://github.com/verse-lab/veil.git"
 rev = "main"
 
 [[lean_lib]]
-name = "KramaSafety"
+name = "IFPSafety"
