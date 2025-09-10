@@ -3,7 +3,7 @@
 \begin{algorithmic}[1]         
 
 \Procedure{RemoveOutdatedQCs}{$\m{qcSet}$}
-     \State $\msc{ComputeHighQCs}(\m{qcSet})$
+     \State $\msc{ExtractHighQCs}(\m{qcSet})$
      %\State $\{\m{maxHeightPrecommit}_p\mid \exists \m{qc}\in \m{qcSet} : p\in \m{qc}.\m{participants}\} \gets \msc{MaxHeight}(\m{qcSet}_v, \m{precommit})$
      %\State $\m{maxHeightPrevote}_v \gets \msc{MaxHeight}(\m{qcSet}_v, \m{prevote})$
      \ForAll{$\m{qc} \in \m{qcSet}$ such that $\m{qc}.\m{stage} = \m{vote}$}

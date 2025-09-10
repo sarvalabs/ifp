@@ -11,11 +11,11 @@
 %    \EndIf
 %\EndFor
 %\item[] 
-\LComment{\textbf{\color{black}As an operator:}}
+\LComment{\textbf{\color{black}As an operator $v$:}}
 \For{$\m{view}.\m{begin}$}
-	\If{$\m{self} = o_I$ for interaction $I$}
+	\If{$\m{v} = o_I$ for interaction $I$}
 		\State $\m{I}_v \gets \m{I}$
-		\State \Broadcast \msg[]{\txt{Prepare}, I_v} to $\msc{ctx}(\m{I}_v)$
+		\State \textbf{multicast} \msg[]{\txt{Prepare}, I_v} to $\msc{ctx}(\m{I}_v)$
 	\EndIf
 \EndFor
 \item[]	
@@ -36,7 +36,7 @@
 \For{$\m{prepareTimeout}$}
     \State \msg[\m{op}]{\txt{Prepare}, I} $= \Call{Choose}{\m{prepares}_p}$
     %\State $\m{lockedQCs}\gets \{\m{lockedQC_v^p}\mid p\in P_I\}$
-    \State \Send \msg[]{\txt{Prepare}, \{\m{lockedQC_v^p}\mid p\in P_I\}} to $\m{op}$
+    \State \Send \msg[]{\txt{Prepare}, \m{lockedQC_v^p}} to $\m{op}$
     \ForAll{\msg[\m{op}']{\txt{Prepare}, I'} $\in \m{prepares}^p\setminus\{\Call{Choose}{\m{prepares}^p}\}$}
         \State \Send \msg[]{\txt{PrepareNil}, \m{prepares}^p} to $\m{op}'$
     \EndFor

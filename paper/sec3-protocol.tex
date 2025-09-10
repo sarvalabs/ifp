@@ -21,9 +21,10 @@ Once an operator is chosen, each \textit{consensus instance} proceeds in a seque
 \input{algs/alg-step1}
 \subsubsection{Prepare}
 
-As defined in~\cref{alg:step1}, the operator initiates the \txt{Prepare} phase by sending a \txt{Prepare} message to the \emph{interaction's context}. This message contains the interaction and serves as a discovery mechanism for validators in the context to respond with their latest state information. We refer to the participant contexts of an interaction $I$ together as the \emph{interaction's context} denoted $\msc{ctx}(I)$. In the \txt{Prepare} phase, each validator (in the context of a participant $p$) collects \txt{Prepare} messages from operators and until a timeout is reached, at which point it chooses a single \txt{Prepare} message to respond to, ensuring that they are participating in a single consensus instance for participant $p$. This is accomplished by the $\msc{Choose}()$ function. However, note that the validator may have responded to multiple \txt{Prepare} messages for different participants in other consensus instances. For the remaining messages, validators respond with a \txt{PrepareNil} message. 
+As defined in~\cref{alg:step1}, the operator initiates the \txt{Prepare} phase by sending a \txt{Prepare} message to the \emph{interaction's context}. This message contains the interaction and serves as a discovery mechanism for validators in the context to respond with their latest state information. We refer to the participant contexts of an interaction $I$ together as the \emph{interaction's context} denoted $\msc{ctx}(I)$. In the \txt{Prepare} phase, each validator (in the context of a participant $p$) collects \txt{Prepare} messages from operators and until a timeout is reached, at which point it chooses a single \txt{Prepare} message to respond to, ensuring that they are participating in a single consensus instance for participant $p$. This is accomplished by the $\msc{Choose}()$ function. However, note that the validator may have responded to multiple \txt{Prepare} messages for different participants in other consensus instances. 
+For the remaining \txt{Prepare} messages, validators respond with a \txt{PrepareNil} message so that the operator can process the responses and proceed to the next stage.
 
-The operator collects responses from validators until a quorum of either \txt{Prepare} or \txt{PrepareNil} messages are obtained, at which point it can propose a Tesseract that extends the latest states of the participants from whose contexts a quorum of successful \txt{Prepare} responses are obtained. 
+The operator collects responses from validators until a quorum consisting of either \txt{Prepare} or \txt{PrepareNil} messages are obtained, at which point it can propose a Tesseract that extends the latest states of the participants from whose contexts a quorum of successful \txt{Prepare} responses are obtained. 
 
 
 \subsubsection{Propose}
@@ -51,7 +52,7 @@ Validators accept the proposal only if it is \emph{valid}, resulting from the ex
 \subsubsection{Vote and Commit}
 
 
-The next two stages of the protocol are \txt{Vote} and \txt{Commit} phases, as described in \cref{alg:step3} and \cref{alg:step4} respectively. Validators that accept a proposal respond with a \txt{Vote} message and refrain from voting on other tesseracts with the same participant set. Once a quorum of validators accept the proposal, the operator forms a \emph{quorum certificate} (QC) of the \txt{Vote} responses and broadcasts it to the ICS. Validators on receiving this \emph{lock} onto the Tesseract and pass it in any subsequent \txt{Prepare} phases. This lock represents the validator's commitment to the proposed Tesseract. 
+The next two stages of the protocol are \txt{Vote} and \txt{Commit} phases, as described in \cref{alg:step3} and \cref{alg:step4} respectively. Validators that accept a proposal respond with a \txt{Vote} message and refrain from voting on other tesseracts with the same participant set. Once a quorum of validators accept the proposal, the operator forms a \emph{quorum certificate} (QC) of the \txt{Vote} responses and multicasts it to the ICS. Validators on receiving this \emph{lock} onto the Tesseract and pass it in any subsequent \txt{Prepare} phases. This lock represents the validator's commitment to the proposed Tesseract. 
 They further respond to the operator with a \txt{Commit} message and the operator, upon receiving a quorum of such messages, forms a quorum certificate and sends a \txt{Commit} message to the ICS as well as the entire validator set. 
 Validators then commit the Tesseract to their histories and lock onto the QC. 
 
@@ -112,11 +113,11 @@ The shuffling procedure follows the swap-or-not shuffle described in \cite{HMR12
 % Validators, upon receiving this type of interaction, perform an additional check to determine if the time elapsed since the previous tesseract formation indicates a sufficiently high probability of context validator unavailability.
 % This interaction is agreed upon by an ICS with sarga's context. 
 % Validators, upon receiving the resulting tesseract monitor the liveness of the participant's context validators at regular intervals for a specified period. 
-% During this monitoring period, if the context validators are found unavailable, validators broadcast a vote for resetting the participant's context.
+% During this monitoring period, if the context validators are found unavailable, validators multicast a vote for resetting the participant's context.
 % Otherwise, they vote against it.
 % A separate context reset logic present with each validator manages this process.
 % The participant can query the context reset logic to determine if a supermajority of votes favour resetting their context.
-% On receiving a supermajority, the participant can broadcast a \emph{context reset} interaction. 
+% On receiving a supermajority, the participant can multicast a \emph{context reset} interaction. 
 % This interaction includes sarga and similar to the regular context shuffling procedure during epoch reconfiguration, the participant's context is shuffled, agreed upon, and the resulting tesseract is committed.
 
 % \subsubsection{Validator Weights}
@@ -206,9 +207,9 @@ The logic for checking the criteria is abstracted in the function $\msc{ValidPro
 % \end{enumerate}
 % The operator cannot propose an interaction with a different participant set due to its lack of knowledge about the latest lock information of other participants and the participant context being on a different consensus instance. 
 % If the above procedure results in a valid interaction, the operator executes it and proposes the resulting tesseract. 
-% The proposal is broadcast to an ICS formed by sampling a stochastic set as described in \Cref{subsubsec:randsetsample}. 
+% The proposal is multicast to an ICS formed by sampling a stochastic set as described in \Cref{subsubsec:randsetsample}. 
 % This \txt{Propose} message contains (1) the tesseract, (2) the quorum certificate $\m{prepareQC}$, (3) the randomly selected stochastic set, and (4) the corresponding pseudo-random number and its proof. 
-% However, if the above procedure does not result in an interaction for proposal, the operator broadcasts a \txt{Propose} message with the $\m{nil}$ tesseract and quorum certificate $\m{prepareQC}$ to the interaction’s context.
+% However, if the above procedure does not result in an interaction for proposal, the operator multicasts a \txt{Propose} message with the $\m{nil}$ tesseract and quorum certificate $\m{prepareQC}$ to the interaction’s context.
 % This message serves to share the $\m{prepareQC}$ with the interaction’s context
 % so that the validators are aware of the latest locked QCs of the interacting participants. 
 % The operator can only propose a single tesseract with a given participant involved during a view, preventing conflicting interaction proposals.
@@ -491,8 +492,8 @@ The logic for checking the criteria is abstracted in the function $\msc{ValidPro
 
 % If an interaction satisfying the above conditions is present, it is executed and the resulting tesseract is agreed upon by the protocol as follows.
 % To propose the tesseract, an interaction consensus set is formed by sampling a stochastic set as described in \Cref{subsubsec:randsetsample}.
-% The operator broadcasts a \txt{Propose} message to the ICS containing (1) the tesseract, (2) the quorum certificate $\m{prepareQC}$, (3) the current view, (4) the randomly selected stochastic set, and (5) the corresponding pseudo-random number and its proof. 
-% However, if such an interaction is not present, then the \txt{Propose} message is broadcast to the interaction's context containing (1) the $\m{nil}$ tesseract, the quorum certificate $\m{prepareQC}$, and (3) the current view.
+% The operator multicasts a \txt{Propose} message to the ICS containing (1) the tesseract, (2) the quorum certificate $\m{prepareQC}$, (3) the current view, (4) the randomly selected stochastic set, and (5) the corresponding pseudo-random number and its proof. 
+% However, if such an interaction is not present, then the \txt{Propose} message is multicast to the interaction's context containing (1) the $\m{nil}$ tesseract, the quorum certificate $\m{prepareQC}$, and (3) the current view.
 % This message serves to share the $\m{prepareQC}$ with the interaction's context so that the validators are aware of the highest locked QCs of the interacting participants. 
 % The operator is limited to proposing a single tesseract with a given participant involved during a view, preventing conflicting interaction proposals. 
 % %This prevents conflicting interactions being proposed by the operator. 
@@ -515,14 +516,14 @@ The logic for checking the criteria is abstracted in the function $\msc{ValidPro
 % \subsubsection{PreVote Stage}
 
 % Upon receiving a quorum of \txt{PreVote} messages from the ICS, the operator aggregates them into a quorum certificate $\m{prevoteQC}$
-% and broadcasts a \txt{PreVote} message containing it to the ICS. Validators in the ICS respond with \txt{PreCommit} messages and set their $\m{lockedQC}^p$ as $\m{prevoteQC}$ for interacting participants whose context they belong to.
+% and multicasts a \txt{PreVote} message containing it to the ICS. Validators in the ICS respond with \txt{PreCommit} messages and set their $\m{lockedQC}^p$ as $\m{prevoteQC}$ for interacting participants whose context they belong to.
 % This step is crucial for safety.
 
 % \subsubsection{PreCommit Stage} 
 
-% Upon receiving a quorum of \txt{PreCommit} messages from the ICS, the operator aggregates them into a quorum certificate $\m{precommitQC}$ and broadcasts a \txt{PreCommit} message containing it to the ICS. 
+% Upon receiving a quorum of \txt{PreCommit} messages from the ICS, the operator aggregates them into a quorum certificate $\m{precommitQC}$ and multicasts a \txt{PreCommit} message containing it to the ICS. 
 % Validators in the ICS commit the tesseract to their history on receiving the message and set their $\m{lockedQC}^p$ as $\m{precommitQC}$ for each interacting participant $p$ whose context they belong to.
-% The operator then asynchronously broadcasts the tesseract to all validators, who commit it upon reception. 
+% The operator then asynchronously multicasts the tesseract to all validators, who commit it upon reception. 
 % This message includes the quorum certificate, randomly sampled stochastic set, corresponding pseudo-random number, and its proof for validators to verify the message.
 
 
