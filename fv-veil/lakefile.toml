@@ -5,7 +5,11 @@ defaultTargets = ["IFPSafety"]
 [[require]]
 name = "veil"
 git = "https://github.com/verse-lab/veil.git"
+<<<<<<< Updated upstream
 rev = "main"
 
 [[lean_lib]]
 name = "IFPSafety"
+=======
+rev = "main"
+>>>>>>> Stashed changes
