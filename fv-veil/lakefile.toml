@@ -1,6 +1,13 @@
 name = "ifp-safety"
 version = "0.1.0"
-defaultTargets = ["IFPSafety"]
+defaultTargets = ["ifp-safety"]
+
+[[lean_lib]]
+name = "IFPSafety"
+
+[[lean_exe]]
+name = "ifp-veil-new"
+root = "Main"
 
 [[require]]
 name = "veil"
