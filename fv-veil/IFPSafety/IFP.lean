@@ -11,6 +11,7 @@ class IFPTheory.Background
   -- → (interaction → participant → participant → Prop) → Prop
 
 -- We prove safety of IFP for a single epoch
+veil module IFP
 
 type view
 instantiate tot_view : TotalOrderWithMinimum view
@@ -232,7 +233,7 @@ invariant [prepare_response_only_on_valid_prepare]
 
 invariant [prepare_response_only_by_context_nodes]
   ∀ (v : view) (ixn : interaction) (n : node),
-    prepared_node n v ixn → ∃ (c1 c2 : context), ixn_ccntexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2)
+    prepared_node n v ixn → ∃ (c1 c2 : context), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2)
 
 
 /-

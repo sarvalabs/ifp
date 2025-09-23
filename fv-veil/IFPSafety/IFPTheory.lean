@@ -1,5 +1,3 @@
-import Mathlib.Data.Set.Basic
-
 namespace IFPTheory
 
 variable {Node: Type}
