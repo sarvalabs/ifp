@@ -43,7 +43,7 @@ relation prepare_timed_out: node → view → Prop
 relation sent_lock_in_prepare : node → view → interaction → interaction → Bool → Prop
 relation decided : node → view → interaction → Prop
 relation locked : node → view → interaction → Bool → Prop
--- Bool 1 = Prevote stage, 0 = Precommit stage
+-- Bool true = Prevote stage, false = Precommit stage
 
 -- for operators
 relation prepared_operator : node → view → interaction → Prop
@@ -64,6 +64,8 @@ relation parent : interaction → interaction → Prop
 relation ancestor : interaction → interaction → Prop
 immutable relation interacting_participants : interaction → participant → participant → Prop
 
+individual genesis : interaction
+
 #gen_state
 
 -- Assume that the two participants in an interaction are distinct.
@@ -81,11 +83,12 @@ assumption ∀ (p : participant) (c1 c2 : context),
 
 
 after_init {
+  parent I J := if I = genesis ∧ J = genesis then True else False;
+  ancestor I J := if I = genesis ∧ J = genesis then True else False;
+  locked N V I S := if I = genesis ∧ S = false ∧ V = tot_view.zero then True else False;
+  decided N V I := if I = genesis ∧ V = tot_view.zero then True else False;
   operator V I N := False;
   cur_view N V := if V = tot_view.zero then True else False;
-  ancestor B C := B = C;
-  decided N V B := False;
-  locked N V B S := False;
   prepared_operator N V B := False;
   sent_lock_in_prepare N V B L S := False;
   proposed N V B := False;
@@ -179,14 +182,21 @@ action prevote (n : node) (v : view) (ixn : interaction) = {
   require ∃ (c1 c2 : context), ixn_contexts ixn c1 c2 ∧ ctx.supermajority c1 ∧ ctx.supermajority c2 ∧
     ∀ (n1 : node), (ctx.member n1 c1 ∨ ctx.member n1 c2) → prevoted_node n1 v ixn
   prevoted_operator n v ixn := True
-  locked n v ixn true := True
+  -- locked n v ixn true := True
+  let (v1 : view) (i : interaction) (s : Bool)
+  locked n v1 i s := if (v1 = v ∧ i = ixn ∧ s = true) then True else False;
+  /-∀ (v1 : view) (i : interaction) (s : Bool), ¬ (v1 = v ∧ i = ixn ∧ s = true)
+    → locked n v1 i s := False-/
+  -- Set all other/previous locks to False
 }
 
 -- The nodes respond to the prevote with a precommit
 action respond_prevote (n : node) (v : view) (ixn : interaction) = {
   require cur_view n v
   require ∃ (op : node), prevoted_operator op v ixn ∧ operator v ixn op
-  locked n v ixn true := True
+  -- locked n v ixn true := True
+  let (v1 : view) (i : interaction) (s : Bool)
+  locked n v1 i s := if (v1 = v ∧ i = ixn ∧ s = true) then True else False;
   precommitted_node n v ixn := True
 }
 
@@ -196,7 +206,9 @@ action precommit (n : node) (v : view) (ixn : interaction) = {
   require ∃ (c1 c2 : context) , ixn_contexts ixn c1 c2 ∧ ctx.supermajority c1 ∧ ctx.supermajority c2 ∧
     ∀ (n1 : node), (ctx.member n1 c1 ∨ ctx.member n1 c2) → precommitted_node n1 v ixn
   precommitted_operator n v ixn := True
-  locked n v ixn false := True
+  -- locked n v ixn false := True
+  let (v1 : view) (i : interaction) (s : Bool)
+  locked n v1 i s := if (v1 = v ∧ i = ixn ∧ s = false) then True else False;
   decided n v ixn := True
   broadcasted_decision n v ixn := True
 }
@@ -205,7 +217,9 @@ action precommit (n : node) (v : view) (ixn : interaction) = {
 action respond_precommit (n : node) (v : view) (ixn : interaction) = {
   require cur_view n v
   require ∃ (op : node), operator v ixn op ∧ precommitted_operator op v ixn
-  locked n v ixn false := True
+  -- locked n v ixn false := True
+  let (v1 : view) (i : interaction) (s : Bool)
+  locked n v1 i s := if (v1 = v ∧ i = ixn ∧ s = false) then True else False;
   decided n v ixn := True
 }
 
@@ -258,3 +272,5 @@ invariant [no_conflicting_prevotes_by_nodes]
 
 set_option veil.printCounterexamples true
 #time #check_invariants
+
+end IFP
