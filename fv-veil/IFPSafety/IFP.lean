@@ -237,6 +237,7 @@ action propose (n : node) (v : view) (ixn ixn_propose : interaction) = {
 }
 
 /-
+# Removed a bunch to compile faster
 `For simulating the sending of locks as part of proposal in prepareQC`
 `Commented for now because it is generating weird errors`
 -- The operator sends all received locks to nodes in prepareQC as part of proposal
@@ -250,6 +251,7 @@ action sent_received_lock_in_propose (n : node) (v vl : view) (ixn_prepare ixn_p
 }
 -/
 
+/-
 -- The nodes respond with a prevote
 action respond_propose (n : node) (v : view) (ixn ixn_prev : interaction) = {
   require cur_view n v
@@ -353,7 +355,7 @@ action respond_decision (n : node) (v : view) (ixn : interaction) = {
   require ∃ (op : node), operator v ixn_prep op ∧ broadcasted_decision op v ixn
   decided n v ixn := True
 }
-
+-/
 /-
 # Byzantine nodes can send whatever they want but cannot forge identities
 action byz_send_1 (n : node) (v : view) (ixn ixnl : interaction) (sl : Bool)  = {
