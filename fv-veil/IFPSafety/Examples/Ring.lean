@@ -233,9 +233,9 @@ safety [single_leader] leader L1 ∧ leader L2 → L1 = L2
 inductive invariant. COMMENT THEM OUT to see how Veil can be used to manually
 discover invariants, guided by counterexamples to induction. -/
 
-invariant [leader_greatest] leader L → le N L
-invariant [receive_self_msg_only_if_greatest] pending L L → le N L
-invariant [no_bypass] pending S D ∧ btw S N D → le N S
+-- invariant [leader_greatest] leader L → le N L
+-- invariant [receive_self_msg_only_if_greatest] pending L L → le N L
+-- invariant [no_bypass] pending S D ∧ btw S N D → le N S
 
 /- Before we can operate on the specification in any way (e.g. check it), we
 must run the `#gen_spec` command. -/
