@@ -32,6 +32,7 @@ type participant
 type node
 type interaction
 type context
+type nodeset
 
 variable (is_byz : node → Prop) -- immutable relation?
 
@@ -305,6 +306,7 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) = {
   require ∃ (op : node), prevoted_operator op v ixn ∧ operator v ixn_prep op ∧
     ∃ (c1 c2 : context), ixn_contexts ixn c1 c2 ∧ ctx.supermajority c1 ∧ ctx.supermajority c2 ∧
     ∀ (n1 : node), (ctx.member n1 c1 ∨ ctx.member n1 c2) → prevoted_node n1 v ixn
+  -- require ∀ (i : interaction), ¬ precommitted_node n v i
   /-
   `Old Code`
   -- locked n v ixn true := True
@@ -363,7 +365,7 @@ action respond_decision (n : node) (v : view) (ixn : interaction) = {
 }
 
 
--- # Byzantine nodes can send whatever they want but cannot forge identities
+-- -- # Byzantine nodes can send whatever they want but cannot forge identities
 -- action byz_send_1 (n : node) (v : view) (ixn ixnl : interaction) (sl : Bool)  = {
 --   require is_byz n
 --   sent_lock_in_prepare n v ixn ixnl sl := True
@@ -409,6 +411,23 @@ action respond_decision (n : node) (v : view) (ixn : interaction) = {
 --   precommitted_node n v ixn := True
 -- }
 
+-- # Byzantine nodes can arbitrarily change their local state and send messages
+action byz_sabotage (n : node) = {
+  require is_byz n
+  decided n V I := *
+  locked n := *
+  sent_lock_in_prepare n V I J S := *
+  prepared_operator n V I := *
+  proposed n V I := *
+  sent_lock_in_propose n V I J S := *
+  prevoted_operator n V I := *
+  sent_received_prevote_in_prevote n V I M := *
+  precommitted_operator n V I := *
+  broadcasted_decision n V I := *
+  prepared_node n V I := *
+  prevoted_node n V I := *
+  precommitted_node n V I := *
+}
 
 /-
 # From Tendermint Ivy Proof:
