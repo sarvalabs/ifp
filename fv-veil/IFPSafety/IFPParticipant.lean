@@ -647,7 +647,6 @@ set_option veil.printCounterexamples true
 set_option veil.smt.model.minimize true
 set_option veil.vc_gen "transition"
 -- set_option veil.showVerificationTime true
--- set_option veil.smt.seed 7
 
 
 #time #check_invariants

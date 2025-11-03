@@ -233,9 +233,9 @@ safety [single_leader] leader L1 ∧ leader L2 → L1 = L2
 inductive invariant. COMMENT THEM OUT to see how Veil can be used to manually
 discover invariants, guided by counterexamples to induction. -/
 
--- invariant [leader_greatest] leader L → le N L
--- invariant [receive_self_msg_only_if_greatest] pending L L → le N L
--- invariant [no_bypass] pending S D ∧ btw S N D → le N S
+invariant [leader_greatest] leader L → le N L
+invariant [receive_self_msg_only_if_greatest] pending L L → le N L
+invariant [no_bypass] pending S D ∧ btw S N D → le N S
 
 /- Before we can operate on the specification in any way (e.g. check it), we
 must run the `#gen_spec` command. -/
@@ -331,7 +331,7 @@ prove_inv_safe by {
 /- We support proof reconstruction from SMT proofs (powered by `lean-smt`). This
 is not yet fully reliable, but it suffices for this simple example. Note that
 `prove_inv_inductive` shows no warning about `sorry` with the option enabled. -/
-set_option veil.smt.reconstructProofs true
+-- set_option veil.smt.reconstructProofs true
 
 prove_inv_inductive by {
   constructor
