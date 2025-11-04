@@ -20,21 +20,6 @@ class IFPTheory.Background
   -- else
   --   False
 
-/-
-class IFPByzQuorum (node : Type) (interaction : Type) (is_byz : outParam (node → Prop)) (nset : outParam Type)
-(ixn_contexts : outParam (interaction → nset → nset → Prop)) where
-  member (a : node) (s : nset) : Prop
-  member_ctx1 (a : node) (i : interaction) : Prop
-  member_ctx2 (a : node) (i : interaction) : Prop
-  supermajority_ctx1 (i : interaction) : Prop       -- 2f + 1 nodes
-  supermajority_ctx2 (i : interaction) : Prop       -- 2f + 1 nodes
-  quorum (i : interaction) : Prop -- 2f + 1 nodes from each context of ixn
-
-  member_ctx1_ixn :
-  supermajorities_intersect_in_honest_ctx1 :
-    ∀ (s1 s2 : nset), supermajority_ctx1∃ (a : node), mea s1 ∧  a s2 ∧ ¬ is_byz a
--/
-
 
 class IFPByzQuorum (node : Type) (is_byz : outParam (node → Prop)) (nset : outParam Type) where
   member (n : node) (s : nset) : Prop
@@ -44,9 +29,9 @@ class IFPByzQuorum (node : Type) (is_byz : outParam (node → Prop)) (nset : out
     ∀ (s c : nset), supermajority s c → ∀ (n : node), (member n s → member n c)
 
   supermajorities_intersect_in_honest :
-    ∀ (s1 s2 : nset),
-      ∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n
-  --  supermajority s1 c ∧ supermajority s2 c →
+    ∀ (s1 s2 c : nset),
+      supermajority s1 c ∧ supermajority s2 c → ∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n
+  --
 
 
 
@@ -73,14 +58,11 @@ individual precommit : stg
 
 
 variable (is_byz : node → Prop)
-
--- instantiate ctx : ByzQuorum node is_byz context
 instantiate ctx : IFPByzQuorum node is_byz nodeset
 
 -- interactions between participants, and contexts are fixed
 immutable relation participant_context: participant → nodeset → Prop
 immutable relation interactions : interaction → participant → participant → Prop
--- immutable relation ixn_contexts : interaction → nodeset → nodeset → Prop
 
 -- instantiate bg : IFPTheory.Background node participant interaction nodeset
 -- open IFPTheory.Background
@@ -109,7 +91,7 @@ relation prepared_operator : node → view → interaction → Prop
 relation proposed : node → view → interaction → Prop
 relation sent_lock_in_propose : node → view → interaction → interaction → Bool → Prop
 relation prevoted_operator : node → view → interaction → Prop
-relation sent_received_prevote_in_prevote : node → view → interaction → node → Prop
+-- relation sent_received_prevote_in_prevote : node → view → interaction → node → Prop
 relation precommitted_operator : node → view → interaction → Prop
 relation broadcasted_decision : node → view → interaction → Prop
 
@@ -136,24 +118,6 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 ∃ (P Q : participant), interactions I P Q ∧ participant_context P C ∧ participant_context Q D
 
 -- # Assumptions
--- Assume that the relations participant_context and ixn_contexts are related as below
--- assumption ∀ (ixn: interaction) (p1 p2 : participant) (c1 c2 : nodeset),
---   ((ixn_contexts ixn c1 c2 ∧ interactions ixn p1 p2) → (participant_context p1 c1 ∧ participant_context p2 c2))
---   ∧ participant_context p1
--- assumption ( ∀ (ixn : interaction) (c1 c2 : nodeset), ixn_contexts ixn c1 c2 →
---   ∃ (p1 p2 : participant), interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ) ∧
---   ( ∀ (ixn : interaction) (p1 p2 : participant) (c1 c2 : nodeset), interactions ixn p1 p2 ∧ participant_context p1 c1
---   ∧ participant_context p2 c2 →  ixn_contexts ixn c1 c2 )
-
-
--- Assume that only two given distinct participants are part of an interaction
--- assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
---   ((interactions ixn p1 p2 ∧ interactions ixn p1 p3) → p2 = p3)
---   ∧ ((interactions ixn p2 p1 ∧ interactions ixn p3 p1) → p2 = p3)
---   ∧ (interactions ixn p1 p2 → p1 ≠ p2)
--- With the above, interactions ixn p1 p2 and interactions ixn p2 p1 can be true
-assumption ∀ (ixn : interaction) (p1 p2 p3 p4: participant),
-  ((interactions ixn p1 p2 ∧ interactions ixn p3 p4) → p1 = p3 ∧ p2 = p4 ∧ p1 ≠ p4)
 
 -- Assume that there are exactly two such participants among which all ixns occur
 assumption ∃ (p1 p2 : participant), p1 ≠ p2 ∧ ∀ (i: interaction),
@@ -166,8 +130,9 @@ assumption ∀ (p : participant) (c1 c2 : nodeset),
 after_init {
   parent I J := if I = genesis ∧ J = genesis then True else False;
   ancestor I J := if I = J then True else False; -- I = genesis ∧ J = genesis
-  locked N I S V := if I = genesis ∧ S = true ∧ V = tot_view.zero then True else False;
+  locked N I S V := if I = genesis ∧ S = false ∧ V = tot_view.zero then True else False;
   decided N V I := if I = genesis ∧ V = tot_view.zero then True else False;
+  stage N V I S := (S = propose);
   operator V I N := False;
   cur_view N V := if V = tot_view.zero then True else False;
   prepared_operator N V B := False;
@@ -203,7 +168,7 @@ action pick_operator (n : node) (v : view) (ixn : interaction) = {
 
 
 action set_view (v_cur v_next : view) = {
-  require ∀ (n : node), cur_view n v_cur -- Why not, `∀ (n:node), cur_view n v_cur`
+  require ∀ (n : node), cur_view n v_cur
   require tot_view.next v_cur v_next
   cur_view N V := (V = v_next)
 }
@@ -385,70 +350,25 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) = {
 -- }
 
 
--- -- # Byzantine nodes can send whatever they want but cannot forge identities
--- action byz_send_1 (n : node) (v : view) (ixn ixnl : interaction) (sl : Bool)  = {
---   require is_byz n
---   sent_lock_in_prepare n v ixn ixnl sl := True
--- }
-
--- action byz_send_2 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   prepared_operator n v ixn := True
--- }
-
--- action byz_send_3 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   proposed n v ixn := True
--- }
-
--- action byz_send_4 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   prevoted_operator n v ixn := True
--- }
-
--- action byz_send_5 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   precommitted_operator n v ixn := True
--- }
-
--- action byz_send_6 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   broadcasted_decision n v ixn := True
--- }
-
--- action byz_send_7 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   prepared_node n v ixn := True
--- }
-
--- action byz_send_8 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   prevoted_node n v ixn := True
--- }
-
--- action byz_send_9 (n : node) (v : view) (ixn : interaction) = {
---   require is_byz n
---   precommitted_node n v ixn := True
--- }
-
 -- # Byzantine nodes can arbitrarily change their local state and send messages
--- action byz_sabotage (n : node) = {
+action byz_sabotage (n : node) = {
 -- #  ------ The Byzantine Actions Being Used Now -----
---   require is_byz n
---   decided n V I := *
---   locked n := *
---   sent_lock_in_prepare n V I J S := *
---   prepared_operator n V I := *
---   proposed n V I := *
---   sent_lock_in_propose n V I J S := *
---   prevoted_operator n V I := *
---   sent_received_prevote_in_prevote n V I M := *
---   precommitted_operator n V I := *
---   broadcasted_decision n V I := *
---   prepared_node n V I := *
---   prevoted_node n V I := *
---   precommitted_node n V I := *
--- }
+  require is_byz n
+  cur_view n V := *
+  decided n V I := *
+  locked n := *
+  stage n V I S := *
+  sent_lock_in_prepare n V I J S := *
+  prepared_operator n V I := *
+  proposed n V I := *
+  sent_lock_in_propose n V I J S := *
+  prevoted_operator n V I := *
+  precommitted_operator n V I := *
+  broadcasted_decision n V I := *
+  prepared_node n V I := *
+  prevoted_node n V I := *
+  precommitted_node n V I := *
+}
 
 /-
 # From Tendermint Ivy Proof:
@@ -507,205 +427,206 @@ safety [main_safety]
 -- `Show that if a propose is received for view v in view u≠v then state does not change`
 invariant [proposed_in_diff_view_implies_no_prevote]
   ∀ (n : node) (u v : view) (i : interaction),
-    (cur_view n u ∧ u ≠ v ∧ ∃ (m : node), proposed m v i → ¬ prevoted_node n u i)
+    (¬ is_byz n ∧ cur_view n u ∧ u ≠ tot_view.zero ∧ v ≠ tot_view.zero ∧ u ≠ v ∧ i ≠ genesis ∧ ∃ (m : node), proposed m v i → ¬ prevoted_node n u i)
 
--- invariant [node_has_cur_view]
---   ∀ (N : node), ∃ (v : view), cur_view N v
+/-
+invariant [node_has_cur_view]
+  ∀ (N : node), ∃ (v : view), cur_view N v
 
--- invariant [unique_cur_view]
---   cur_view N U ∧ cur_view N V → U = V
+invariant [unique_cur_view]
+  cur_view N U ∧ cur_view N V → U = V
 
--- invariant [ancestor_reflexive]
---   ∀ (i : interaction), ancestor i i
+invariant [ancestor_reflexive]
+  ∀ (i : interaction), ancestor i i
 
--- invariant [operator_from_ixn_context]
---   ∀ (ixn : interaction) (op : node) (v : view),
---     ¬ is_byz op → (operator v ixn op → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.member op c1)
+invariant [operator_from_ixn_context]
+  ∀ (ixn : interaction) (op : node) (v : view),
+    ¬ is_byz op → (operator v ixn op → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.member op c1)
 
--- invariant [unique_operator_for_ixn]
---   ∀ (v : view) (ixn : interaction) (n1 n2 : node),
---     ¬ (is_byz n1 ∨ is_byz n2) → (operator v ixn n1 ∧ operator v ixn n2 → n1 = n2)
+invariant [unique_operator_for_ixn]
+  ∀ (v : view) (ixn : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → (operator v ixn n1 ∧ operator v ixn n2 → n1 = n2)
 
--- invariant [prepare_only_by_operator]
+invariant [prepare_only_by_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prepared_operator n v ixn → operator v ixn n)
+
+invariant [unique_prepare]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    (¬ is_byz n ∧ prepared_operator n v i1 ∧ prepared_operator n v i2) → i1 = i2
+
+invariant [prepare_response_only_on_prepare]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prepared_node n v ixn → ∃ (op : node), operator v ixn op ∧ prepared_operator op v ixn)
+
+invariant [prepare_response_only_by_context_nodes]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prepared_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
+
+invariant [proposal_only_by_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (proposed n v ixn → ∃ (ixn_prepare : interaction), prepare_propose_ixns v ixn = ixn_prepare ∧ operator v ixn_prepare n)
+
+invariant [unique_proposal_each_view]
+  ∀ (v : view) (i1 i2 : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → ( (proposed n1 v i1 ∧ proposed n2 v i2) → (i1 = i2 ∧ n1 = n2) )
+
+invariant [proposal_only_if_quorum_prepare]
+  ∀ (v : view) (ixn_propose : interaction) (n : node),
+    ¬ is_byz n → (proposed n v ixn_propose → (∃ (ixn_prepare : interaction) (c1 c2 s1 s2 : nodeset),
+    prepare_propose_ixns v ixn_propose = ixn_prepare ∧ ixn_contexts ixn_prepare c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ixn_prepare))
+
+invariant [propose_only_if_operator_prepare]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (proposed n v ixn → ∃ (ip : interaction), prepare_propose_ixns v ixn = ip ∧ prepared_operator n v ip)
+
+invariant [prevote_nodes_only_by_context_nodes]
+∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prevoted_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
+
+invariant [unique_prevote_nodes]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((prevoted_node n v i1 ∧ prevoted_node n v i2) → i1 = i2)
+
+invariant [prevote_operator_only_if_quorum_prevote]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prevoted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v ixn))
+
+invariant [prevote_operator_only_if_quorum_prepare]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prevoted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset) (ip : interaction), prepare_propose_ixns v ixn = ip ∧ ixn_contexts ip c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ip))
+
+invariant [prevote_only_by_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prevoted_operator n v ixn → ∃ (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp n)
+
+invariant [prevote_by_single_operator]
+  ∀ (v : view) (ixn : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → ((prevoted_operator n1 v ixn ∧ prevoted_operator n2 v ixn) → (n1 = n2))
+
+invariant [unique_prevote_operator]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((prevoted_operator n v i1 ∧ prevoted_operator n v i2) → (i1 = i2))
+
+invariant [precommit_nodes_only_if_operator_prevote]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_node n v ixn → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
+    operator v ixnp op ∧ prevoted_operator op v ixn)
+
+invariant [precommit_nodes_only_by_context_nodes]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
+
+invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_node n v ixn → prevoted_node n v ixn)
+
+invariant [unique_precommit_nodes]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((precommitted_node n v i1 ∧ precommitted_node n v i2) → i1 = i2)
+
+invariant [precommit_operator_only_if_quorum_precommit]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v ixn))
+
+invariant [precommit_only_by_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_operator n v ixn → ∃ (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp n)
+
+invariant [precommit_by_single_operator]
+  ∀ (v : view) (ixn : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → ((precommitted_operator n1 v ixn ∧ precommitted_operator n2 v ixn) → (n1 = n2))
+
+invariant [unique_precommit_operator]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((precommitted_operator n v i1 ∧ precommitted_operator n v i2) → (i1 = i2))
+
+invariant [decide_only_if_precommit_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → (∃ (op : node) (ixnp : interaction),
+    prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp op ∧ precommitted_operator op v ixn))
+
+invariant [decide_only_if_quorum_precommit]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v ixn))
+
+invariant [precommit_only_if_propose]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_node n v ixn → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
+    operator v ixnp op ∧ proposed op v ixn)
+
+invariant [precommit_only_if_prepare_quorum]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_node n v ixn → (∃ (c1 c2 s1 s2 : nodeset) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ ixn_contexts ixnp c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ixnp))
+
+invariant [proposal_extends_parent]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (proposed n v ixn → (∃ (il : interaction) (nl : node), parent il ixn ∧ (sent_lock_in_prepare nl v ixn il true ∨ sent_lock_in_prepare nl v ixn il false)))
+
+invariant [ancestor_def]
+  ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+
+invariant [parent_property]
+  parent I J ∧ parent J I → I = J
+
+invariant [unique_parent]
+  parent J I ∧ parent K I → J = K
+
+invariant [parent_only_if_proposed]
+  parent I J ∧ J ≠ genesis→ ∃ (n : node) (v : view), proposed n v J
+
+invariant [decisions_not_from_higher_views]
+  cur_view N V ∧ decided N U I → tot_view.le U V
+
+invariant [decided_only_if_proposed]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
+    operator v ixnp op ∧ proposed op v ixn)
+
+invariant [decided_genesis_only_if_vzero]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n ∧ decided n v ixn ∧ ixn = genesis → v = tot_view.zero
+
+invariant [propose_only_if_stage]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n ∧ proposed n v ixn → stage n v ixn propose
+
+invariant [prevote_node_only_if_stage]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n ∧ prevoted_node n v ixn → stage n v ixn propose
+
+invariant [prevote_operator_only_if_stage]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n ∧ prevoted_operator n v ixn → stage n v ixn prevote
+
+invariant [precommit_operator_only_if_stage]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n ∧ precommitted_operator n v ixn → stage n v ixn precommit
+-/
+-- invariant [decided_vzero_only_genesis]
 --   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prepared_operator n v ixn → operator v ixn n)
+--     ¬ is_byz n decided n v ixn ∧ tot_view.zero v → ixn = genesis
 
--- invariant [unique_prepare]
---   ∀ (v : view) (i1 i2 : interaction) (n : node),
---     (¬ is_byz n ∧ prepared_operator n v i1 ∧ prepared_operator n v i2) → i1 = i2
+-- invariant [safety_vone]
+--   ∀ (v1 v2 : view) (ixn : interaction) (n : node),
+--      (decided n v2 ixn ∧ tot_view.zero v1 ∧ tot_view.next v1 v2 → parent genesis ixn)
 
--- invariant [prepare_response_only_on_prepare]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prepared_node n v ixn → ∃ (op : node), operator v ixn op ∧ prepared_operator op v ixn)
-
--- invariant [prepare_response_only_by_context_nodes]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prepared_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
-
--- invariant [proposal_only_by_operator]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (proposed n v ixn → ∃ (ixn_prepare : interaction), prepare_propose_ixns v ixn = ixn_prepare ∧ operator v ixn_prepare n)
-
--- invariant [unique_proposal_each_view]
---   ∀ (v : view) (i1 i2 : interaction) (n1 n2 : node),
---     ¬ (is_byz n1 ∨ is_byz n2) → ( (proposed n1 v i1 ∧ proposed n2 v i2) → (i1 = i2 ∧ n1 = n2) )
-
--- invariant [proposal_only_if_quorum_prepare]
---   ∀ (v : view) (ixn_propose : interaction) (n : node),
---     ¬ is_byz n → (proposed n v ixn_propose → (∃ (ixn_prepare : interaction) (c1 c2 s1 s2 : nodeset),
---     prepare_propose_ixns v ixn_propose = ixn_prepare ∧ ixn_contexts ixn_prepare c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ixn_prepare))
-
--- invariant [propose_only_if_operator_prepare]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (proposed n v ixn → ∃ (ip : interaction), prepare_propose_ixns v ixn = ip ∧ prepared_operator n v ip)
-
--- invariant [prevote_nodes_only_by_context_nodes]
--- ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prevoted_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
-
--- invariant [unique_prevote_nodes]
---   ∀ (v : view) (i1 i2 : interaction) (n : node),
---     ¬ is_byz n → ((prevoted_node n v i1 ∧ prevoted_node n v i2) → i1 = i2)
-
--- invariant [prevote_operator_only_if_quorum_prevote]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prevoted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v ixn))
-
--- invariant [prevote_operator_only_if_quorum_prepare]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prevoted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset) (ip : interaction), prepare_propose_ixns v ixn = ip ∧ ixn_contexts ip c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ip))
-
--- invariant [prevote_only_by_operator]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (prevoted_operator n v ixn → ∃ (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp n)
-
--- invariant [prevote_by_single_operator]
---   ∀ (v : view) (ixn : interaction) (n1 n2 : node),
---     ¬ (is_byz n1 ∨ is_byz n2) → ((prevoted_operator n1 v ixn ∧ prevoted_operator n2 v ixn) → (n1 = n2))
-
--- invariant [unique_prevote_operator]
---   ∀ (v : view) (i1 i2 : interaction) (n : node),
---     ¬ is_byz n → ((prevoted_operator n v i1 ∧ prevoted_operator n v i2) → (i1 = i2))
-
--- invariant [precommit_nodes_only_if_operator_prevote]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_node n v ixn → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
---     operator v ixnp op ∧ prevoted_operator op v ixn)
-
--- invariant [precommit_nodes_only_by_context_nodes]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
-
--- invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_node n v ixn → prevoted_node n v ixn)
-
--- invariant [unique_precommit_nodes]
---   ∀ (v : view) (i1 i2 : interaction) (n : node),
---     ¬ is_byz n → ((precommitted_node n v i1 ∧ precommitted_node n v i2) → i1 = i2)
-
--- invariant [precommit_operator_only_if_quorum_precommit]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v ixn))
-
--- invariant [precommit_only_by_operator]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_operator n v ixn → ∃ (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp n)
-
--- invariant [precommit_by_single_operator]
---   ∀ (v : view) (ixn : interaction) (n1 n2 : node),
---     ¬ (is_byz n1 ∨ is_byz n2) → ((precommitted_operator n1 v ixn ∧ precommitted_operator n2 v ixn) → (n1 = n2))
-
--- invariant [unique_precommit_operator]
---   ∀ (v : view) (i1 i2 : interaction) (n : node),
---     ¬ is_byz n → ((precommitted_operator n v i1 ∧ precommitted_operator n v i2) → (i1 = i2))
-
--- invariant [decide_only_if_precommit_operator]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → (∃ (op : node) (ixnp : interaction),
---     prepare_propose_ixns v ixn = ixnp ∧ operator v ixnp op ∧ precommitted_operator op v ixn))
-
--- invariant [decide_only_if_quorum_precommit]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v ixn))
-
--- invariant [precommit_only_if_propose]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_node n v ixn → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
---     operator v ixnp op ∧ proposed op v ixn)
-
--- invariant [precommit_only_if_prepare_quorum]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (precommitted_node n v ixn → (∃ (c1 c2 s1 s2 : nodeset) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧ ixn_contexts ixnp c1 c2 ∧
---     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc v ixnp))
-
--- invariant [proposal_extends_parent]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (proposed n v ixn → (∃ (il : interaction) (nl : node), parent il ixn ∧ (sent_lock_in_prepare nl v ixn il true ∨ sent_lock_in_prepare nl v ixn il false)))
-
--- invariant [ancestor_def]
---   ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
-
--- invariant [parent_property]
---   parent I J ∧ parent J I → I = J
-
--- invariant [unique_parent]
---   parent J I ∧ parent K I → J = K
-
--- invariant [parent_only_if_proposed]
---   parent I J ∧ J ≠ genesis→ ∃ (n : node) (v : view), proposed n v J
-
--- invariant [decisions_not_from_higher_views]
---   cur_view N V ∧ decided N U I → tot_view.le U V
-
--- invariant [decided_only_if_proposed]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (decided n v ixn ∧ ixn ≠ genesis → ∃ (op : node) (ixnp : interaction), prepare_propose_ixns v ixn = ixnp ∧
---     operator v ixnp op ∧ proposed op v ixn)
-
--- invariant [decided_genesis_only_if_vzero]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n ∧ decided n v ixn ∧ ixn = genesis → v = tot_view.zero
-
--- invariant [propose_only_if_stage]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n ∧ proposed n v ixn → stage n v ixn stg.propose
-
--- invariant [prevote_node_only_if_stage]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n ∧ prevoted_node n v ixn → stage n v ixn stg.propose
-
--- invariant [prevote_operator_only_if_stage]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n ∧ prevoted_operator n v ixn → stage n v ixn stg.prevote
-
--- invariant [precommit_operator_only_if_stage]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n ∧ precommitted_operator n v ixn → stage n v ixn stg.precommit
-
--- -- invariant [decided_vzero_only_genesis]
--- --   ∀ (v : view) (ixn : interaction) (n : node),
--- --     ¬ is_byz n decided n v ixn ∧ tot_view.zero v → ixn = genesis
-
--- -- invariant [safety_vone]
--- --   ∀ (v1 v2 : view) (ixn : interaction) (n : node),
--- --      (decided n v2 ixn ∧ tot_view.zero v1 ∧ tot_view.next v1 v2 → parent genesis ixn)
-
--- -- invariant [safety_vk_vk1]
--- --   ∀ (v1 v2 : view) (i1 i2 : interaction) (n1 n2 : node),
--- --      (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → parent i1 i2)
+-- invariant [safety_vk_vk1]
+--   ∀ (v1 v2 : view) (i1 i2 : interaction) (n1 n2 : node),
+--      (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → parent i1 i2)
 
 
--- -- invariant [precommit_operator_only_if_parent_locked]
+-- invariant [precommit_operator_only_if_parent_locked]
 
--- -- invariant [unique_lock_held_by_each_node]
--- --   ∀ (v : view) (i1 i2 : interaction) (n : node) (s1 s2 : Bool),
--- --     (locked n v i1 s1 ∧ locked n v i2 s2) →  (i1 = i2 ∧ s1 = s2)
+-- invariant [unique_lock_held_by_each_node]
+--   ∀ (v : view) (i1 i2 : interaction) (n : node) (s1 s2 : Bool),
+--     (locked n v i1 s1 ∧ locked n v i2 s2) →  (i1 = i2 ∧ s1 = s2)
 
 
 #gen_spec
