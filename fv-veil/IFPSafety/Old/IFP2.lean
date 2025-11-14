@@ -278,59 +278,59 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn ixn_prev
 
 
 -- The operator responds to a quorum of prevotes with a prevote
-action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action prevote (op : node) (v : view) (p1 p2 : participant) (ixn : interaction) = {
   require cur_view op v
   require operator op v p1 p2
   require stage op v p1 p2 ixn prevote -- in prevote stage
-  require ixn_contexts ixn c1 c2
-  require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+  require ∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     (∀ (n: node), (ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n v p1 p2 ixn)
   prevoted_operator op v p1 p2 ixn := True
-  locked op v P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  let c : nodeset ← fresh
+  locked op v P I S V := (participant_context P c ∧ ctx.member op c ∧ (P = p1 ∨ P = p2) ∧ I = ixn ∧ S = true ∧ V = v)
   -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked op U P I false V )) -- not updating lock if already holding a higher stage lock for same ixn from earlier views
   stage op v p1 p2 ixn S := (S = precommit) -- move to precommit stage
 }
 
 -- The nodes respond to the prevote with a precommit
-action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action respond_prevote (n : node) (v : view) (p1 p2 : participant) (ixn : interaction) = {
   require cur_view n v
   require stage n v p1 p2 ixn prevote -- in prevote stage
-  require ixn_contexts ixn c1 c2
-  require ctx.member n c1 ∨ ctx.member n c2
+  require ∃ (c1 c2 : nodeset), ctx.member n c1 ∨ ctx.member n c2 ∧ ixn_contexts ixn c1 c2
   require ∃ (op : node), operator op v p1 p2 ∧ prevoted_operator op v p1 p2 ixn
-  require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+  require ∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v p1 p2 ixn
   precommitted_node n v p1 p2 ixn := True
-  locked n v P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  let c : nodeset ← fresh
+  locked n v P I S V := (participant_context P c ∧ ctx.member n c ∧ (P = p1 ∨ P = p2) ∧ I = ixn ∧ S = true ∧ V = v)
   -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked n U P I false V ))
   stage n v p1 p2 ixn S := (S = precommit) -- move to precommit stage
 }
 
 -- The operator responds to a quorum of precommits by a precommit and decides on the ixn
-action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action precommit (op : node) (v : view) (p1 p2 : participant) (ixn : interaction) = {
   require cur_view op v
   require operator op v p1 p2
   require stage op v p1 p2 ixn precommit -- in precommit stage
-  require ixn_contexts ixn c1 c2
-  require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+  require ∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
   precommitted_operator op v p1 p2 ixn := True
-  locked op v P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = false ∧ V = v)
+  let c : nodeset ← fresh
+  locked op v P I S V := (participant_context P c ∧ ctx.member op c ∧ (P = p1 ∨ P = p2) ∧ I = ixn ∧ S = false ∧ V = v)
   decided op v p1 p2 ixn := True
   -- broadcasted_decision op v ixn := True
   -- stage op v p1 p2 ixn S := (S = 3) -- move to commit stage
 }
 
 -- The nodes decide on the ixn on receiving a precommit from the operator
-action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action respond_precommit (n : node) (v : view) (p1 p2 : participant) (ixn : interaction) = {
   require cur_view n v
   require stage n v p1 p2 ixn precommit -- in precommit stage
-  require ixn_contexts ixn c1 c2
-  require ctx.member n c1 ∨ ctx.member n c2
+  require ∃ (c1 c2 : nodeset), ctx.member n c1 ∨ ctx.member n c2 ∧ ixn_contexts ixn c1 c2
   require ∃ (op : node), operator op v p1 p2 ∧ precommitted_operator op v p1 p2 ixn
-  require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+  require ∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
-  locked n v P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) )  ∧ I = ixn ∧ S = false ∧ V = v)
+  let c : nodeset ← fresh
+  locked n v P I S V := (participant_context P c ∧ ctx.member n c ∧ (P = p1 ∨ P = p2) ∧ I = ixn ∧ S = false ∧ V = v)
   decided n v p1 p2 ixn := True
 }
 
@@ -647,9 +647,9 @@ set_option veil.printCounterexamples true
 set_option veil.smt.model.minimize true
 set_option veil.vc_gen "transition"
 -- set_option veil.showVerificationTime true
--- set_option veil.smt.seed 7
+set_option Elab.async false
+set_option trace.veil.debug true
 
-
-#time #check_invariants
+#time #check_invariants?
 
 end IFP

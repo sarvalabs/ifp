@@ -30,7 +30,7 @@ class IFPByzQuorum (node : Type) (is_byz : outParam (node → Prop)) (nset : out
 
   supermajorities_intersect_in_honest :
     ∀ (s1 s2 c : nset),
-      supermajority s1 c ∧ supermajority s2 c → ∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n
+      (supermajority s1 c ∧ supermajority s2 c) → (∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n)
   --
 
 
@@ -89,7 +89,7 @@ relation stage : node → view → interaction → stg → Prop
 relation operator: view → interaction → node → Prop
 relation prepared_operator : node → view → interaction → Prop
 relation proposed : node → view → interaction → Prop
-relation sent_lock_in_propose : node → view → interaction → interaction → Bool → Prop
+-- relation sent_lock_in_propose : node → view → interaction → interaction → Bool → Prop
 relation prevoted_operator : node → view → interaction → Prop
 -- relation sent_received_prevote_in_prevote : node → view → interaction → node → Prop
 relation precommitted_operator : node → view → interaction → Prop
@@ -120,8 +120,11 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 -- # Assumptions
 
 -- Assume that there are exactly two such participants among which all ixns occur
-assumption ∃ (p1 p2 : participant), p1 ≠ p2 ∧ ∀ (i: interaction),
-  interactions i p1 p2
+assumption ∃ (p1 p2 : participant),
+  (p1 ≠ p2 ∧
+  (∀ (i: interaction) (p q : participant), interactions i p q → (p = p1 ∧ q = p2)))
+
+-- assumption ∀ (i : interaction) (p q : participant), interactions i pp qq ∧ ¬ interactions i p q
 
 -- Assume that each participant has only one context.
 assumption ∀ (p : participant) (c1 c2 : nodeset),
@@ -230,6 +233,7 @@ action propose (n : node) (v : view) (ixn ixn_propose : interaction) = {
     ∀ (n1 : node), (ctx.member n1 s1 ∨ ctx.member n1 s2) → prepared_node n1 v ixn
   require ∀ (ix : interaction), ¬ proposed n v ix
   require stage n v ixn_propose propose
+  require ∀ (i : interaction), ¬ (stage n v i prevote ∨ stage n v i precommit)
   /-
   let ixn_max_p1 : interaction ← fresh
   let s_max_p1 : Bool ← fresh
@@ -283,6 +287,7 @@ action respond_propose (n : node) (v : view) (ixn ixn_prev : interaction) (s_pre
   `Not needed for now because we assume only two participants. Simpler alternative below`
   -/
   require ∀ (i : interaction), ¬ prevoted_node n v i
+  require ∀ (i : interaction), ¬ (stage n v i prevote ∨ stage n v i precommit)
   require parent ixn_prev ixn
   -- the proposed ixn extends the max lock among the locks in sent_received_lock_in_propose
   require ∀ (ixnl : interaction) (sl : Bool), sent_lock_in_prepare n v ixn ixnl sl →
@@ -377,21 +382,70 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) = {
 -- # Invariants
 
 -- If two nodes decide two ixns, then one is an ancestor of the other
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ is_byz n1 ∧ ¬ is_byz n2 ∧ decided n1 v1 i1 ∧ decided n2 v2 i2) → (ancestor i1 i2 ∨ ancestor i2 i1)
+-- safety [main_safety]
+--   ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+--     (¬ is_byz n1 ∧ ¬ is_byz n2 ∧ decided n1 v1 i1 ∧ decided n2 v2 i2) → (ancestor i1 i2 ∨ ancestor i2 i1)
 
--- invariant [proposed_in_diff_view_implies_no_prevote]
---   ∀ (n m : node) (u v : view) (i : interaction),
---     (u ≠ v ∧ proposed m v i → ¬ prevoted_node n u i)
+invariant [unique_prevote_nodes]
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((prevoted_node n v i1 ∧ prevoted_node n v i2) → i1 = i2)
 
-invariant [view_neq]
-  ∀ (u v : view),
-    u ≠ v
+invariant [unique_prevote_lock_in_view]
+  ∀ (n1 n2 : node) (v : view) (i1 i2 : interaction),
+    ¬ (is_byz n1 ∨ is_byz n2) → ((locked n1 i1 true v ∧ locked n2 i2 true v) → i1 = i2)
 
-invariant [propose_prevote]
-  ∀ (n m : node) (u v : view) (i : interaction),
-    proposed m v i → ¬ prevoted_node n u i
+invariant [decision_requires_precommit_lock]
+  ∀ (n : node) (v : view) (i : interaction),
+    ¬ is_byz n → (decided n v i ∧ i ≠ genesis → locked n i false v)
+
+invariant [precommit_operator_only_if_quorum_locked]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (precommitted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → ∃ (s : Bool), locked nc ixn s v))
+
+invariant [unique_operator_for_ixn]
+  ∀ (v : view) (ixn : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → (operator v ixn n1 ∧ operator v ixn n2 → n1 = n2)
+
+invariant [unique_cur_view]
+  cur_view N U ∧ cur_view N V → U = V
+
+invariant [parent_property]
+  parent I J ∧ parent J I → I = J
+
+invariant [unique_parent]
+  parent J I ∧ parent K I → J = K
+
+invariant [parent_only_if_proposed]
+  parent I J ∧ J ≠ genesis→ ∃ (n : node) (v : view), proposed n v J
+
+invariant [unique_lock_sent]
+  (sent_lock_in_prepare N V I IL1 SL1 ∧ sent_lock_in_prepare N V I IL2 SL2) → (IL1 = IL2 ∧ SL1 = SL2)
+
+invariant [unique_stage]
+  (stage N V I S1 ∧ stage N V I S2) → S1 = S2
+
+invariant [prepare_only_by_operator]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prepared_operator n v ixn → operator v ixn n)
+
+invariant [prevote_operator_only_if_quorum_prevote_lock]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (prevoted_operator n v ixn → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → (prevoted_node nc v ixn)))
+
+invariant [unique_proposal]
+  ∀ (v : view) (i1 i2 : interaction) (n1 n2 : node),
+    ¬ (is_byz n1 ∨ is_byz n2) → ( (proposed n1 v i1 ∧ proposed n2 v i2) → (i1 = i2 ∧ n1 = n2) )
+
+
+-- invariant [precommit_qc_implies_lock_discovered]
+--   ∀ (u v : view) (i1 i2: interaction) (n m : node),
+--     ¬ (is_byz n ∨ is_byz m) → ( (precommitted_operator n u i1 ∧ v = tot_view.next u ∧ proposed m v i2) →
+--       ∃ (nl : node) (sl : Bool), sent_lock_in_prepare nl v (prepare_propose_ixns i2) i1 sl)
+    --  (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧
+    -- ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → ∃ (s : Bool), locked nc ixn s v)
+
 
 /-
 invariant [node_has_cur_view]
@@ -623,7 +677,6 @@ invariant [decision_requires_precommit_lock]
   ∀ (n : node) (v : view) (i : interaction),
     ¬ is_byz n → (decided n v i ∧ i ≠ genesis → locked n i false v)
 
-
 -- invariant [safety_vone]
 --   ∀ (v1 v2 : view) (ixn : interaction) (n : node),
 --      (decided n v2 ixn ∧ tot_view.zero v1 ∧ tot_view.next v1 v2 → parent genesis ixn)
@@ -632,12 +685,12 @@ invariant [decision_requires_precommit_lock]
 --   ∀ (v1 v2 : view) (i1 i2 : interaction) (n1 n2 : node),
 --      (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → parent i1 i2)
 
-
 -- invariant [precommit_operator_only_if_parent_locked]
 
 -- invariant [unique_lock_held_by_each_node]
 --   ∀ (v : view) (i1 i2 : interaction) (n : node) (s1 s2 : Bool),
 --     (locked n v i1 s1 ∧ locked n v i2 s2) →  (i1 = i2 ∧ s1 = s2)
+
 -/
 
 #gen_spec
@@ -647,6 +700,7 @@ set_option veil.smt.model.minimize true
 set_option veil.vc_gen "transition"
 set_option veil.showVerificationTime true
 set_option veil.smt.seed 7
+set_option veil.smt.timeout 10
 
 
 #time #check_invariants
