@@ -295,8 +295,12 @@ action prevote (op : node) (v : view) (c1 c2 : nodeset) (ixn : interaction) = {
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     (∀ (n: node), (ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n v p1 p2 ixn)
   prevoted_operator op v p1 p2 ixn := True
-  locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
-  -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked op U P I false V )) -- not updating lock if already holding a higher stage lock for same ixn from earlier views
+  if ( ctx.member op c1 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p1 ixn false u) ) then
+    locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  if ( ctx.member op c2 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p2 ixn false u) ) then
+    locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  -- not updating lock if already holding a higher stage lock for same ixn from earlier views
+  -- locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
   -- cur_stage op v p1 p2 ixn S := (S = precommit) -- move to precommit stage
   -- We need the operator to respond to prevote msg he sent in respond_prevote as a normal node.
   -- The stage is only changed when as a normal node, the response is made. Otherwise, the operator wont pass the require for stage in respond_prevote
@@ -312,8 +316,12 @@ action respond_prevote (n : node) (v : view) (c1 c2 : nodeset) (ixn : interactio
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v p1 p2 ixn
   precommitted_node n v p1 p2 ixn := True
-  locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
-      -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked n U P I false V )
+  if ( ctx.member n c1 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked n p1 ixn false u) ) then
+    locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  if ( ctx.member n c2 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked n p2 ixn false u) ) then
+    locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  -- not updating lock if already holding a higher stage lock for same ixn from earlier views
+  -- locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
   cur_stage n v p1 p2 ixn S := (S = precommit) -- move to precommit stage
 }
 
