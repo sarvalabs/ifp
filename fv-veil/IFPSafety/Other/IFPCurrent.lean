@@ -42,6 +42,8 @@ type view
 instantiate tot_view : TotalOrderWithMinimum view
 
 type participant
+individual p1 : participant
+individual p2 : participant
 type node
 type interaction
 -- type context
@@ -385,15 +387,15 @@ safety [main_safety]
 --   ∀ (n m : node) (u v : view) (i : interaction),
 --     (u ≠ v ∧ proposed m v i → ¬ prevoted_node n u i)
 
-invariant [view_neq]
-  ∀ (u v : view),
-    u ≠ v
+-- invariant [view_neq]
+--   ∀ (u v : view),
+--     u ≠ v
 
-invariant [propose_prevote]
-  ∀ (n m : node) (u v : view) (i : interaction),
-    proposed m v i → ¬ prevoted_node n u i
+-- invariant [propose_prevote]
+--   ∀ (n m : node) (u v : view) (i : interaction),
+--     proposed m v i → ¬ prevoted_node n u i
 
-/-
+
 invariant [node_has_cur_view]
   ∀ (N : node), ∃ (v : view), cur_view N v
 
@@ -449,6 +451,7 @@ invariant [prevote_nodes_only_by_context_nodes]
 ∀ (v : view) (ixn : interaction) (n : node),
     ¬ is_byz n → (prevoted_node n v ixn → ∃ (c1 c2 : nodeset), ixn_contexts ixn c1 c2 ∧ (ctx.member n c1 ∨ ctx.member n c2))
 
+/-
 invariant [unique_prevote_nodes]
   ∀ (v : view) (i1 i2 : interaction) (n : node),
     ¬ is_byz n → ((prevoted_node n v i1 ∧ prevoted_node n v i2) → i1 = i2)

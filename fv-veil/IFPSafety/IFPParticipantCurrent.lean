@@ -19,14 +19,11 @@ veil module IFP
 type view
 instantiate tot_view : TotalOrderWithMinimum view
 type participant
+individual p1 : participant
+individual p2 : participant
 type node
 type interaction
 type nodeset
--- inductive stg where
---   | propose
---   | prevote
---   | precommit
---   deriving Repr, DecidableEq
 type stage
 individual propose : stage
 individual prevote : stage
@@ -49,14 +46,14 @@ immutable relation participant_context: participant → nodeset → Prop
 relation cur_view: node → view → Prop
 -- relation prepare_timed_out: node → view → Prop
 -- An alternative: relation in_prepare_stage : node → view → Prop
-relation sent_lock_in_prepare : node → view → participant → participant → interaction → Bool → Prop
+relation sent_lock_in_prepare : node → view → participant → participant → interaction → Bool → view → Prop
 relation decided : node → view → participant → participant → interaction → Prop
-relation locked : node → view → participant → interaction → Bool → view → Prop
+relation locked : node → participant → interaction → Bool → view → Prop
 -- Bool true = Prevote stage, false = Precommit stage
 relation cur_stage : node → view → participant → participant → interaction → stage → Prop
 -- 0 = Propose, 1 = Prevote, 2 = Precommit
 
--- `Maintain state variable for checking whether a node has voted for a ixn with a participant in a view`
+-- Maintain state variable for checking whether a node has voted for a ixn with a participant in a view
 -- relation voted_participant : node → participant → view → Prop
 
 
@@ -68,7 +65,7 @@ relation prevoted_operator : node → view → participant → participant → i
 relation precommitted_operator : node → view → participant → participant → interaction → Prop
 relation broadcasted_decision : node → view → participant → participant → interaction → Prop
 
-relation node_action : node → participant → Prop
+-- relation node_action : node → participant → Prop
 
 -- # For Non-Operator Nodes
 relation prepared_node : node → view → participant → participant → Prop
@@ -98,10 +95,14 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 -- # Assumptions
 
 -- Assume that there are exactly two such participants among which all ixns occur
-assumption ∃ (p1 p2 : participant), p1 ≠ p2 ∧ ∀ (i: interaction),
-  interactions i p1 p2
+-- assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
+--   ( ∀ (i: interaction),  interactions i p1 p2 ) ∧
+--   ( ∀ (n : node) (v : view) (q1 q2 : participant), (prepared_operator n v q1 q2 ∨ prepared_node n v q1 q2) → (q1 = p1 ∧ q2 = p2) )
+--   )
+-- assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
+--   ( ∀ (i: interaction),  interactions i p1 p2 ) )
 
- -- # Revisit assumptions - can remove one of them perhaps.
+assumption ∀ (i : interaction), interactions i p1 p2
 
 -- Assume that each participant has only one context.
 assumption (participant_context P C1 ∧ participant_context P C2) → C1 = C2
@@ -110,14 +111,14 @@ assumption (participant_context P C1 ∧ participant_context P C2) → C1 = C2
 after_init {
   parent I J := (I = genesis ∧ J = genesis);
   ancestor I J := (I = J); -- I = genesis ∧ J = genesis
-  locked N U P I S V := (I = genesis ∧ S = true ∧ U = tot_view.zero ∧ V = tot_view.zero);
+  locked N P I S V := (I = genesis ∧ S = true ∧ V = tot_view.zero);
   decided N V P Q I := (I = genesis ∧ V = tot_view.zero)
   height genesis := 0;
   cur_stage N V P Q I S := (S = propose);
   operator N V P Q := False;
   cur_view N V := (V = tot_view.zero);
   prepared_operator N V P Q := False;
-  sent_lock_in_prepare N V P Q L S := False;
+  sent_lock_in_prepare N V P Q L S V := False;
   proposed N V P Q I := False;
   prevoted_operator N V P Q I := False;
   precommitted_operator N V P Q I := False;
@@ -145,9 +146,8 @@ action set_view (v_cur v_next : view) = {
   cur_view N V := (V = v_next)
 }
 
-action pick_operator (op : node) (v : view) (p1 p2 : participant) = {
+action pick_operator (op : node) (v : view) = {
   require cur_view op v
-  require p1 ≠ p2
   require ∃ (c1 : nodeset), participant_context p1 c1 ∧ ctx.member op c1
   -- Operator is picked from first participant's context by default
   require ∀ (n : node), ¬ operator n v p1 p2  -- Operator is not chosen yet for ixn and v
@@ -155,21 +155,15 @@ action pick_operator (op : node) (v : view) (p1 p2 : participant) = {
 }
 
 -- The operator sends a prepare message
-action prepare (op : node) (v : view) (p1 p2 : participant) = {
+action prepare (op : node) (v : view) = {
   require cur_view op v
   require operator op v p1 p2
-  /-
-  require ∀ (i : interaction), ∃ (p1 p2 p3 p4 : participant),
-    interactions i p1 p2 ∧ interactions ixn p3 p4 ∧ (p1 = p3 ∨ p2 = p4) → ¬ prepared_operator n v i
-  `Not sent prepare msg for any other ixn with any of the same participants during the view`
-  -- Not needed for now because we assume only two participants. Simpler alternative below
-  -/
   require ¬ prepared_operator op v p1 p2
   prepared_operator op v p1 p2 := True
 }
 
 -- The nodes respond with a prepare message
-action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
+action respond_prepare (n : node) (v : view)  = {
   -- require ¬ prepare_timed_out n v
   -- TODO: incorporate prepare timeout and ordering and responding to one
   require cur_view n v
@@ -182,61 +176,63 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
 }
 
 -- The nodes send their lock in the prepare message
-action send_lock_in_prepare_p1 (n : node) (u1 v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
+action send_lock_in_prepare_p1 (n : node) (v vl : view) (ixnl : interaction) (sl : Bool) = {
   require cur_view n v
   require prepared_node n v p1 p2
-  /-
-  require ∃ (p1 p2 p3 p4 : participant),  interactions ixn p1 p2 ∧ interactions ixnl p3 p4 ∧
-    (p1 = p3 ∨ p2 = p4) ∧ locked n vl ixnl sl
-  `ixnl sl is lock for a participant in ixn's participants`
-  We only have two fixed participants for now so each node has only one such lock.
-  So we can use the below simplified requirement.
-  -/
-  require locked n u1 p1 ixnl sl vl
-  require ∀ (u2 : view), tot_view.le u1 u2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool) (vl2 : view), locked n u2 p1 ixnl2 sl2 vl2
-  require ∀ (i_lock : interaction) (s_lock : Bool), ¬ sent_lock_in_prepare n v p1 p2 i_lock s_lock
-  -- Not sent any other lock in prepare
-  sent_lock_in_prepare n v p1 p2 ixnl sl := True
+  require locked n p1 ixnl sl vl
+  require ∃ (c1 : nodeset), ctx.member n c1 ∧ participant_context p1 c1
+  -- require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool), locked n p1 ixnl2 sl2 vl2
+  require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare n v p1 p2 i_lock s_lock v_lock
+  sent_lock_in_prepare n v p1 p2 ixnl sl vl := True
 }
 
-action send_lock_in_prepare_p2 (n : node) (u1 v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
+action send_lock_in_prepare_p2 (n : node) ( v vl : view) (ixnl : interaction) (sl : Bool) = {
   require cur_view n v
   require prepared_node n v p1 p2
-  /-
-  require ∃ (p1 p2 p3 p4 : participant),  interactions ixn p1 p2 ∧ interactions ixnl p3 p4 ∧
-    (p1 = p3 ∨ p2 = p4) ∧ locked n vl ixnl sl
-  `ixnl sl is lock for a participant in ixn's participants`
-  We only have two fixed participants for now so each node has only one such lock.
-  So we can use the below simplified requirement.
-  -/
-  require locked n u1 p2 ixnl sl vl
-  require ∀ (u2 : view), tot_view.le u1 u2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool) (vl2 : view), locked n u2 p2 ixnl2 sl2 vl2
-  require ∀ (i_lock : interaction) (s_lock : Bool), ¬ sent_lock_in_prepare n v p1 p2 i_lock s_lock
-  -- Not sent any other lock in prepare
-  sent_lock_in_prepare n v p1 p2 ixnl sl := True
+  require locked n p2 ixnl sl vl
+  require ∃ (c2 : nodeset), ctx.member n c2 ∧ participant_context p2 c2
+  -- require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool), locked n p2 ixnl2 sl2 vl2
+  require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare n v p1 p2 i_lock s_lock v_lock
+  sent_lock_in_prepare n v p1 p2 ixnl sl vl := True
 }
 
 -- The operator makes a proposal
-action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : interaction) = {
+action propose (op : node) (v : view) (ixn_propose : interaction) = {
   require cur_view op v
   require operator op v p1 p2
   require cur_stage op v p1 p2 ixn_propose propose -- in propose stage
   require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix -- operator hasnt proposed any ixns yet
-  require ∃ (c1 c2 s1 s2 : nodeset), participant_context p1 c1 ∧ participant_context p2 c2 ∧
-    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
-    ∀ (n : node), (ctx.member n s1 ∨ ctx.member n s2) → prepared_node n v p1 p2 ∧
-      ∃ (ul vl : view) (ixnl : interaction) (sl : Bool), sent_lock_in_prepare n v p1 p2 ixnl sl ∧
-         (locked n ul p1 ixnl sl vl ∨ locked n ul p2 ixnl sl vl) ∧ tot_view.le ul v
-        -- above line: checking validity of the lock sent
+  require ∃ (c1 c2 s1 s2 : nodeset), (
+    participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ (
+      ∀ (n : node), (
+        (ctx.member n s1 ∨ ctx.member n s2) → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
+          sent_lock_in_prepare n v p1 p2 ixnl sl vl
+          ∧ (locked n p1 ixnl sl vl ∨ locked n p2 ixnl sl vl)
+          ∧ tot_view.le vl v
+          ∧ ( sl = True → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = False → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+        )
+      ))
+    )
+  )
   let ixn_max : interaction ← fresh
   let s_max : Bool ← fresh
-  require ∃ (n_max : node) (c1 c2 : nodeset), participant_context p1 c1 ∧ participant_context p2 c2 ∧
-    (ctx.member n_max c1 ∨ ctx.member n_max c2) ∧
-    sent_lock_in_prepare n_max v p1 p2 ixn_max s_max ∧ interactions ixn_max p1 p2 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool),
-      ((ctx.member n_l c1 ∨ ctx.member n_l c2) ∧ sent_lock_in_prepare n_l v p1 p2 ixn_l s_l) →
-        (height ixn_l < height ixn_max ∨ (height ixn_l = height ixn_max ∧ s_l=true ∧ s_max=false))
-          -- lock_le ixn_l s_l ixn_max s_max height )
+  let v_max : view ← fresh
+  require ∃ (n_max : node) (c1 c2 : nodeset), (
+    participant_context p1 c1 ∧ participant_context p2 c2
+    ∧ (ctx.member n_max c1 ∨ ctx.member n_max c2)
+    ∧ interactions ixn_max p1 p2
+    ∧ sent_lock_in_prepare n_max v p1 p2 ixn_max s_max v_max ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
+      ((ctx.member n_l c1 ∨ ctx.member n_l c2) ∧ sent_lock_in_prepare n_l v p1 p2 ixn_l s_l v_l) → (
+        height ixn_l < height ixn_max
+        ∨ (height ixn_l = height ixn_max ∧ s_l=true ∧ s_max=false)
+        ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
+        ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
+      )
+    )
+  )
   parent ixn_max ixn_propose := True
   ancestor A ixn_propose := ancestor A ixn_max ∨ A = ixn_max ∨ A = ixn_propose
   proposed op v p1 p2 ixn_propose := True
@@ -247,33 +243,51 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
 }
 
 -- The nodes respond with a prevote
-action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn ixn_prev : interaction) (s_prev : Bool) = {
+action respond_propose (n : node) (v : view) (ixn ixn_prev : interaction) (s_prev : Bool) = {
   require cur_view n v
   require cur_stage n v p1 p2 ixn propose -- in propose stage
   require interactions ixn p1 p2
   require ∃ (op : node), operator op v p1 p2 ∧ proposed op v p1 p2 ixn
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
-  require ∃ (c1 c2 : nodeset), ctx.member n c1 ∨ ctx.member n c2 ∧ ixn_contexts ixn c1 c2
-  require ∃ (c1 c2 s1 s2 : nodeset), ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
-    (∀ (n1 : node), (ctx.member n1 s1 ∨ ctx.member n1 s2) → prepared_node n1 v p1 p2)
-  /-
-  require ∀ (i : interaction) (p1 p2 p3 p4 : participant),
-    interactions ixn p1 p2 ∧ interactions i p3 p4 ∧ (p1 = p3 ∨ p2 = p4 ∨ p1 = p4 ∨ p2 = p3)
-    → ¬ prevoted_node n v i
-  -- Not voted for any other ixn with common participants during view
-  `Not needed for now because we assume only two participants. Simpler alternative below`
-  -/
+  require ∃ (c1 c2 : nodeset), (ctx.member n c1 ∨ ctx.member n c2) ∧ ixn_contexts ixn c1 c2
   require parent ixn_prev ixn
-  -- the proposed ixn extends the max lock among the locks in sent_received_lock_in_propose
-  require ∀ (ixnl : interaction) (sl : Bool), sent_lock_in_prepare n v p1 p2 ixnl sl →
-    (height ixnl < height ixn_prev ∨ (height ixnl = height ixn_prev ∧ sl=true ∧ s_prev=false))
+  require height ixn = height ixn_prev + 1
+  require interactions ixn_prev p1 p2
+  require ∃ (c1 c2 s1 s2 : nodeset), (
+    participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ (
+      ∀ (nc : node), (
+        (ctx.member nc s1 ∨ ctx.member nc s2) → (prepared_node nc v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
+          sent_lock_in_prepare nc v p1 p2 ixnl sl vl
+          ∧ (locked nc p1 ixnl sl vl ∨ locked nc p2 ixnl sl vl)
+          ∧ tot_view.le vl v
+          ∧ ( sl = True → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = False → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+        )
+      ))
+    )
+  )
+  -- ixn_prev is the max lock among the locks in sent_received_lock_in_propose
+   require ∃ (n_prev : node) (s_prev : Bool) (v_prev : view) (c1 c2 : nodeset), (
+    participant_context p1 c1 ∧ participant_context p2 c2
+    ∧ (ctx.member n_prev c1 ∨ ctx.member n_prev c2)
+    ∧ sent_lock_in_prepare n_prev v p1 p2 ixn_prev s_prev v_prev ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
+      ((ctx.member n_l c1 ∨ ctx.member n_l c2) ∧ sent_lock_in_prepare n_l v p1 p2 ixn_l s_l v_l) → (
+        height ixn_l < height ixn_prev
+        ∨ (height ixn_l = height ixn_prev ∧ s_l=true ∧ s_prev=false)
+        ∨ (height ixn_l = height ixn_prev ∧ s_l = s_prev ∧ tot_view.le v_l v_prev)
+        ∨ (ixn_l = ixn_prev ∧ s_l = s_prev ∧ v_l = v_prev)
+      )
+    )
+  )
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 ixn S := (S = prevote) -- move to prevote stage
 }
 
 
 -- The operator responds to a quorum of prevotes with a prevote
-action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action prevote (op : node) (v : view) (c1 c2 : nodeset) (ixn : interaction) = {
   require cur_view op v
   require operator op v p1 p2
   require cur_stage op v p1 p2 ixn prevote -- in prevote stage
@@ -281,7 +295,7 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     (∀ (n: node), (ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n v p1 p2 ixn)
   prevoted_operator op v p1 p2 ixn := True
-  locked op v P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
   -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked op U P I false V )) -- not updating lock if already holding a higher stage lock for same ixn from earlier views
   -- cur_stage op v p1 p2 ixn S := (S = precommit) -- move to precommit stage
   -- We need the operator to respond to prevote msg he sent in respond_prevote as a normal node.
@@ -289,7 +303,7 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
 }
 
 -- The nodes respond to the prevote with a precommit
-action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action respond_prevote (n : node) (v : view) (c1 c2 : nodeset) (ixn : interaction) = {
   require cur_view n v
   require cur_stage n v p1 p2 ixn prevote -- in prevote stage
   require ixn_contexts ixn c1 c2
@@ -298,13 +312,13 @@ action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v p1 p2 ixn
   precommitted_node n v p1 p2 ixn := True
-  locked n v P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
+  locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
       -- ∧ (∀ (U : view), tot_view.le U v → ¬ locked n U P I false V )
   cur_stage n v p1 p2 ixn S := (S = precommit) -- move to precommit stage
 }
 
 -- The operator responds to a quorum of precommits by a precommit and decides on the ixn
-action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action precommit (op : node) (v : view) (c1 c2 : nodeset) (ixn : interaction) = {
   require cur_view op v
   require operator op v p1 p2
   require cur_stage op v p1 p2 ixn precommit -- in precommit stage
@@ -312,14 +326,14 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
   precommitted_operator op v p1 p2 ixn := True
-  locked op v P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = false ∧ V = v)
+  locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = false ∧ V = v)
   decided op v p1 p2 ixn := True
   -- broadcasted_decision op v ixn := True
   -- stage op v p1 p2 ixn S := (S = 3) -- move to commit stage
 }
 
 -- The nodes decide on the ixn on receiving a precommit from the operator
-action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+action respond_precommit (n : node) (v : view) (c1 c2 : nodeset) (ixn : interaction) = {
   require cur_view n v
   require cur_stage n v p1 p2 ixn precommit -- in precommit stage
   require ixn_contexts ixn c1 c2
@@ -327,7 +341,7 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   require ∃ (op : node), operator op v p1 p2 ∧ precommitted_operator op v p1 p2 ixn
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
-  locked n v P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) )  ∧ I = ixn ∧ S = false ∧ V = v)
+  locked n P I S V := (( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) )  ∧ I = ixn ∧ S = false ∧ V = v)
   decided n v p1 p2 ixn := True
 }
 
@@ -340,17 +354,16 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
 --   decided n v ixn := True
 -- }
 
+-- action quorum_check (n : node) (p : participant) (c : nodeset) = {
+--   require participant_context p c
+--   require ctx.member n c
+--   node_action n p := True
+-- -- }
 
-action quorum_check (n : node) (p : participant) (c : nodeset) = {
-  require participant_context p c
-  require ctx.member n c
-  node_action n p := True
-}
-
-action sabotage (n : node) = {
-  require is_byz n
-  node_action n P := True
-}
+-- action sabotage (n : node) = {
+--   require is_byz n
+--   node_action n P := True
+-- }
 
 -- # Byzantine nodes can arbitrarily change their local state and send messages
 -- action byz_sabotage (n : node) = {
@@ -371,18 +384,15 @@ action sabotage (n : node) = {
 --   precommitted_node n V I := *
 -- }
 
--- # Invariants for Testing
-
-invariant [quorum_with_actions]
-  ∀ (s1 s2 c : nodeset) (p : participant),
-    ctx.supermajority s1 c ∧ ctx.supermajority s2 c ∧
-    (∀ (n : node), (ctx.member n c) → node_action n p) →
-      ∃ (m : node), ctx.member m s1 ∧ ctx.member m s2 ∧ ¬ is_byz m ∧ node_action m p
+-- invariant [quorum_with_actions]
+--   ∀ (s1 s2 c : nodeset) (p : participant),
+--     ctx.supermajority s1 c ∧ ctx.supermajority s2 c ∧
+--     (∀ (n : node), (ctx.member n c) → node_action n p) →
+--       ∃ (m : node), ctx.member m s1 ∧ ctx.member m s2 ∧ ¬ is_byz m ∧ node_action m p
 
 
 -- # Invariants
 
-/-
 -- If two nodes decide two ixns, then one is an ancestor of the other
 safety [main_safety]
   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)
@@ -405,10 +415,6 @@ invariant [unique_operator_for_pset]
 invariant [prepare_only_by_operator]
   ¬ is_byz N → (prepared_operator N V P Q → operator N V P Q)
 
-invariant [proposed_in_diff_view_implies_no_prevote]
-  ∀ (p  q : participant) (n m : node) (u v : view) (i : interaction),
-    ((cur_view n u ∧ u ≠ tot_view.zero ∧ v ≠ tot_view.zero ∧ u ≠ v ∧ i ≠ genesis ∧ proposed m v p q i) → ¬ prevoted_node n u p q i)
--/
 /-
 invariant [unique_prepare]
   ∀ (v : view) (i1 i2 : interaction) (n : node),
