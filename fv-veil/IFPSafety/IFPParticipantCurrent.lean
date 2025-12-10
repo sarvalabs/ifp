@@ -236,6 +236,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
   require cur_view op v
   require operator op v p1 p2
   require cur_stage op v p1 p2 ixn_propose propose -- in propose stage
+  require ixn_propose ≠ genesis;     -- Don't extend genesis to itself
   require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix -- operator hasnt proposed any ixns yet
   -- quorum of valid locks send from p1's context
   require ∃ (c1 c2 s1 : nodeset), (
@@ -318,7 +319,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
     proposed op v p1 p2 ixn_max_1 := True;
   -- extend if both are commits and are same ixn
   if (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) then
-    parent ixn_max_1 ixn_propose := True;
+    parent ixn_max_1 ixn_propose := (ixn_max_1 ≠ ixn_propose);
     ancestor A ixn_propose := ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
     proposed op v p1 p2 ixn_propose := True;
     height1 ixn_propose := height1 ixn_max_1 + 1;
@@ -574,8 +575,8 @@ invariant [decided_only_if_quorum_prevote_locked]
 
 -- If a quorum has prevote-locked onto an interaction in view v, then in the Prepare stage of
 -- later views, a lock from atleast view v and descendant of ixn is obtained -----------------
-invariant [quorum_locked_implies_future_highqc_not_earlier_view]
-  ∀ (v : view) (p1 p2 : participant) (ixn : interaction) (v vp : view),
+invariant [quorum_locked_implies_lock_of_descendant_discovered]
+  ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
   (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∨ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
   ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn true v) ∧ (ctx.member n s2 → locked n p2 ixn true v)))
   ∧ tot_view.lt v vp ) →
@@ -584,13 +585,14 @@ invariant [quorum_locked_implies_future_highqc_not_earlier_view]
   ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : Bool) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ ancestor ixn ixnl2) )
   ))
 
+-- invariant [quorum_locked_implies_future_highqc_]
 
 -- If a quorum has prevote-locked onto an interaction in view v, then in the Prepare stage of
 -- later views, the highest lock obtained is not from a view earlier than v -----------------
 
 
 -- ######## Supporting Invariants ############
-/-
+
 invariant [decided_only_if_precommitted_operator]
   ∀ (v : view) (p1 p2 : participant) (ixn : interaction) (n : node),
     ¬ is_byz n → ( (decided n v p1 p2 ixn ∧ ixn ≠ genesis) →
@@ -672,11 +674,26 @@ invariant [ancestor_height]
 invariant [unique_decide_in_height]
   decided N V P Q I → ¬ (decided N U P Q J ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
+invariant [height_uniqueness_of_decided_1]
+  (height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+
+invariant [height_uniqueness_of_decided_2]
+  (height2 I = height2 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+
+-- invariant [same_height_locks_implies_diff_view]
+--   locked N
+
+-- invariant [height_monotonicity]
+--   ()
+
+-- invariant [extend_highest_lock_1]
+
+
 -- invariant [interaction_participants]
 --   ∃ (p q : participant), ∀ (i : interaction) (r s : participant), interactions i r s → (r = p ∧ s = q)
 
--- invariant [identical_locks_for_same_ixn]
---   locked N1 I1 S V ∧ locked N2 I2 S V → (I1 = I2)
+invariant [unique_lock_in_view]
+  locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V → (I1 = I2)
 
 -- invariant [precommit_operator_only_if_parent_locked]
 
@@ -778,7 +795,7 @@ safety [main_safety]
 --     ¬ is_byz n1 ∧ ¬ is_byz n2 → (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → ancestor i1 i2)
 -/
 
--/
+
 #gen_spec
 
 set_option veil.printCounterexamples true
