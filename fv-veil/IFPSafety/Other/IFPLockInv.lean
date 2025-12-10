@@ -382,9 +382,9 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) = {
 -- # Invariants
 
 -- If two nodes decide two ixns, then one is an ancestor of the other
--- safety [main_safety]
---   ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
---     (¬ is_byz n1 ∧ ¬ is_byz n2 ∧ decided n1 v1 i1 ∧ decided n2 v2 i2) → (ancestor i1 i2 ∨ ancestor i2 i1)
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ is_byz n1 ∧ ¬ is_byz n2 ∧ decided n1 v1 i1 ∧ decided n2 v2 i2) → (ancestor i1 i2 ∨ ancestor i2 i1)
 
 invariant [unique_prevote_nodes]
   ∀ (v : view) (i1 i2 : interaction) (n : node),
