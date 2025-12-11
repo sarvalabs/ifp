@@ -451,8 +451,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : intera
   -- extended if both are commits and are same ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
     (parent ixn_max_1 ixn
-    ∧ (if ixn_max_1 ≠ ixn then height1 = ixn_max_1 + 1 else height1 = ixn)
-    ∧ (if ixn_max_1 ≠ ixn then height2 = ixn_max_1 + 1 else height2 = ixn) )
+    ∧ (if ixn_max_1 ≠ ixn then height1 ixn = height1 ixn_max_1 + 1 else height1 ixn = height1 ixn_max_1)
+    ∧ (if ixn_max_1 ≠ ixn then height2 ixn = height2 ixn_max_1 + 1 else height2 ixn = height2 ixn_max_1) )
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 ixn S := (S = prevote) -- move to prevote stage
 }
@@ -463,7 +463,7 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
-  require ctx.member n c1 ∨ ctx.member n c2
+  require ctx.member op c1 ∨ ctx.member op c2
   require cur_stage op v p1 p2 ixn prevote -- in prevote stage
   require ixn_contexts ixn c1 c2
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
@@ -505,7 +505,7 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
-  require ctx.member n c1 ∨ ctx.member n c2
+  require ctx.member op c1 ∨ ctx.member op c2
   require cur_stage op v p1 p2 ixn precommit -- in precommit stage
   require ixn_contexts ixn c1 c2
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
