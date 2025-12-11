@@ -210,7 +210,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
-  require ∃ (c1 c2 : nodeset), (ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2
+  require ∃ (c1 c2 : nodeset), ((ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   require ¬ prepared_operator op v p1 p2
   require ∃ (i : interaction), interactions i p1 p2
   prepared_operator op v p1 p2 := True
@@ -222,8 +222,8 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   -- TODO: incorporate prepare timeout and ordering and responding to one
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view n v
-  require ∃ (op : node), operator op v p1 p2 ∧ prepared_operator op v p1 p2
-  require ∃ (c1 c2 : nodeset), ctx.member n c1 ∨ ctx.member n c2 ∧ participant_context p1 c1 ∧ participant_context p2 c2
+  require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
+  require ∃ (c1 c2 : nodeset), ((ctx.member n c1 ∨ ctx.member n c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   -- n is in the interaction's contexts
   -- if ∃ (vl : view) (ixnl : interaction) (sl : Bool), locked n vl sl ixnl then
     -- sent_lock_in_prepare n v sl ixnl := True
@@ -236,7 +236,7 @@ action send_lock_in_prepare_p1 (n : node) (v vl : view) (p1 p2 : participant) (i
   require cur_view n v
   require prepared_node n v p1 p2
   require locked n p1 ixnl sl vl
-  require ∃ (c1 : nodeset), ctx.member n c1 ∧ participant_context p1 c1
+  require ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1)
   require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2 : Bool), locked n p1 ixnl2 sl2 vl2
   require sl = true → ¬ locked n p1 ixnl false vl
   require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare_1 n v p1 p2 i_lock s_lock v_lock
@@ -260,7 +260,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
-  require ∃ (c1 c2 : nodeset), (ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2
+  require ∃ (c1 c2 : nodeset), ((ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 ixn_propose propose -- in propose stage
   require ixn_propose ≠ genesis;     -- Don't extend genesis to itself
@@ -466,9 +466,9 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
+  require ixn_contexts ixn c1 c2
   require ctx.member op c1 ∨ ctx.member op c2
   require cur_stage op v p1 p2 ixn prevote -- in prevote stage
-  require ixn_contexts ixn c1 c2
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     (∀ (n: node), (ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n v p1 p2 ixn)
   prevoted_operator op v p1 p2 ixn := True
