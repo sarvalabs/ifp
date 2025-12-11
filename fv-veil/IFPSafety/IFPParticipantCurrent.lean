@@ -758,6 +758,9 @@ invariant [prepare_response_only_by_context_nodes]
 invariant [proposal_only_by_operator]
   ¬ is_byz N → (proposed N V P Q I → operator N V P Q)
 
+invariant [single_participant_pair_per_view]
+     (operator N V P1 Q1 ∧ operator N V P2 Q2) → (P1 = P2 ∧ Q1 = Q2)
+
 /-
 invariant [unique_proposal_each_view]
   ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V P Q I1 ∧ proposed N2 V P Q I2) → (I1 = I2 ∧ N1 = N2) )
