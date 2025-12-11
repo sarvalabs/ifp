@@ -127,22 +127,22 @@ assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
   ∧ ((interactions ixn p2 p1 ∧ interactions ixn p3 p1) → p2 = p3)
   ∧ (interactions ixn p1 p2 → p1 ≠ p2)
 
--- All protocol activity must use the fixed participant pair
-assumption ∀ (n : node) (v : view) (q1 q2 : participant),
-  (prepared_operator n v q1 q2 ∨ prepared_node n v q1 q2) →
-  ((q1 = p1_fixed ∧ q2 = p2_fixed))
+-- -- All protocol activity must use the fixed participant pair
+-- assumption ∀ (n : node) (v : view) (q1 q2 : participant),
+--   (prepared_operator n v q1 q2 ∨ prepared_node n v q1 q2) →
+--   ((q1 = p1_fixed ∧ q2 = p2_fixed))
 
-assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
-  (proposed n v q1 q2 i ∨ prevoted_node n v q1 q2 i ∨ precommitted_node n v q1 q2 i) →
-  ((q1 = p1_fixed ∧ q2 = p2_fixed))
+-- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
+--   (proposed n v q1 q2 i ∨ prevoted_node n v q1 q2 i ∨ precommitted_node n v q1 q2 i) →
+--   ((q1 = p1_fixed ∧ q2 = p2_fixed))
 
-assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
-  (prevoted_operator n v q1 q2 i ∨ precommitted_operator n v q1 q2 i) →
-  ((q1 = p1_fixed ∧ q2 = p2_fixed))
+-- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
+--   (prevoted_operator n v q1 q2 i ∨ precommitted_operator n v q1 q2 i) →
+--   ((q1 = p1_fixed ∧ q2 = p2_fixed))
 
-assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
-  decided n v q1 q2 i →
-  ((q1 = p1_fixed ∧ q2 = p2_fixed))
+-- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
+--   decided n v q1 q2 i →
+--   ((q1 = p1_fixed ∧ q2 = p2_fixed))
 
 -- assumption ∀ (i : interaction), interactions i p1 p2
 
@@ -451,8 +451,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : intera
   -- extended if both are commits and are same ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
     (parent ixn_max_1 ixn
-    ∧ (if ixn_max_1 ≠ ixn_propose then height1 ixn_max_1 + 1 else height1 ixn_propose)
-    ∧ (if ixn_max_1 ≠ ixn_propose then height2 ixn_max_1 + 1 else height2 ixn_propose) )
+    ∧ (if ixn_max_1 ≠ ixn then height1 = ixn_max_1 + 1 else height1 = ixn)
+    ∧ (if ixn_max_1 ≠ ixn then height2 = ixn_max_1 + 1 else height2 = ixn) )
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 ixn S := (S = prevote) -- move to prevote stage
 }
