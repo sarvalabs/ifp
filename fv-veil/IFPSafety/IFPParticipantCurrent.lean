@@ -451,8 +451,10 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : intera
   -- extended if both are commits and are same ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
     (parent ixn_max_1 ixn
-    ∧ (if ixn_max_1 ≠ ixn then height1 ixn = height1 ixn_max_1 + 1 else height1 ixn = height1 ixn_max_1)
-    ∧ (if ixn_max_1 ≠ ixn then height2 ixn = height2 ixn_max_1 + 1 else height2 ixn = height2 ixn_max_1) )
+    ∧ (ixn_max_1 ≠ ixn → height1 ixn = height1 ixn_max_1 + 1)
+    ∧ (ixn_max_1 = ixn → height1 ixn = height1 ixn_max_1)
+    ∧ (ixn_max_1 ≠ ixn → height2 ixn = height2 ixn_max_1 + 1)
+    ∧ (ixn_max_1 = ixn → height2 ixn = height2 ixn_max_1) )
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 ixn S := (S = prevote) -- move to prevote stage
 }
@@ -721,7 +723,20 @@ invariant [height_uniqueness_of_decided_2]
 --   ()
 
 -- invariant [extend_highest_lock_1]
+--   ∀ (op operator) ()
 
+invariant [propose_only_if_parent_locked]
+  (¬ is_byz OP ∧ proposed OP V P Q J ∧ parent I J) → (∃ (u : view) (n : node) (s : Bool), tot_view.le u V ∧ (locked n P I s u ∨ locked n Q I s u))
+
+-- invariant [proposal_highest_lock]
+
+invariant [propose_only_if_quorum_locks_sent]
+  ¬ is_byz N → ( proposed N V P Q I →
+    (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+    ∧ ∀ (nc : node), ((ctx.member nc s1 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V P Q ixnl sl vl ) )
+      ∧ (ctx.member nc s2 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V P Q ixnl sl vl) )) ))
+
+-- invariant []
 
 -- invariant [interaction_participants]
 --   ∃ (p q : participant), ∀ (i : interaction) (r s : participant), interactions i r s → (r = p ∧ s = q)
