@@ -121,6 +121,8 @@ assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
 
 assumption interactions I p1_fixed p2_fixed
 
+assumption p1_fixed ≠ p2_fixed
+
 
 -- Assume that only two given distinct participants are part of an interaction
 -- assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
