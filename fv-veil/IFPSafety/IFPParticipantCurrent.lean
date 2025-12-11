@@ -209,6 +209,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
+  require ∃ (c1 c2 : nodeset), (ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2
   require ¬ prepared_operator op v p1 p2
   require ∃ (i : interaction), interactions i p1 p2
   prepared_operator op v p1 p2 := True
@@ -258,6 +259,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
+  require ∃ (c1 c2 : nodeset), (ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 ixn_propose propose -- in propose stage
   require ixn_propose ≠ genesis;     -- Don't extend genesis to itself
@@ -461,6 +463,7 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
+  require ctx.member n c1 ∨ ctx.member n c2
   require cur_stage op v p1 p2 ixn prevote -- in prevote stage
   require ixn_contexts ixn c1 c2
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
@@ -502,6 +505,7 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require cur_view op v
   require operator op v p1 p2
+  require ctx.member n c1 ∨ ctx.member n c2
   require cur_stage op v p1 p2 ixn precommit -- in precommit stage
   require ixn_contexts ixn c1 c2
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
