@@ -158,14 +158,14 @@ after_init {
   -- parent2 I J := (I = genesis ∧ J = genesis);
   ancestor I J := (I = J); -- I = genesis ∧ J = genesis
   -- ancestor2 I J := (I = J); -- I = genesis ∧ J = genesis
-  locked N P I S V := (I = genesis ∧ S = true ∧ V = tot_view.zero);
-  decided N V P Q I := (I = genesis ∧ V = tot_view.zero)
+  locked N P I S V := (I = genesis ∧ S = true ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
+  decided N V P Q I := (I = genesis ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed))
   -- height I M N := (I = genesis ∧ M = 0 ∧ N = 0);
   -- height1 genesis := 0;
   -- height2 genesis := 0;
   height1 I := 0;
   height2 I := 0;
-  cur_stage N V P Q I S := (S = propose);
+  cur_stage N V P Q I S := (S = propose ∧ (P = p1_fixed ∨ P = p2_fixed));
   operator N V P Q := False;
   cur_view N V := (V = tot_view.zero);
   prepared_operator N V P Q := False;
