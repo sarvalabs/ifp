@@ -660,11 +660,11 @@ invariant [decision_requires_precommit_lock]
   ∀ (n : node) (v : view) (p1 p2 : participant) (i : interaction),
     ¬ is_byz n → (decided n v p1 p2 i ∧ i ≠ genesis → (locked n p1 i false v ∨ locked n p2 i false v))
 
--- invariant [parent_antisymmetric]
---   parent I J ∧ parent J I → (I = J ∧ J = genesis)
+invariant [parent_antisymmetric]
+  parent I J ∧ parent J I → (I = J ∧ J = genesis)
 
--- invariant [unique_parent]
---   parent J I ∧ parent K I → J = K
+invariant [unique_parent]
+  parent J I ∧ parent K I → J = K
 
 invariant [parent_irreflexive]
   ¬ parent I I
