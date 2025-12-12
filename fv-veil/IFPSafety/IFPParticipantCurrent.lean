@@ -670,25 +670,25 @@ invariant [parent_irreflexive]
   ¬ parent I I
 
 invariant [locks_sent_only_after_prepare_1]
-  sent_lock_in_prepare_1 N V P Q IL SL VL → prepared_node N V P Q
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL SL VL) → prepared_node N V P Q
 
 invariant [locks_sent_only_if_locked_1]
-  sent_lock_in_prepare_1 N V P Q IL SL VL → locked N P IL SL VL
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL SL VL) → locked N P IL SL VL
 
 invariant [locks_sent_only_after_prepare_2]
-  sent_lock_in_prepare_2 N V P Q IL SL VL → prepared_node N V P Q
+  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V P Q IL SL VL) → prepared_node N V P Q
 
 invariant [locks_sent_only_if_locked_2]
-  sent_lock_in_prepare_2 N V P Q IL SL VL → locked N Q IL SL VL
+  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V P Q IL SL VL) → locked N Q IL SL VL
 
 invariant [parent_only_if_proposed]
   parent I J ∧ J ≠ genesis → ∃ (n : node) (p1 p2 : participant) (v : view), proposed n v p1 p2 J
 
 invariant [unique_lock_sent]
-  (sent_lock_in_prepare_1 N V P Q I IL1 SL1 ∧ sent_lock_in_prepare_1 N V P Q I IL2 SL2) → (IL1 = IL2 ∧ SL1 = SL2)
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q I IL1 SL1 ∧ sent_lock_in_prepare_1 N V P Q I IL2 SL2) → (IL1 = IL2 ∧ SL1 = SL2)
 
 invariant [unique_stage]
-  (cur_stage N V P Q I S1 ∧ cur_stage N V P Q I S2) → S1 = S2
+  (¬ is_byz N ∧ cur_stage N V P Q I S1 ∧ cur_stage N V P Q I S2) → S1 = S2
 
 invariant [prepare_only_by_operator]
   ¬ is_byz N → (prepared_operator N V P Q → operator N V P Q)
@@ -742,10 +742,10 @@ invariant [unique_decide_in_height]
   (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
 invariant [height_uniqueness_of_decided_1]
-  (height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+  (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
 
 invariant [height_uniqueness_of_decided_2]
-  (height2 I = height2 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+  (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
 
 -- invariant [genesis_immutable]
 --   st.genesis = st_.genesis  -- Genesis in post-state equals genesis in pre-state
@@ -778,7 +778,7 @@ invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
 
 invariant [unique_lock_in_view]
-  locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V → (I1 = I2)
+  ¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V → (I1 = I2)
 
 -- invariant [precommit_operator_only_if_parent_locked]
 
