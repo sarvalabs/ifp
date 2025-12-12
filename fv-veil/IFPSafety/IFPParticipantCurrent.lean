@@ -792,7 +792,6 @@ invariant [proposal_only_by_operator]
 invariant [single_participant_pair_per_view]
      (operator N V P1 Q1 ∧ operator N V P2 Q2) → (P1 = P2 ∧ Q1 = Q2)
 
-
 invariant [unique_proposal_each_view]
   ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V P Q I1 ∧ proposed N2 V P Q I2) → (I1 = I2 ∧ N1 = N2) )
 
@@ -806,11 +805,10 @@ invariant [propose_only_if_operator_prepare]
 
 invariant [prevote_nodes_only_by_context_nodes]
   (¬ is_byz N ∧ prevoted_node N V P Q I) → (∃ (c1 c2 : nodeset), ixn_contexts I c1 c2 ∧ (ctx.member N c1 ∨ ctx.member N c2))
-
+/-
 invariant [prevote_operator_only_if_quorum_prevote]
   ¬ is_byz N → (prevoted_operator OP V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
     ∧ ∀ (n : node), ((ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n V P Q I)) )
-
 
 invariant [prevote_operator_only_if_quorum_prepare]
   ¬ is_byz OP → (prevoted_operator OP V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
@@ -833,7 +831,7 @@ invariant [precommit_nodes_only_if_operator_prevote]
 
 invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
   ¬ is_byz N → (precommitted_node N V P Q I → prevoted_node N V P Q I)
-/-
+
 invariant [unique_precommit_nodes]
   ¬ is_byz N → ((precommitted_node N V P Q I ∧ precommitted_node N V P Q J) → I = J)
 
@@ -883,6 +881,7 @@ safety [main_safety]
 --     ¬ is_byz n1 ∧ ¬ is_byz n2 → (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → ancestor i1 i2)
 -/
 -/
+
 
 #gen_spec
 
