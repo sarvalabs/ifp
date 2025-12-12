@@ -154,15 +154,15 @@ assumption (participant_context P C1 ∧ participant_context P C2) → C1 = C2
 
 
 after_init {
-  parent I J := (I = genesis ∧ J = genesis);
+  parent I J := False;-- (I = genesis ∧ J = genesis);
   -- parent2 I J := (I = genesis ∧ J = genesis);
   ancestor I J := (I = J); -- I = genesis ∧ J = genesis
   -- ancestor2 I J := (I = J); -- I = genesis ∧ J = genesis
   locked N P I S V := (I = genesis ∧ S = true ∧ V = tot_view.zero);
   decided N V P Q I := (I = genesis ∧ V = tot_view.zero)
   -- height I M N := (I = genesis ∧ M = 0 ∧ N = 0);
-  height1 genesis := 0;
-  height2 genesis := 0;
+  -- height1 genesis := 0;
+  -- height2 genesis := 0;
   height1 I := 0;
   height2 I := 0;
   cur_stage N V P Q I S := (S = propose);
@@ -266,6 +266,8 @@ action send_lock_in_prepare_p2 (n : node) ( v vl : view) (p1 p2 : participant) (
 action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : interaction) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
+  require ∀ (j : interaction), ¬ parent j ixn_propose
+  require height1 ixn_propose = 0 ∧ height2 ixn_propose = 0
   require cur_view op v
   require operator op v p1 p2
   require ∃ (c1 c2 : nodeset), ((ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
@@ -737,7 +739,7 @@ invariant [ancestor_height]
   ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
 
 invariant [unique_decide_in_height]
-  decided N V P Q I → ¬ (decided N U P Q J ∧ (height1 I = height1 J ∨ height2 I = height2 J))
+  (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
 invariant [height_uniqueness_of_decided_1]
   (height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
@@ -790,7 +792,7 @@ invariant [proposal_only_by_operator]
   ¬ is_byz N → (proposed N V P Q I → operator N V P Q)
 
 invariant [single_participant_pair_per_view]
-     (operator N V P1 Q1 ∧ operator N V P2 Q2) → (P1 = P2 ∧ Q1 = Q2)
+  (¬ is_byz N ∧ operator N V P1 Q1 ∧ operator N V P2 Q2) → (P1 = P2 ∧ Q1 = Q2)
 
 invariant [unique_proposal_each_view]
   ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V P Q I1 ∧ proposed N2 V P Q I2) → (I1 = I2 ∧ N1 = N2) )
