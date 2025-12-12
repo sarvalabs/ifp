@@ -116,12 +116,15 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 -- # Assumptions
 
 -- Assume that there are exactly two such participants among which all ixns occur
-assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
-  ( ∀ (i: interaction),  interactions i p1 p2 ) )
+-- assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
+--   ( ∀ (i: interaction),  interactions i p1 p2 ) )
 
-assumption interactions I p1_fixed p2_fixed
+-- assumption interactions I p1_fixed p2_fixed
 
-assumption p1_fixed ≠ p2_fixed
+-- assumption p1_fixed ≠ p2_fixed
+
+assumption ∀ (i : interaction) (p q : participant),
+  interactions i p q → (p = p1_fixed ∧ q = p2_fixed)
 
 
 -- Assume that only two given distinct participants are part of an interaction
