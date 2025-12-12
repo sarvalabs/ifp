@@ -738,6 +738,16 @@ invariant [heights_equal]
 invariant [parent_height]
   parent I J → (height1 I + 1 = height1 J ∧ height2 I + 1 = height2 J)
 
+invariant [parent_height_2]
+  (¬ is_byz N ∧ parent I J ∧ proposed N V P Q I) →
+    height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
+
+invariant [parent_height_for_valid_proposals]
+  (parent I J ∧
+   (∃ (n : node) (v : view) (p q : participant),
+     ¬ is_byz n ∧ proposed n v p q I)) →
+  height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
+
 invariant [ancestor_height]
   ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
 
