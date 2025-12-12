@@ -162,13 +162,13 @@ after_init {
   ancestor I J := (I = J); -- I = genesis ∧ J = genesis
   -- ancestor2 I J := (I = J); -- I = genesis ∧ J = genesis
   locked N P I S V := (I = genesis ∧ S = true ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
-  decided N V P Q I := (I = genesis ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed))
+  decided N V P Q I := (I = genesis ∧ V = tot_view.zero ∧ (P = p1_fixed ∧ Q = p2_fixed))
   -- height I M N := (I = genesis ∧ M = 0 ∧ N = 0);
   -- height1 genesis := 0;
   -- height2 genesis := 0;
   height1 I := 0;
   height2 I := 0;
-  cur_stage N V P Q I S := (S = propose ∧ (P = p1_fixed ∨ P = p2_fixed));
+  cur_stage N V P Q I S := (S = propose ∧ (P = p1_fixed ∧ Q = p2_fixed));
   operator N V P Q := False;
   cur_view N V := (V = tot_view.zero);
   prepared_operator N V P Q := False;
@@ -359,11 +359,11 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
     proposed op v p1 p2 ixn_max_1 := True;
   -- extend if both are commits and are same ixn
   if (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) then
-    parent ixn_max_1 ixn_propose := (ixn_max_1 ≠ ixn_propose);
+    parent ixn_max_1 ixn_propose := True;-- (ixn_max_1 ≠ ixn_propose);
     ancestor A ixn_propose := ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
     proposed op v p1 p2 ixn_propose := True;
-    height1 ixn_propose := (if ixn_max_1 ≠ ixn_propose then height1 ixn_max_1 + 1 else height1 ixn_propose);
-    height2 ixn_propose := (if ixn_max_1 ≠ ixn_propose then height2 ixn_max_2 + 1 else height2 ixn_propose);
+    height1 ixn_propose := height1 ixn_max_1 + 1; -- (if ixn_max_1 ≠ ixn_propose then height1 ixn_max_1 + 1 else height1 ixn_propose);
+    height2 ixn_propose := height2 ixn_max_2 + 1-- (if ixn_max_1 ≠ ixn_propose then height2 ixn_max_2 + 1 else height2 ixn_propose);
   if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 ≠ ixn_max_2) then
     proposed_nil op v p1 p2 := True;
   -- cur_stage op v p1 p2 ixn_propose S := (S = prevote) -- move to prevote stage
