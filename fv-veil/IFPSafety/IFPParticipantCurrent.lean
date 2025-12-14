@@ -355,6 +355,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
     )
   )
   require ixn_max_1 ≠ ixn_propose
+  require ¬ ancestor ixn_max_1 ixn_propose
   -- repropose if both are locks for same ixn
   if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) then
     proposed op v p1 p2 ixn_max_1 := True;
@@ -753,7 +754,8 @@ invariant [ancestor_height]
   ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
 
 invariant [unique_decide_in_height]
-  (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ (height1 I = height1 J ∨ height2 I = height2 J))
+  (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
+  ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
 invariant [height_uniqueness_of_decided_1]
   (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
