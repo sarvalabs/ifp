@@ -354,12 +354,13 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
       )
     )
   )
+  require ixn_max_1 ≠ ixn_propose
   -- repropose if both are locks for same ixn
   if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) then
     proposed op v p1 p2 ixn_max_1 := True;
   -- extend if both are commits and are same ixn
   if (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) then
-    parent ixn_max_1 ixn_propose := True;-- (ixn_max_1 ≠ ixn_propose);
+    parent ixn_max_1 ixn_propose := (ixn_max_1 ≠ ixn_propose);
     ancestor A ixn_propose := ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
     proposed op v p1 p2 ixn_propose := True;
     height1 ixn_propose := height1 ixn_max_1 + 1; -- (if ixn_max_1 ≠ ixn_propose then height1 ixn_max_1 + 1 else height1 ixn_propose);
