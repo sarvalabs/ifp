@@ -666,15 +666,6 @@ invariant [decision_requires_precommit_lock]
   ∀ (n : node) (v : view) (p1 p2 : participant) (i : interaction),
     ¬ is_byz n → (decided n v p1 p2 i ∧ i ≠ genesis → (locked n p1 i false v ∨ locked n p2 i false v))
 
-invariant [parent_antisymmetric]
-  parent I J ∧ parent J I → (I = J ∧ J = genesis)
-
-invariant [unique_parent]
-  parent J I ∧ parent K I → J = K
-
-invariant [parent_irreflexive]
-  ¬ parent I I
-
 invariant [locks_sent_only_after_prepare_1]
   (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL SL VL) → prepared_node N V P Q
 
@@ -726,6 +717,15 @@ invariant [unique_operator_for_pset]
 --     ¬ is_byz n → ( proposed n v p1 p2 ixn → (∃ (il : interaction) (nl : node) (vl : view), (parent il ixn ∧
 --       (sent_lock_in_prepare nl v p1 p2 il true vl ∨ sent_lock_in_prepare nl v p1 p2 il false vl))) )
 
+invariant [parent_antisymmetric]
+  parent I J ∧ parent J I → (I = J ∧ J = genesis)
+
+invariant [unique_parent]
+  parent J I ∧ parent K I → J = K
+
+invariant [parent_irreflexive]
+  ¬ parent I I
+
 invariant [ancestor_def]
   ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
 
@@ -739,12 +739,27 @@ invariant [heights_equal]
   height1 I = height2 I
 
 invariant [committed_implies_parent_committed]
-  (decided M V P Q J ∧ parent I J) → (∃ (u : view) (n : node), (tot_view.lt u V ∧ decided n u P Q I))
+  (decided M V P Q J ∧ parent I J ∧ J ≠ genesis) → (∃ (u : view) (n : node), (tot_view.lt u V ∧ decided n u P Q I))
 
-invariant [latest_commit_is_parent] (∃ (u: view) (n : node)),
-  (decided M V P Q J ∧ tot_view.le u V ∧ decided n u P Q I
-  ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i P Q ixn ))
+invariant [latest_commit_is_parent] (∃ (u: view) (n : node),
+  (decided M V P Q J ∧ tot_view.le u V ∧ decided n u P Q I  ∧ J ≠ genesis
+  ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i P Q ixn )) )
   → parent I J
+
+invariant [genesis_decided_first]
+  (decided N V P Q J ∧ J ≠ genesis) →
+    (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u P Q genesis)
+
+invariant [genesis_height_zero]
+  (height1 I = 0) ↔ (I = genesis)
+
+invariant [genesis_view_zero]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → (decided n v ixn ∧ tot_view.zero v → ixn = genesis)
+
+
+-- invariant [max_lock_parent_height]
+
 
 -- invariant [parent_height]
 --   parent I J → (height1 I + 1 = height1 J ∧ height2 I + 1 = height2 J)
@@ -895,9 +910,6 @@ invariant [precommit_only_if_prepare_quorum]
 safety [main_safety]
   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)
 
--- invariant [decided_vzero_only_genesis]
---   ∀ (v : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (decided n v ixn ∧ tot_view.zero v → ixn = genesis)
 
 -- invariant [safety_vone]
 --   ∀ (v1 v2 : view) (ixn : interaction) (n : node),
