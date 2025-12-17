@@ -690,10 +690,6 @@ invariant [unique_stage]
 invariant [prepare_only_by_operator]
   ¬ is_byz N → (prepared_operator N V P Q → operator N V P Q)
 
-invariant [prevote_operator_only_if_quorum_prevoted]
-  ¬ is_byz N → (prevoted_operator N V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧
-    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V P Q I)))
-
 invariant [unique_proposal]
   ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V P Q I1 ∧ proposed N2 V P Q I2) → (I1 = I2 ∧ N1 = N2) )
 
@@ -712,10 +708,11 @@ invariant [operator_from_ixn_context]
 invariant [unique_operator_for_pset]
   ¬ (is_byz N1 ∨ is_byz N2) → (operator N1 V P Q ∧ operator N2 V P Q → N1 = N2)
 
--- invariant [proposal_extends_parent]
---   ∀ (v : view) (ixn : interaction) (n : node) (p1 p2 : participant),
---     ¬ is_byz n → ( proposed n v p1 p2 ixn → (∃ (il : interaction) (nl : node) (vl : view), (parent il ixn ∧
---       (sent_lock_in_prepare nl v p1 p2 il true vl ∨ sent_lock_in_prepare nl v p1 p2 il false vl))) )
+invariant [proposal_extends_parent]
+  ∀ (v : view) (ixn : interaction) (n : node) (p1 p2 : participant),
+    ¬ is_byz n → ( proposed n v p1 p2 ixn → (∃ (il : interaction) (nl : node) (vl : view) (c1 c2 : nodeset),
+    (parent il ixn ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧
+      ((ctx.member nl c1 ∧ sent_lock_in_prepare_1 nl v p1 p2 il true vl) ∨ (ctx.member nl c2 ∧ sent_lock_in_prepare_1 nl v p1 p2 il false vl)))) )
 
 invariant [parent_antisymmetric]
   parent I J ∧ parent J I → (I = J ∧ J = genesis)
@@ -751,31 +748,31 @@ invariant [genesis_decided_first]
     (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u P Q genesis)
 
 invariant [genesis_height_zero]
-  (height1 I = 0) ↔ (I = genesis)
+  (height1 I = 0 ↔ I = genesis) ∧
+  (height2 I = 0 ↔ I = genesis)
 
 invariant [genesis_view_zero]
-  ∀ (v : view) (ixn : interaction) (n : node),
-    ¬ is_byz n → (decided n v ixn ∧ tot_view.zero v → ixn = genesis)
+  (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
 
+/-
+invariant [max_lock_parent_height]
 
--- invariant [max_lock_parent_height]
+invariant [parent_height]
+  parent I J → (height1 I + 1 = height1 J ∧ height2 I + 1 = height2 J)
 
+invariant [parent_height_2]
+  (¬ is_byz N ∧ parent I J ∧ proposed N V P Q I) →
+    height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
 
--- invariant [parent_height]
---   parent I J → (height1 I + 1 = height1 J ∧ height2 I + 1 = height2 J)
+invariant [parent_height_for_valid_proposals]
+  (parent I J ∧
+   (∃ (n : node) (v : view) (p q : participant),
+     ¬ is_byz n ∧ proposed n v p q I)) →
+  height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
 
--- invariant [parent_height_2]
---   (¬ is_byz N ∧ parent I J ∧ proposed N V P Q I) →
---     height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
-
--- invariant [parent_height_for_valid_proposals]
---   (parent I J ∧
---    (∃ (n : node) (v : view) (p q : participant),
---      ¬ is_byz n ∧ proposed n v p q I)) →
---   height1 I = height1 J + 1 ∧ height2 I = height2 J + 1
-
--- invariant [ancestor_height]
---   ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
+invariant [ancestor_height]
+  ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
+-/
 
 invariant [unique_decide_in_height]
   (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
@@ -787,17 +784,11 @@ invariant [height_uniqueness_of_decided_1]
 invariant [height_uniqueness_of_decided_2]
   (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
 
--- invariant [genesis_immutable]
---   st.genesis = st_.genesis  -- Genesis in post-state equals genesis in pre-state
-
 invariant [genesis_has_no_parent]
   ∀ (p : interaction), ¬ parent p genesis
 
 -- invariant [same_height_locks_implies_diff_view]
 --   locked N
-
--- invariant [height_monotonicity]
---   ()
 
 -- invariant [extend_highest_lock_1]
 --   ∀ (op operator) ()
@@ -820,6 +811,7 @@ invariant [interaction_participants]
 invariant [unique_lock_in_view]
   ¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V → (I1 = I2)
 
+/-
 -- invariant [precommit_operator_only_if_parent_locked]
 
 invariant [prepare_response_only_on_prepare]
@@ -847,7 +839,11 @@ invariant [propose_only_if_operator_prepare]
 
 invariant [prevote_nodes_only_by_context_nodes]
   (¬ is_byz N ∧ prevoted_node N V P Q I) → (∃ (c1 c2 : nodeset), ixn_contexts I c1 c2 ∧ (ctx.member N c1 ∨ ctx.member N c2))
-/-
+
+invariant [prevote_operator_only_if_quorum_prevoted]
+  ¬ is_byz N → (prevoted_operator N V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V P Q I)))
+
 invariant [prevote_operator_only_if_quorum_prevote]
   ¬ is_byz N → (prevoted_operator OP V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
     ∧ ∀ (n : node), ((ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n V P Q I)) )
@@ -903,23 +899,14 @@ invariant [precommit_only_if_propose]
 invariant [precommit_only_if_prepare_quorum]
   (¬ is_byz N ∧ precommitted_node N V P Q I) → (∃ (c1 c2 s1 s2 : nodeset), (ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
     ∧ ∀ (nc : node), ((ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc V P Q)) )
-
+-/
 
 /-
 -- If two nodes decide two ixns, then one is an ancestor of the other
 safety [main_safety]
   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)
-
-
--- invariant [safety_vone]
---   ∀ (v1 v2 : view) (ixn : interaction) (n : node),
---     ¬ is_byz n → (decided n v2 ixn ∧ tot_view.zero v1 ∧ tot_view.next v1 v2 → ancestor genesis ixn)
-
--- invariant [safety_vk_vk1]
---   ∀ (v1 v2 : view) (i1 i2 : interaction) (n1 n2 : node),
---     ¬ is_byz n1 ∧ ¬ is_byz n2 → (decided n1 v1 i1 ∧ decided n2 v2 i2 ∧ tot_view.next v1 v2 → ancestor i1 i2)
 -/
--/
+
 
 
 #gen_spec
@@ -928,7 +915,7 @@ set_option veil.printCounterexamples true
 set_option veil.smt.model.minimize true
 set_option veil.vc_gen "transition"
 -- set_option veil.showVerificationTime true
-set_option veil.smt.seed 67
+set_option veil.smt.seed 44
 --set_option veil.smt.timeout 10
 -- set_option veil.smt.solver "z3"
 
