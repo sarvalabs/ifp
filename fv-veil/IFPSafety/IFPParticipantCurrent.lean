@@ -42,6 +42,8 @@ type stage
 individual propose : stage
 individual prevote : stage
 individual precommit : stage
+individual commit : stage
+
 
 variable (is_byz : node → Prop)
 
@@ -126,12 +128,14 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 assumption ∀ (i : interaction) (p q : participant),
   interactions i p q → (p = p1_fixed ∧ q = p2_fixed)
 
+assumption p1_fixed ≠ p2_fixed
 
 -- Assume that only two given distinct participants are part of an interaction
 -- assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
 --   ((interactions ixn p1 p2 ∧ interactions ixn p1 p3) → p2 = p3)
 --   ∧ ((interactions ixn p2 p1 ∧ interactions ixn p3 p1) → p2 = p3)
 --   ∧ (interactions ixn p1 p2 → p1 ≠ p2)
+
 
 -- -- All protocol activity must use the fixed participant pair
 -- assumption ∀ (n : node) (v : view) (q1 q2 : participant),
@@ -536,7 +540,8 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   precommitted_operator op v p1 p2 ixn := True
   locked op p1 ixn false v := (ctx.member op c1)--(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
   locked op p2 ixn false v := (ctx.member op c2)
-  decided op v p1 p2 ixn := True
+  -- decided op v p1 p2 ixn := True
+
   -- broadcasted_decision op v ixn := True
   -- stage op v p1 p2 ixn S := (S = 3) -- move to commit stage
 }
@@ -555,6 +560,7 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   locked n p1 ixn false v := (ctx.member n c1) --(( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) )-- ∧ I = ixn)
   locked n p2 ixn false v := (ctx.member n c2)
   decided n v p1 p2 ixn := True
+  cur_stage n v p1 p2 ixn S := (S = commit)
 }
 
 -- -- Nodes decide on an interaction on receiving it from the operator
@@ -732,8 +738,8 @@ invariant [unique_parent]
 invariant [parent_irreflexive]
   ¬ parent I I
 
-invariant [ancestor_def]
-  ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+-- invariant [ancestor_def]
+--   ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
 
 invariant [decisions_not_from_higher_views]
   cur_view N V ∧ decided N U P Q I → tot_view.le U V
@@ -800,7 +806,7 @@ invariant [genesis_has_no_parent]
 --   locked N
 
 -- invariant [extend_highest_lock_1]
---   ∀ (op operator) ()
+--   ¬ is_byz OP ∧ proposed OP V P Q J ∧ pa
 
 invariant [propose_only_if_parent_locked]
   (¬ is_byz OP ∧ proposed OP V P Q J ∧ parent I J) → (∃ (u : view) (n : node) (s : Bool), tot_view.le u V ∧ (locked n P I s u ∨ locked n Q I s u))
