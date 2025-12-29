@@ -662,14 +662,13 @@ invariant [decided_only_if_quorum_prevote_locked]
 
 
 -- ######## Supporting Invariants ############
-
-invariant [precommitted_node_only_if_locked]
+invariant [precommitted_node_implies_lock]
   ∀ (v : view) (ixn : interaction) (n : node),
     ¬ is_byz n → ((precommitted_node n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
       (∃ (c1 c2 : nodeset),
         ixn_contexts ixn c1 c2 ∧
-        (ctx.member n c1 → (locked n p1_fixed ixn true v ∨ locked n p1_fixed ixn false v)) ∧
-        (ctx.member n c2 → (locked n p2_fixed ixn true v ∨ locked n p2_fixed ixn false v))))
+        (ctx.member n c1 → ∃ (u : view), tot_view.le u v ∧ (locked n p1_fixed ixn true u ∨ locked n p1_fixed ixn false u)) ∧
+        (ctx.member n c2 → ∃ (u : view), tot_view.le u v ∧ (locked n p2_fixed ixn true u ∨ locked n p2_fixed ixn false u))))
 
 invariant [precommitted_operator_only_if_quorum_prevote_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
