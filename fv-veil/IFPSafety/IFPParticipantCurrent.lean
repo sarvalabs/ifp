@@ -613,29 +613,29 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
 
 -- Unique Prevote by Nodes
 invariant [unique_prevote_nodes]
-  ∀ (v : view) (i1 i2 : interaction) (p1 p2 : participant) (n : node),
-    ¬ is_byz n → ((prevoted_node n v p1 p2 i1 ∧ prevoted_node n v p1 p2 i2) → i1 = i2)
+  ∀ (v : view) (i1 i2 : interaction) (n : node),
+    ¬ is_byz n → ((prevoted_node n v p1_fixed p2_fixed i1 ∧ prevoted_node n v p1_fixed p2_fixed i2) → i1 = i2)
 
 -- Unique prevoteQC in Each View------
 invariant [unique_prevote_lock_in_view]
-  ∀ (n1 n2 : node) (v : view) (p1 p2 : participant) (i1 i2 : interaction),
-    ¬ (is_byz n1 ∨ is_byz n2) → (( (locked n1 p1 i1 true v ∧ locked n2 p1 i2 true v) ∨ (locked n1 p2 i1 true v ∧ locked n2 p2 i2 true v) ) → i1 = i2)
+  ∀ (n1 n2 : node) (v : view) (i1 i2 : interaction),
+    ¬ (is_byz n1 ∨ is_byz n2) → (( (locked n1 p1_fixed i1 true v ∧ locked n2 p1_fixed i2 true v) ∨ (locked n1 p2_fixed i1 true v ∧ locked n2 p2_fixed i2 true v) ) → i1 = i2)
 
 -- invariant [two_prevote_qcs_implies_diff_view]
   -- ∀ ( (s1 s2 s3 s4 c1 c2 : nodeset) ()
   -- )
 
 invariant [two_prevoted_operators_implies_diff_view]
-  ∀ (n1 n2 : node) (p1 p2 : participant) (ixn: interaction) (v1 v2 : view),
-    ¬ (is_byz n1 ∨ is_byz n2) → ( (prevoted_operator n1 v1 p1 p2 ixn ∧ prevoted_operator n2 v2 p1 p2 ixn ∧ n1 ≠ n2) → v1 ≠ v2 )
+  ∀ (n1 n2 : node) (ixn: interaction) (v1 v2 : view),
+    ¬ (is_byz n1 ∨ is_byz n2) → ( (prevoted_operator n1 v1 p1_fixed p2_fixed ixn ∧ prevoted_operator n2 v2 p1_fixed p2_fixed ixn ∧ n1 ≠ n2) → v1 ≠ v2 )
 -- Unique prevoteQC in Each View------
 
 -- Decided only if Quorum of Nodes Prevote-Locked------
 invariant [decided_only_if_quorum_prevote_locked]
-  ∀ (v : view) (p1 p2 : participant) (ixn : interaction) (n : node),
-    ¬ is_byz n → ( (decided n v p1 p2 ixn ∧ ixn ≠ genesis) →
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → ( (decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
       (∃ (c1 c2 s1 s2 : nodeset), (ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-        ∧ ∀ (nc : node), ( (ctx.member nc s1 → (locked nc p1 ixn true v ∨ locked nc p1 ixn false v) ) ∧ (ctx.member nc s2 → (locked nc p2 ixn true v ∨ locked nc p2 ixn false v)) )) ) )
+        ∧ ∀ (nc : node), ( (ctx.member nc s1 → (locked nc p1_fixed ixn true v ∨ locked nc p1_fixed ixn false v) ) ∧ (ctx.member nc s2 → (locked nc p2_fixed ixn true v ∨ locked nc p2_fixed ixn false v)) )) ) )
 -- Decided only if Quorum of Nodes Prevote-Locked------
 
 
@@ -659,13 +659,13 @@ invariant [decided_only_if_quorum_prevote_locked]
 
 -- ######## Supporting Invariants ############
 invariant [quorum_locked_implies_discovered_next_view]
-  ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
-  (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∨ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-  ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn true v) ∧ (ctx.member n s2 → locked n p2 ixn true v)))
+  ∀ (ixn : interaction) (v vp : view),
+  (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1_fixed p2_fixed ∧ participant_context p1_fixed c1 ∨ participant_context p2_fixed c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+  ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1_fixed ixn true v) ∧ (ctx.member n s2 → locked n p2_fixed ixn true v)))
   ∧ tot_view.next v vp ) →
-  ((∃ (op : node), prepared_operator op vp p1 p2) → (
-  ( ∃ (n1 : node) (c1 : nodeset) (sl1 : Bool), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixn sl1 v) )
-  ∧ ( ∃ (n2 : node) (c2 : nodeset) (sl2 : Bool), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixn sl2 v) )
+  ((∃ (op : node), prepared_operator op vp p1_fixed p2_fixed) → (
+  ( ∃ (n1 : node) (c1 : nodeset) (sl1 : Bool), (ctx.member n1 c1 ∧ participant_context p1_fixed c1 ∧ sent_lock_in_prepare_1 n1 vp p1_fixed p2_fixed ixn sl1 v) )
+  ∧ ( ∃ (n2 : node) (c2 : nodeset) (sl2 : Bool), (ctx.member n2 c2 ∧ participant_context p2_fixed c2 ∧ sent_lock_in_prepare_2 n2 vp p1_fixed p2_fixed ixn sl2 v) )
   ))
 
 invariant [prevote_lock_only_if_quorun_prevoted]
@@ -673,40 +673,40 @@ invariant [prevote_lock_only_if_quorun_prevoted]
     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V p1_fixed p2_fixed I))
 
 invariant [prevote_operator_only_if_quorum_prevoted]
-  ¬ is_byz N → (prevoted_operator N V P Q I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧
-    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V P Q I)))
+  ¬ is_byz N → (prevoted_operator N V p1_fixed p2_fixed I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧
+    ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V p1_fixed p2_fixed I)))
 
 invariant [locks_sent_only_after_prepare_1]
-  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL SL VL) → prepared_node N V P Q
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
 
 invariant [locks_sent_only_if_locked_1]
-  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL SL VL) → locked N P IL SL VL
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL) → locked N p1_fixed IL SL VL
 
 invariant [locks_sent_only_after_prepare_2]
-  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V P Q IL SL VL) → prepared_node N V P Q
+  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
 
 invariant [locks_sent_only_if_locked_2]
-  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V P Q IL SL VL) → locked N Q IL SL VL
+  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL) → locked N p2_fixed IL SL VL
 
 invariant [parent_only_if_proposed]
   parent I J ∧ J ≠ genesis → ∃ (n : node) (p1 p2 : participant) (v : view), proposed n v p1 p2 J
 
 invariant [unique_lock_sent]
-  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V P Q IL1 SL1 VL1 ∧ sent_lock_in_prepare_1 N V P Q IL2 SL2 VL2) → (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
+  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL1 SL1 VL1 ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL2 SL2 VL2) → (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
 
 invariant [unique_stage]
-  (¬ is_byz N ∧ cur_stage N V P Q I S1 ∧ cur_stage N V P Q I S2) → S1 = S2
+  (¬ is_byz N ∧ cur_stage N V p1_fixed p2_fixed I S1 ∧ cur_stage N V p1_fixed p2_fixed I S2) → S1 = S2
 
 invariant [prepare_only_by_operator]
-  ¬ is_byz N → (prepared_operator N V P Q → operator N V P Q)
+  ¬ is_byz N → (prepared_operator N V p1_fixed p2_fixed → operator N V p1_fixed p2_fixed)
 
 invariant [unique_proposal]
-  ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V P Q I1 ∧ proposed N2 V P Q I2) → (I1 = I2 ∧ N1 = N2) )
+  ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V p1_fixed p2_fixed I1 ∧ proposed N2 V p1_fixed p2_fixed I2) → (I1 = I2 ∧ N1 = N2) )
 
 invariant [proposal_only_if_quorum_prepare]
-  ¬ is_byz N → ( proposed N V P Q I →
+  ¬ is_byz N → ( proposed N V p1_fixed p2_fixed I →
     (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-    ∧ ∀ (nc : node), ((ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc V P Q)) )
+    ∧ ∀ (nc : node), ((ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc V p1_fixed p2_fixed)) )
 
 invariant [node_has_cur_view]
   ∀ (n : node), ∃ (v : view), cur_view n v
@@ -724,10 +724,10 @@ invariant [unique_operator_for_pset]
   ¬ (is_byz N1 ∨ is_byz N2) → (operator N1 V P Q ∧ operator N2 V P Q → N1 = N2)
 
 invariant [proposal_extends_parent]
-  ∀ (v : view) (ixn : interaction) (n : node) (p1 p2 : participant),
-    ¬ is_byz n → ( proposed n v p1 p2 ixn → (∃ (il : interaction) (nl : node) (vl : view) (c1 c2 : nodeset),
-    (parent il ixn ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧
-      ((ctx.member nl c1 ∧ sent_lock_in_prepare_1 nl v p1 p2 il true vl) ∨ (ctx.member nl c2 ∧ sent_lock_in_prepare_1 nl v p1 p2 il false vl)))) )
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → ( proposed n v p1_fixed p2_fixed ixn → (∃ (il : interaction) (nl : node) (vl : view) (c1 c2 : nodeset),
+    (parent il ixn ∧ participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
+      ((ctx.member nl c1 ∧ sent_lock_in_prepare_1 nl v p1_fixed p2_fixed il true vl) ∨ (ctx.member nl c2 ∧ sent_lock_in_prepare_1 nl v p1_fixed p2_fixed il false vl)))) )
 
 invariant [parent_antisymmetric]
   parent I J ∧ parent J I → (I = J ∧ J = genesis)
@@ -742,7 +742,7 @@ invariant [parent_irreflexive]
 --   ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
 
 invariant [decisions_not_from_higher_views]
-  cur_view N V ∧ decided N U P Q I → tot_view.le U V
+  cur_view N V ∧ decided N U p1_fixed p2_fixed I → tot_view.le U V
 
 -- invariant [decided_only_if_proposed]
 --   ¬ is_byz N → (decided N V P1 P2 I → ∃ (op : node), operator op V P1 P2 ∧ proposed op V P1 P2 I)
@@ -751,16 +751,16 @@ invariant [heights_equal]
   height1 I = height2 I
 
 invariant [committed_implies_parent_committed]
-  (decided M V P Q J ∧ parent I J ∧ J ≠ genesis) → (∃ (u : view) (n : node), (tot_view.lt u V ∧ decided n u P Q I))
+  (decided M V p1_fixed p2_fixed J ∧ parent I J ∧ J ≠ genesis) → (∃ (u : view) (n : node), (tot_view.lt u V ∧ decided n u p1_fixed p2_fixed I))
 
 invariant [latest_commit_is_parent] (∃ (u: view) (n : node),
-  (decided M V P Q J ∧ tot_view.le u V ∧ decided n u P Q I  ∧ J ≠ genesis
-  ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i P Q ixn )) )
+  (decided M V p1_fixed p2_fixed J ∧ tot_view.le u V ∧ decided n u p1_fixed p2_fixed I  ∧ J ≠ genesis
+  ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i p1_fixed p2_fixed ixn )) )
   → parent I J
 
 invariant [genesis_decided_first]
-  (decided N V P Q J ∧ J ≠ genesis) →
-    (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u P Q genesis)
+  (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
+    (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
 
 invariant [genesis_height_zero]
   ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
@@ -790,14 +790,14 @@ invariant [ancestor_height]
 -/
 
 invariant [unique_decide_in_height]
-  (¬ is_byz N ∧ decided N V P Q I) → ¬ (decided N U P Q J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
+  (¬ is_byz N ∧ decided N V p1_fixed p2_fixed I) → ¬ (decided N U p1_fixed p2_fixed J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
   ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
 invariant [height_uniqueness_of_decided_1]
-  (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+  (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
 
 invariant [height_uniqueness_of_decided_2]
-  (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U P Q I ∧ decided N V P Q J) → (I = J)
+  (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
 
 invariant [genesis_has_no_parent]
   ∀ (p : interaction), ¬ parent p genesis
@@ -809,21 +809,21 @@ invariant [genesis_has_no_parent]
 --   ¬ is_byz OP ∧ proposed OP V P Q J ∧ pa
 
 invariant [propose_only_if_parent_locked]
-  (¬ is_byz OP ∧ proposed OP V P Q J ∧ parent I J) → (∃ (u : view) (n : node) (s : Bool), tot_view.le u V ∧ (locked n P I s u ∨ locked n Q I s u))
+  (¬ is_byz OP ∧ proposed OP V p1_fixed p2_fixed J ∧ parent I J) → (∃ (u : view) (n : node) (s : Bool), tot_view.le u V ∧ (locked n p1_fixed I s u ∨ locked n p2_fixed I s u))
 
 -- invariant [proposal_highest_lock]
 
 invariant [propose_only_if_quorum_locks_sent]
-  ¬ is_byz N → ( proposed N V P Q I →
+  ¬ is_byz N → ( proposed N V p1_fixed p2_fixed I →
     (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-    ∧ ∀ (nc : node), ((ctx.member nc s1 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V P Q ixnl sl vl ) )
-      ∧ (ctx.member nc s2 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V P Q ixnl sl vl) )) ))
+    ∧ ∀ (nc : node), ((ctx.member nc s1 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V p1_fixed p2_fixed ixnl sl vl ) )
+      ∧ (ctx.member nc s2 → (∃ (ixnl : interaction) (sl : Bool) (vl : view), sent_lock_in_prepare_1 nc V p1_fixed p2_fixed ixnl sl vl) )) ))
 
 invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
 
 invariant [unique_lock_in_view]
-  ¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V → (I1 = I2)
+  (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
 
 /-
 invariant [decided_only_if_precommitted_operator]
