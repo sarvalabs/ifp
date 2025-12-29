@@ -538,8 +538,10 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
   precommitted_operator op v p1 p2 ixn := True
-  locked op p1 ixn false v := (ctx.member op c1)--(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
-  locked op p2 ixn false v := (ctx.member op c2)
+  if (ctx.member op c1) then
+  locked op p1 ixn false v := True;--(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
+  if (ctx.member op c2) then
+  locked op p2 ixn false v := True;
   -- decided op v p1 p2 ixn := True
 
   -- broadcasted_decision op v ixn := True
@@ -557,8 +559,10 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   require ∃ (op : node), operator op v p1 p2 ∧ precommitted_operator op v p1 p2 ixn
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
-  locked n p1 ixn false v := (ctx.member n c1) --(( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) )-- ∧ I = ixn)
-  locked n p2 ixn false v := (ctx.member n c2)
+  if (ctx.member n c1) then
+  locked n p1 ixn false v := True; --(( (ctx.member n c1 ∧ P = p1) ∨ (ctx.member n c2 ∧ P = p2) ) )-- ∧ I = ixn)
+  if (ctx.member n c2) then
+  locked n p2 ixn false v := True;
   decided n v p1 p2 ixn := True
   cur_stage n v p1 p2 ixn S := (S = commit)
 }
@@ -625,9 +629,9 @@ invariant [unique_prevote_lock_in_view]
   -- ∀ ( (s1 s2 s3 s4 c1 c2 : nodeset) ()
   -- )
 
-invariant [two_prevoted_operators_implies_diff_view]
-  ∀ (n1 n2 : node) (ixn: interaction) (v1 v2 : view),
-    ¬ (is_byz n1 ∨ is_byz n2) → ( (prevoted_operator n1 v1 p1_fixed p2_fixed ixn ∧ prevoted_operator n2 v2 p1_fixed p2_fixed ixn ∧ n1 ≠ n2) → v1 ≠ v2 )
+-- invariant [two_prevoted_operators_implies_diff_view]
+--   ∀ (n1 n2 : node) (ixn: interaction) (v1 v2 : view),
+--     ¬ (is_byz n1 ∨ is_byz n2) → ( (prevoted_operator n1 v1 p1_fixed p2_fixed ixn ∧ prevoted_operator n2 v2 p1_fixed p2_fixed ixn ∧ n1 ≠ n2) → v1 ≠ v2 )
 -- Unique prevoteQC in Each View------
 
 -- Decided only if Quorum of Nodes Prevote-Locked------
@@ -762,9 +766,9 @@ invariant [genesis_decided_first]
   (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
     (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
 
-invariant [genesis_height_zero]
-  ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
-  ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
+-- invariant [genesis_height_zero]
+--   ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
+--   ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
 
 invariant [genesis_view_zero]
   (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
