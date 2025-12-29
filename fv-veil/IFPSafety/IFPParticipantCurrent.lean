@@ -663,12 +663,13 @@ invariant [decided_only_if_quorum_prevote_locked]
 
 -- ######## Supporting Invariants ############
 
-invariant [precommitted_node_only_if_prevote_locked]
+invariant [precommitted_node_only_if_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
-    ¬ is_byz n → ( (precommitted_node n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
-      (∃ (c1 c2 s1 s2 : nodeset), (ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-        ∧ (ctx.member n s1 → (locked n p1_fixed ixn true v ∨ locked n p1_fixed ixn false v) ) ∧ (ctx.member n s2 → (locked n p2_fixed ixn true v ∨ locked n p2_fixed ixn false v)) )) )
-
+    ¬ is_byz n → ((precommitted_node n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
+      (∃ (c1 c2 : nodeset),
+        ixn_contexts ixn c1 c2 ∧
+        (ctx.member n c1 → (locked n p1_fixed ixn true v ∨ locked n p1_fixed ixn false v)) ∧
+        (ctx.member n c2 → (locked n p2_fixed ixn true v ∨ locked n p2_fixed ixn false v))))
 
 invariant [precommitted_operator_only_if_quorum_prevote_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
@@ -841,8 +842,8 @@ invariant [propose_only_if_quorum_locks_sent]
 invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
 
-invariant [unique_lock_in_view]
-  (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
+-- invariant [unique_lock_in_view]
+--   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
 
 /-
 invariant [decided_only_if_precommitted_operator]
