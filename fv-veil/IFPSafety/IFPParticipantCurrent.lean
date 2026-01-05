@@ -853,9 +853,28 @@ invariant [precommit_next_view_discovery]
     )
   )) → ∀ (v2 : view), (tot_view.next v v2 → (∃ (c1 c2 : nodeset) (op : node) (i : interaction), (
     operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed ∧
-    ∀ (n : node), ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧ (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v) )
+    ∀ (n : node), (
+      ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧ (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v))
+      )
   ))
   ) )
+
+invariant [precommit_next_view_discovery_2]
+  ∀ (v v2 : view) (i : interaction) (op : node),
+    (interactions i p1_fixed p2_fixed ∧
+     tot_view.next v v2 ∧
+     operator op v2 p1_fixed p2_fixed ∧
+     prepared_operator op v2 p1_fixed p2_fixed ∧
+     ∃ (c1 c2 : nodeset),
+       ixn_contexts i c1 c2 ∧
+       ∀ (n : node), (
+         (ctx.member n c1 → locked n p1_fixed i false v) ∧
+         (ctx.member n c2 → locked n p2_fixed i false v)
+       )
+    ) →
+    (∀ (n : node),
+      (ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
+      (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v))
 
 -- invariant [unique_lock_in_view]
 --   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
