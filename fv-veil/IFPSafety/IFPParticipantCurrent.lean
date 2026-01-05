@@ -860,13 +860,12 @@ invariant [precommit_next_view_discovery]
   ) )
 
 invariant [precommit_next_view_discovery_2]
-  ∀ (v v2 : view) (i : interaction) (op : node),
+  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
      operator op v2 p1_fixed p2_fixed ∧
      prepared_operator op v2 p1_fixed p2_fixed ∧
-     ∃ (c1 c2 : nodeset),
-       ixn_contexts i c1 c2 ∧
+     ixn_contexts i c1 c2 ∧
        ∀ (n : node), (
          (ctx.member n c1 → locked n p1_fixed i false v) ∧
          (ctx.member n c2 → locked n p2_fixed i false v)
