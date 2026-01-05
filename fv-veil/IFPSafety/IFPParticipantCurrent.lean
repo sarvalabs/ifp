@@ -234,40 +234,55 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
+  require ¬ prepared_node n v p1 p2
   require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
   require ∃ (c1 c2 : nodeset), ((ctx.member n c1 ∨ ctx.member n c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   -- n is in the interaction's contexts
   -- if ∃ (vl : view) (ixnl : interaction) (sl : Bool), locked n vl sl ixnl then
     -- sent_lock_in_prepare n v sl ixnl := True
   prepared_node n v p1 p2 := True
+  sent_lock_in_prepare_1 n v p1 p2 IL SL VL :=
+    (locked n p1 IL SL VL ∧
+     ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : Bool), locked n p1 i2 s2 vl2) ∧
+     (SL = true → ¬ locked n p1 IL false VL)
+     )
+  sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
+    (locked n p2 IL SL VL ∧
+     ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : Bool), locked n p2 i2 s2 vl2) ∧
+     (SL = true → ¬ locked n p2 IL false VL)
+     )
 }
 
--- The nodes send their lock in the prepare message
-action send_lock_in_prepare_p1 (n : node) (v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
-  require (p1 = p1_fixed ∧ p2 = p2_fixed)
-  require p1 ≠ p2
-  require cur_view n v
-  require prepared_node n v p1 p2
-  require locked n p1 ixnl sl vl
-  require ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1)
-  require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2 : Bool), locked n p1 ixnl2 sl2 vl2
-  require sl = true → ¬ locked n p1 ixnl false vl
-  require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare_1 n v p1 p2 i_lock s_lock v_lock
-  sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl := True
-}
+-- -- The nodes send their lock in the prepare message
+-- action send_lock_in_prepare_p1 (n : node) (v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
+--   require (p1 = p1_fixed ∧ p2 = p2_fixed)
+--   require p1 ≠ p2
+--   require cur_view n v
+--   require prepared_node n v p1 p2
+--   require locked n p1 ixnl sl vl
+--   require ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1)
+--   require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2 : Bool), locked n p1 ixnl2 sl2 vl2
+--   require sl = true → ¬ locked n p1 ixnl false vl
+--   require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare_1 n v p1 p2 i_lock s_lock v_lock
+--   sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl := True
+-- }
 
-action send_lock_in_prepare_p2 (n : node) ( v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
-  require (p1 = p1_fixed ∧ p2 = p2_fixed)
-  require p1 ≠ p2
-  require cur_view n v
-  require prepared_node n v p1 p2
-  require locked n p2 ixnl sl vl
-  require ∃ (c2 : nodeset), ctx.member n c2 ∧ participant_context p2 c2
-  require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool), locked n p2 ixnl2 sl2 vl2
-  require sl = true → ¬ locked n p2 ixnl false vl
-  require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare_2 n v p1 p2 i_lock s_lock v_lock
-  sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl := True
-}
+-- action send_lock_in_prepare_p2 (n : node) ( v vl : view) (p1 p2 : participant) (ixnl : interaction) (sl : Bool) = {
+--   require (p1 = p1_fixed ∧ p2 = p2_fixed)
+--   require p1 ≠ p2
+--   require cur_view n v
+--   require prepared_node n v p1 p2
+--   require locked n p2 ixnl sl vl
+--   require ∃ (c2 : nodeset), ctx.member n c2 ∧ participant_context p2 c2
+--   require ∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (ixnl2 : interaction) (sl2: Bool), locked n p2 ixnl2 sl2 vl2
+--   require sl = true → ¬ locked n p2 ixnl false vl
+--   require ∀ (i_lock : interaction) (s_lock : Bool) (v_lock), ¬ sent_lock_in_prepare_2 n v p1 p2 i_lock s_lock v_lock
+--   sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl := True
+-- }
 
 -- The operator makes a proposal
 action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : interaction) = {
@@ -875,6 +890,41 @@ invariant [precommit_next_view_discovery_2]
       (ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
       (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v))
 
+invariant [precommit_next_view_discovery_sup]
+  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
+    (interactions i p1_fixed p2_fixed ∧
+     tot_view.next v v2 ∧
+     operator op v2 p1_fixed p2_fixed ∧
+     prepared_operator op v2 p1_fixed p2_fixed ∧
+     ixn_contexts i c1 c2 ∧
+     ctx.supermajority s1 c1 ∧
+     ctx.supermajority s2 c2 ∧
+     (∀ (n : node), (
+       (ctx.member n s1 → locked n p1_fixed i false v) ∧
+       (ctx.member n s2 → locked n p2_fixed i false v)
+     ))
+    ) →
+    (∀ (n : node),
+      (ctx.member n s1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
+      (ctx.member n s2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v))
+
+invariant [prevote_next_view_discovery_sup]
+  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
+    (interactions i p1_fixed p2_fixed ∧
+     tot_view.next v v2 ∧
+     operator op v2 p1_fixed p2_fixed ∧
+     prepared_operator op v2 p1_fixed p2_fixed ∧
+     ixn_contexts i c1 c2 ∧
+     ctx.supermajority s1 c1 ∧
+     ctx.supermajority s2 c2 ∧
+     (∀ (n : node), (
+       (ctx.member n s1 → locked n p1_fixed i true v) ∧
+       (ctx.member n s2 → locked n p2_fixed i true v)
+     ))
+    ) →
+    (∀ (n : node),
+      (ctx.member n s1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i true v ∨ sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v)) ∧
+      (ctx.member n s2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i true v ∨ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
 -- invariant [unique_lock_in_view]
 --   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
 
