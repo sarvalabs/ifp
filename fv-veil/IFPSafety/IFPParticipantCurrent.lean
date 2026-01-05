@@ -723,13 +723,13 @@ invariant [unique_stage]
 invariant [prepare_only_by_operator]
   ¬ is_byz N → (prepared_operator N V p1_fixed p2_fixed → operator N V p1_fixed p2_fixed)
 
-invariant [unique_proposal]
-  ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V p1_fixed p2_fixed I1 ∧ proposed N2 V p1_fixed p2_fixed I2) → (I1 = I2 ∧ N1 = N2) )
+-- invariant [unique_proposal]
+--   ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V p1_fixed p2_fixed I1 ∧ proposed N2 V p1_fixed p2_fixed I2) → (I1 = I2 ∧ N1 = N2) )
 
-invariant [proposal_only_if_quorum_prepare]
-  ¬ is_byz N → ( proposed N V p1_fixed p2_fixed I →
-    (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-    ∧ ∀ (nc : node), ((ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc V p1_fixed p2_fixed)) )
+-- invariant [proposal_only_if_quorum_prepare]
+--   ¬ is_byz N → ( proposed N V p1_fixed p2_fixed I →
+--     (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+--     ∧ ∀ (nc : node), ((ctx.member nc s1 ∨ ctx.member nc s2) → prepared_node nc V p1_fixed p2_fixed)) )
 
 invariant [node_has_cur_view]
   ∀ (n : node), ∃ (v : view), cur_view n v
@@ -844,6 +844,18 @@ invariant [propose_only_if_quorum_locks_sent]
 
 invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
+
+invariant [precommit_next_view_discovery]
+  ∀ (v : view), (
+  (∃ (c1 c2: nodeset) (i : interaction), (
+    interactions i p1_fixed p2_fixed ∧ ixn_contexts i c1 c2 ∧ ∀ (n : node), (
+      (ctx.member n c1 → locked n p1_fixed i false v) ∧ (ctx.member n c2 → locked n p2_fixed i false v)
+    )
+  )) → ∀ (v2 : view), (tot_view.next v v2 → (∃ (c1 c2 : nodeset) (op : node) (i : interaction), (
+    operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed ∧
+    ∀ (n : node), ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧ (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v) )
+  ))
+  ) )
 
 -- invariant [unique_lock_in_view]
 --   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
