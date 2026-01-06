@@ -234,7 +234,7 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
-  require ¬ prepared_node n v p1 p2
+  require ¬ (prepared_node n v p1 Q ∨ prepared_node P p2)
   require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
   require ∃ (c1 c2 : nodeset), ((ctx.member n c1 ∨ ctx.member n c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   -- n is in the interaction's contexts
@@ -859,20 +859,6 @@ invariant [propose_only_if_quorum_locks_sent]
 
 invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
-
-invariant [precommit_next_view_discovery]
-  ∀ (v : view), (
-  (∃ (c1 c2: nodeset) (i : interaction), (
-    interactions i p1_fixed p2_fixed ∧ ixn_contexts i c1 c2 ∧ ∀ (n : node), (
-      (ctx.member n c1 → locked n p1_fixed i false v) ∧ (ctx.member n c2 → locked n p2_fixed i false v)
-    )
-  )) → ∀ (v2 : view), (tot_view.next v v2 → (∃ (c1 c2 : nodeset) (op : node) (i : interaction), (
-    operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed ∧
-    ∀ (n : node), (
-      ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧ (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v))
-      )
-  ))
-  ) )
 
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
