@@ -234,7 +234,7 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
-  require ∀ (p q : participant), ¬ (prepared_node n v p p2 ∨ prepared_node p1 q)
+  require ∀ (p q : participant), ¬ (prepared_node n v p p2 ∨ prepared_node n v p1 q)
   require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
   require ∃ (c1 c2 : nodeset), ((ctx.member n c1 ∨ ctx.member n c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
   -- n is in the interaction's contexts
