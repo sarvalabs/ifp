@@ -880,7 +880,7 @@ invariant [precommit_only_if_prepare]
   ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis) →  prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_next_view_discovery_2]
-  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
+  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
      operator op v2 p1_fixed p2_fixed ∧
@@ -895,6 +895,7 @@ invariant [precommit_next_view_discovery_2]
     (∀ (n : node),
       ¬ is_byz n → ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
       (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
+  )
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
