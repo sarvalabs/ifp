@@ -874,10 +874,10 @@ invariant [prepare_response]
   (¬ is_byz N ∧ prepared_node N V p1_fixed p2_fixed) → ∃ (op : node), prepared_operator op V p1_fixed p2_fixed
 
 invariant [locked_only_if_prepared]
-  ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero) → prepared_node N V p1_fixed p2_fixed
+  ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero ∧ I ≠ genesis) → prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_only_if_prepare]
-  (cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) →  prepared_node N V p1_fixed p2_fixed
+  ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis) →  prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
