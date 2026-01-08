@@ -737,7 +737,7 @@ invariant [unique_lock_sent]
   (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL1 SL1 VL1 ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL2 SL2 VL2) → (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
 
 invariant [unique_stage]
-  (¬ is_byz N ∧ cur_stage N V p1_fixed p2_fixed I S1 ∧ cur_stage N V p1_fixed p2_fixed I S2) → S1 = S2
+  (¬ is_byz N ∧ cur_stage N V p1_fixed p2_fixed S1 ∧ cur_stage N V p1_fixed p2_fixed S2) → S1 = S2
 
 invariant [prepare_only_by_operator]
   ¬ is_byz N → (prepared_operator N V p1_fixed p2_fixed → operator N V p1_fixed p2_fixed)
@@ -877,7 +877,7 @@ invariant [locked_only_if_prepared]
   ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero) → prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_only_if_prepare]
-  (cur_stage N V p1_fixed p2_fixed I precommit ∨ precommitted_node N V p1_fixed p2_fixed I) →  prepared_node N V p1_fixed p2_fixed
+  (cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) →  prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
