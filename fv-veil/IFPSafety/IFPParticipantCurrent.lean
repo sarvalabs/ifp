@@ -860,6 +860,15 @@ invariant [propose_only_if_quorum_locks_sent]
 invariant [interaction_participants]
   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
 
+invariant [sent_lock_only_if_prepare]
+  (¬ is_byz N ∧ (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL)) → prepared_node N V p1_fixed p2_fixed
+
+invariant [unique_prepare_operator_each_view]
+  ¬ (is_byz N1 ∨ is_byz N2) → ( (prepared_operator N1 V p1_fixed p2_fixed ∧ prepared_operator N2 V p1_fixed p2_fixed) → (N1 = N2) )
+
+invariant [prepare_response]
+  (¬ is_byz N ∧ prepared_node N V p1_fixed p2_fixed) → ∃ (op : node), prepared_operator op V p1_fixed p2_fixed
+
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 : nodeset),
     (interactions i p1_fixed p2_fixed ∧
