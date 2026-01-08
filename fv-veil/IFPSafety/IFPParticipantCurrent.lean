@@ -39,11 +39,11 @@ type node
 type interaction
 type nodeset
 type stage
-individual prepare : stage
-individual propose : stage
-individual prevote : stage
-individual precommit : stage
-individual commit : stage
+immutable individual prepare : stage
+immutable individual propose : stage
+immutable individual prevote : stage
+immutable individual precommit : stage
+immutable individual commit : stage
 
 
 variable (is_byz : node → Prop)
@@ -130,6 +130,9 @@ assumption ∀ (i : interaction) (p q : participant),
   interactions i p q → (p = p1_fixed ∧ q = p2_fixed)
 
 assumption p1_fixed ≠ p2_fixed
+
+assumption ¬ (prepare = propose ∨ prepare = prevote ∨ prepare = precommit ∨ prepare = commit ∨
+  propose = prevote ∨ propose = precommit ∨ propose = commit ∨ prevote = precommit ∨ prevote = commit ∨ precommit = commit)
 
 -- Assume that only two given distinct participants are part of an interaction
 -- assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
