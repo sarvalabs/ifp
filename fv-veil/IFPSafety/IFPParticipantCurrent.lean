@@ -886,8 +886,7 @@ invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction)  (c1 c2 : nodeset), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
-     (∃ (op : node),  operator op v2 p1_fixed p2_fixed ) ∧
-     prepared_operator op v2 p1_fixed p2_fixed ∧
+     (∃ (op : node),  operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed) ∧
      ixn_contexts i c1 c2 ∧
        ∀ (n : node), (
          ¬ is_byz n →
