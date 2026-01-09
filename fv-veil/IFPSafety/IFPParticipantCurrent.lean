@@ -885,6 +885,10 @@ invariant [precommit_only_if_prepare]
 invariant [precommit_lock_stage]
   (locked N p1_fixed I false V ∨ locked N p2_fixed I false V) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
+invariant [cur_stage_exists]
+  cur_stage N V p1_fixed p2_fixed prepare ∨ cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote \
+  ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit
+
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction)  (c1 c2 : nodeset), (
     (interactions i p1_fixed p2_fixed ∧
