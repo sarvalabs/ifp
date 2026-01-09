@@ -882,6 +882,9 @@ invariant [locked_only_if_prepared]
 invariant [precommit_only_if_prepare]
   ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis) →  prepared_node N V p1_fixed p2_fixed
 
+invariant [precommit_lock_stage]
+  (locked N p1_fixed I false V ∨ locked N p2_fixed I false V) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+
 invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction)  (c1 c2 : nodeset), (
     (interactions i p1_fixed p2_fixed ∧
