@@ -893,7 +893,7 @@ invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i : interaction)  (c1 c2 : nodeset), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
-     (∃ (op : node),  operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed) ∧
+     (∃ (op : node),  ¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed) ∧
      ixn_contexts i c1 c2 ∧
        ∀ (n : node), (
          ¬ is_byz n →
@@ -905,6 +905,9 @@ invariant [precommit_next_view_discovery_2]
       ¬ is_byz n → ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
       (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
   )
+
+invariant [precommit_lock_implies_prevoted]
+  (locked N p1_fixed I false V ∨ locked N p2_fixed I false V) →  prevoted_node N V p1_fixed p2_fixed I
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
