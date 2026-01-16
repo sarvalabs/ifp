@@ -914,14 +914,14 @@ invariant [initially_prepare_stage]
 
 invariant [stage_neg_1]
   ((cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
-  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis)  → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I false)
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis)  → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N p1_fixed I false V ∨ locked N p2_fixed I false V)
 
 invariant [stage_neg_2]
   ((cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
-  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (precommitted_node N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I S )
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (precommitted_node N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
 
 invariant [stage_neg_3]
-  ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I S)
+  ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
 
 
 
