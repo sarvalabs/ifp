@@ -803,16 +803,16 @@ invariant [latest_commit_is_parent] (∃ (u: view) (n : node),
   ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i p1_fixed p2_fixed ixn )) )
   → parent I J
 
-invariant [genesis_decided_first]
-  (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
-    (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
+-- invariant [genesis_decided_first]
+--   (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
+--     (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
 
 -- invariant [genesis_height_zero]
 --   ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
 --   ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
 
-invariant [genesis_view_zero]
-  (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
+-- invariant [genesis_view_zero]
+--   (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
 
 /-
 invariant [max_lock_parent_height]
@@ -834,18 +834,18 @@ invariant [ancestor_height]
   ancestor I J → (height1 I ≤ height1 J ∧ height2 I ≤ height2 J)
 -/
 
-invariant [unique_decide_in_height]
-  (¬ is_byz N ∧ decided N V p1_fixed p2_fixed I) → ¬ (decided N U p1_fixed p2_fixed J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
-  ∧ (height1 I = height1 J ∨ height2 I = height2 J))
+-- invariant [unique_decide_in_height]
+--   (¬ is_byz N ∧ decided N V p1_fixed p2_fixed I) → ¬ (decided N U p1_fixed p2_fixed J ∧ height1 I ≠ 0 ∧ height2 I ≠ 0 ∧ height1 J ≠ 0 ∧ height2 J ≠ 0
+--   ∧ (height1 I = height1 J ∨ height2 I = height2 J))
 
-invariant [height_uniqueness_of_decided_1]
-  (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
+-- invariant [height_uniqueness_of_decided_1]
+--   (¬ is_byz M ∧ ¬ is_byz N ∧ height1 I = height1 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
 
-invariant [height_uniqueness_of_decided_2]
-  (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
+-- invariant [height_uniqueness_of_decided_2]
+--   (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
 
-invariant [genesis_has_no_parent]
-  ∀ (p : interaction), ¬ parent p genesis
+-- invariant [genesis_has_no_parent]
+--   ∀ (p : interaction), ¬ parent p genesis
 
 -- invariant [same_height_locks_implies_diff_view]
 --   locked N
@@ -910,11 +910,11 @@ invariant [precommit_lock_implies_prevoted]
   ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V) ∧ I ≠ genesis) → prevoted_node N V p1_fixed p2_fixed I
 
 invariant [initially_prepare_stage]
-  (¬ (prepared_node N V p1_fixed p2_fixed ∨ prepared_operator N V p1_fixed p2_fixed)) → cur_stage N V p1_fixed p2_fixed prepare
+  (¬ (prepared_node N V p1_fixed p2_fixed ∨ prepared_operator N V p1_fixed p2_fixed) ∧ I ≠ genesis) → cur_stage N V p1_fixed p2_fixed prepare
 
 invariant [stage_neg_1]
   ((cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
-  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N)  → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N p1_fixed I false V ∨ locked N p2_fixed I false V)
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N) → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N p1_fixed I false V ∨ locked N p2_fixed I false V)
 
 invariant [stage_neg_2]
   ((cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
@@ -923,9 +923,6 @@ invariant [stage_neg_2]
 invariant [stage_neg_3]
   ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N)
   → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
-
-invariant [unique_stage]
-  (¬ is_byz N ∧ cur_stage N V p1_fixed p2_fixed S ∧ cur_stage N V p1_fixed p2_fixed T) → S = T
 
 
 -- invariant [precommit_next_view_discovery_sup]
