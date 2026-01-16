@@ -516,10 +516,10 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     (∀ (n: node), (ctx.member n s1 ∨ ctx.member n s2) → prevoted_node n v p1 p2 ixn)
   prevoted_operator op v p1 p2 ixn := True
-  if ( ctx.member op c1 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p1 ixn false u) ) then
-    locked op p1 ixn true v := True -- (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
-  if ( ctx.member op c2 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p2 ixn false u) ) then
-    locked op p2 ixn true v := True --(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
+  -- if ( ctx.member op c1 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p1 ixn false u) ) then
+  --   locked op p1 ixn true v := True -- (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
+  -- if ( ctx.member op c2 ∧ ¬ ∃ (u : view), (tot_view.lt u v ∧ locked op p2 ixn false u) ) then
+  --   locked op p2 ixn true v := True --(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
   -- not updating lock if already holding a higher stage lock for same ixn from earlier views
   -- locked op P I S V := (( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) ∧ I = ixn ∧ S = true ∧ V = v)
   -- cur_stage op v p1 p2 ixn S := (S = precommit) -- move to precommit stage
@@ -560,10 +560,10 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → precommitted_node nc v p1 p2 ixn
   precommitted_operator op v p1 p2 ixn := True
-  if (ctx.member op c1) then
-  locked op p1 ixn false v := True;--(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
-  if (ctx.member op c2) then
-  locked op p2 ixn false v := True;
+  -- if (ctx.member op c1) then
+  -- locked op p1 ixn false v := True;--(( (ctx.member op c1 ∧ P = p1) ∨ (ctx.member op c2 ∧ P = p2) ) )--∧ I = ixn)
+  -- if (ctx.member op c2) then
+  -- locked op p2 ixn false v := True;
   -- decided op v p1 p2 ixn := True
 
   -- broadcasted_decision op v ixn := True
@@ -911,6 +911,19 @@ invariant [precommit_lock_implies_prevoted]
 
 invariant [initially_prepare_stage]
   (¬ (prepared_node N V p1_fixed p2_fixed ∨ prepared_operator N V p1_fixed p2_fixed)) → cur_stage N V p1_fixed p2_fixed prepare
+
+invariant [stage_neg_1]
+  ((cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis)  → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I false)
+
+invariant [stage_neg_2]
+  ((cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (precommitted_node N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I S )
+
+invariant [stage_neg_3]
+  ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis) → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ locked N V p1_fixed p2_fixed I S)
+
+
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
