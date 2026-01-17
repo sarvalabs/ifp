@@ -400,7 +400,6 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
 }
 
 -- action respond_propose_nil (n : node) (v : view) (p1 p2 : participant) = {
-
 -- }
 
 -- The nodes respond with a prevote
@@ -923,6 +922,26 @@ invariant [stage_neg_2]
 invariant [stage_neg_3]
   ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N)
   → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
+
+invariant [stage_1]
+  ((operator N V p1_fixed p2_fixed ∨ prepared_operator N V p1_fixed p2_fixed) ∧ ¬ is_byz N)
+  → (cur_stage N V p1_fixed p2_fixed prepare ∨ cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+
+invariant [stage_2]
+  ((sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL ∨ prepared_node N V p1_fixed p2_fixed ∨ proposed N V p1_fixed p2_fixed I ∨ proposed_nil N V p1_fixed p2_fixed) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+
+invariant [stage_3]
+  ((prevoted_node N V p1_fixed p2_fixed I ∨ prevoted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+
+invariant [stage_4]
+  ((locked N p1_fixed I true V ∨ locked N p2_fixed I true V ∨ precommitted_node N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+
+invariant [stage_5]
+  ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V ∨ decided N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed commit)
 
 
 -- invariant [precommit_next_view_discovery_sup]
