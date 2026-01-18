@@ -909,7 +909,7 @@ invariant [precommit_lock_implies_prevoted]
   ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V) ∧ I ≠ genesis) → prevoted_node N V p1_fixed p2_fixed I
 
 invariant [stage_init_prepare]
-  (¬ prepared_node N V p1_fixed p2_fixed I ∧ I ≠ genesis ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
+  (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
 
 invariant [stage_1]
   (cur_stage N V p1_fixed p2_fixed propose)
