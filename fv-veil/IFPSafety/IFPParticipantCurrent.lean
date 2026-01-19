@@ -881,28 +881,28 @@ invariant [locked_only_if_prepared]
 invariant [precommit_only_if_prepare]
   ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis) →  prepared_node N V p1_fixed p2_fixed
 
-invariant [precommit_lock_stage]
-  ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V) ∧ I ≠ genesis) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+-- invariant [precommit_lock_stage]
+--   ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V) ∧ I ≠ genesis) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
 invariant [cur_stage_exists]
   cur_stage N V p1_fixed p2_fixed prepare ∨ cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote
   ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit
 
 invariant [precommit_next_view_discovery_2]
-  ∀ (v v2 : view) (i : interaction)  (c1 c2 : nodeset), (
+  ∀ (v v2 : view) (i il : interaction)  (c1 c2 : nodeset) (n : node), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
-     (∃ (op : node),  ¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed) ∧
+     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
-       ∀ (n : node), (
-         ¬ is_byz n →
-         ((ctx.member n c1 → locked n p1_fixed i false v) ∧
-         (ctx.member n c2 → locked n p2_fixed i false v))
-       )
-    ) →
-    (∀ (n : node),
-      ¬ is_byz n → ((ctx.member n c1 → sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v) ∧
-      (ctx.member n c2 → sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
+      ¬ is_byz n →
+      ((ctx.member n c1 → (locked n p1_fixed i false v ∧ sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed il false v)) ∧
+         (ctx.member n c2 → (locked n p2_fixed i false v ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il false v)) ∧
+         cur_stage n v p1_fixed p2_fixed commit ∧
+         cur_view n v2
+      )
+    ) → i = il
+    -- (((¬ is_byz n ∧ ctx.member n c1 ∧ sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed il false v) → il = i) ∧
+    --   ((¬ is_byz n ∧ ctx.member n c2 ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il false v) → il = i))
   )
 
 invariant [precommit_lock_implies_prevoted]
