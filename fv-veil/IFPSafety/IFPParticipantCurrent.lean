@@ -840,13 +840,12 @@ invariant [precommit_next_view_discovery]
      ¬ tot_view.lt v2 v ∧ -- No cycles
      ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
      ¬ is_byz n →
-      ((ctx.member n c1 → (locked n p1_fixed i precommit v ) ∧
-         (ctx.member n c2 → (locked n p2_fixed i precommit v ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il precommit v)) ∧
-         cur_stage n v p1_fixed p2_fixed commit ∧
-         prepared_node n v2 p1_fixed p2_fixed ∧
-         cur_view n v2
-      )
-    ) →
+      ((ctx.member n c1 → locked n p1_fixed i precommit v ) ∧
+       (ctx.member n c2 → locked n p2_fixed i precommit v) ∧
+       cur_stage n v p1_fixed p2_fixed commit ∧
+       prepared_node n v2 p1_fixed p2_fixed ∧
+       cur_view n v2
+      ) →
     (∀ (n : node), ¬ is_byz n → (
       (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i precommit v)) ∧
       (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i precommit v)))
@@ -870,13 +869,12 @@ invariant [precommit_next_view_discovery_sup]
      ¬ tot_view.lt v2 v ∧ -- No cycles
      ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
      ¬ is_byz n →
-      ((ctx.member n s1 → (locked n p1_fixed i precommit v ) ∧
-         (ctx.member n s2 → (locked n p2_fixed i precommit v ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il precommit v)) ∧
-         cur_stage n v p1_fixed p2_fixed commit ∧
-         prepared_node n v2 p1_fixed p2_fixed ∧
-         cur_view n v2
-      )
-    ) →
+      ((ctx.member n s1 → locked n p1_fixed i precommit v) ∧
+       (ctx.member n s2 → locked n p2_fixed i precommit v) ∧
+       cur_stage n v p1_fixed p2_fixed commit ∧
+       prepared_node n v2 p1_fixed p2_fixed ∧
+       cur_view n v2
+      ) →
     (∀ (n : node), ¬ is_byz n → (
       (ctx.member n s1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i precommit v)) ∧
       (ctx.member n s2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i precommit v)))
@@ -885,24 +883,32 @@ invariant [precommit_next_view_discovery_sup]
 
 
 invariant [prevote_next_view_discovery_sup]
-  ∀ (v v2 : view) (i : interaction) (op : node) (c1 c2 s1 s2 : nodeset),
+  ∀ (v v2 : view) (i il : interaction)  (c1 c2 s1 s2 : nodeset) (n : node), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
-     operator op v2 p1_fixed p2_fixed ∧
-     prepared_operator op v2 p1_fixed p2_fixed ∧
+     v ≠ v2 ∧
+     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
      ctx.supermajority s1 c1 ∧
      ctx.supermajority s2 c2 ∧
-     (∀ (n : node), (
-       (ctx.member n s1 → (locked n p1_fixed i prevote v ∧ ¬ locked n p1_fixed i precommit v)) ∧
-       (ctx.member n s2 → (locked n p2_fixed i prevote v ∧ ¬ locked n p2_fixed i precommit v))
-       ∧ prepared_node n v2 p1_fixed p2_fixed
-     ))
-    ) →
+     i ≠ genesis ∧
+     il ≠ genesis ∧
+     tot_view.zero ≠ v ∧
+     tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
+     ¬ tot_view.lt v2 v ∧ -- No cycles
+     ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
+     ¬ is_byz n →
+      ((ctx.member n s1 → (locked n p1_fixed i prevote v ∧ ¬ locked n p1_fixed i precommit v) ) ∧
+       (ctx.member n s2 → (locked n p2_fixed i prevote v ∧ ¬ locked n p2_fixed i precommit v) ) ∧
+       cur_stage n v p1_fixed p2_fixed commit ∧
+       prepared_node n v2 p1_fixed p2_fixed ∧
+       cur_view n v2
+      ) →
     (∀ (n : node), ¬ is_byz n → (
       (ctx.member n s1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i prevote v)) ∧
       (ctx.member n s2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i prevote v)))
     )
+  ))
 
 
 invariant [precommit_lock_implies_prevoted]
