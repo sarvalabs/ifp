@@ -829,6 +829,7 @@ invariant [precommit_next_view_discovery_2]
   ∀ (v v2 : view) (i il : interaction)  (c1 c2 : nodeset) (n : node), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
+     v ≠ v2 ∧
      (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
      i ≠ genesis ∧
@@ -907,6 +908,7 @@ invariant [precommit_next_view_discovery_sup]
   ∀ (v v2 : view) (i il : interaction)  (c1 c2 s1 s2 : nodeset) (n : node), (
     (interactions i p1_fixed p2_fixed ∧
      tot_view.next v v2 ∧
+     v ≠ v2 ∧
      (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
      ctx.supermajority s1 c1 ∧
