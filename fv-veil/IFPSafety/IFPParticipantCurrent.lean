@@ -920,6 +920,7 @@ invariant [precommit_next_view_discovery_sup]
       ((ctx.member n s1 → (locked n p1_fixed i precommit v ∧ sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed il precommit v)) ∧
          (ctx.member n s2 → (locked n p2_fixed i precommit v ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il precommit v)) ∧
          cur_stage n v p1_fixed p2_fixed commit ∧
+         prepared_node n v2 p1_fixed p2_fixed ∧
          cur_view n v2
       )
     ) → i = il
