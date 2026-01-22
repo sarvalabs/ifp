@@ -212,10 +212,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
   prepared_operator op v p1 p2 := True
 }
 
--- The nodes respond with a prepare message
-action respond_prepare (n : node) (v vl : view) (p1 p2 : participant) (il : interaction) (sl : stage) = {
-  -- require ¬ prepare_timed_out n v
-  -- TODO: incorporate prepare timeout and ordering and responding to one
+action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
@@ -223,26 +220,20 @@ action respond_prepare (n : node) (v vl : view) (p1 p2 : participant) (il : inte
   require ∀ (p q : participant), ¬ (prepared_node n v p p2 ∨ prepared_node n v p1 q)
   require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
   require ∃ (c1 c2 : nodeset), ((ctx.member n c1 ∨ ctx.member n c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
-  -- n is in the interaction's contexts
-  -- if ∃ (vl : view) (ixnl : interaction) (sl : stage), locked n vl sl ixnl then
-    -- sent_lock_in_prepare n v sl ixnl := True
+
   prepared_node n v p1 p2 := True
-  if (locked n p1 il sl vl ∧
+  sent_lock_in_prepare_1 n v p1 p2 IL SL VL :=
+    (locked n p1 IL SL VL ∧
      ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
-     tot_view.lt vl v ∧
-     (∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
-     (sl = prevote → ¬ locked n p1 il precommit vl)
-     ) then
-  sent_lock_in_prepare_1 n v p1 p2 il sl vl := True;
-
-  if (locked n p2 il sl vl ∧
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 ∧ tot_view.lt vl2 v → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
+     (SL = prevote → ¬ locked n p1 IL precommit VL))
+  sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
+    (locked n p2 IL SL VL ∧
      ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
-     tot_view.lt vl v ∧
-     (∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
-     (sl = prevote → ¬ locked n p2 il precommit vl)
-     ) then
-  sent_lock_in_prepare_2 n v p1 p2 il sl vl := True;
-
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 ∧ tot_view.lt vl2 v → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
+     (SL = prevote → ¬ locked n p2 IL precommit VL))
   cur_stage n v p1 p2 S := (S = propose)
 }
 
