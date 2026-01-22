@@ -213,7 +213,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
 }
 
 -- The nodes respond with a prepare message
-action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
+action respond_prepare (n : node) (v vl : view) (p1 p2 : participant) (il : interaction) (sl : stage) = {
   -- require ¬ prepare_timed_out n v
   -- TODO: incorporate prepare timeout and ordering and responding to one
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
@@ -227,20 +227,22 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
   -- if ∃ (vl : view) (ixnl : interaction) (sl : stage), locked n vl sl ixnl then
     -- sent_lock_in_prepare n v sl ixnl := True
   prepared_node n v p1 p2 := True
-  sent_lock_in_prepare_1 n v p1 p2 IL SL VL :=
-    (locked n p1 IL SL VL ∧
+  if (locked n p1 il sl vl ∧
      ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
-     tot_view.lt VL v ∧
-     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p1 IL precommit VL)
-     )
-  sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
-    (locked n p2 IL SL VL ∧
+     tot_view.lt vl v ∧
+     (∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
+     (sl = prevote → ¬ locked n p1 il precommit vl)
+     ) then
+  sent_lock_in_prepare_1 n v p1 p2 il sl vl := True;
+
+  if (locked n p2 il sl vl ∧
      ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
-     tot_view.lt VL v ∧
-     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p2 IL precommit VL)
-     )
+     tot_view.lt vl v ∧
+     (∀ (vl2 : view), tot_view.lt vl vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
+     (sl = prevote → ¬ locked n p2 il precommit vl)
+     ) then
+  sent_lock_in_prepare_2 n v p1 p2 il sl vl := True;
+
   cur_stage n v p1 p2 S := (S = propose)
 }
 
@@ -836,6 +838,7 @@ invariant [precommit_next_view_discovery]
      tot_view.next v v2 ∧
      v ≠ v2 ∧
      (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
+     (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
      i ≠ genesis ∧
      il ≠ genesis ∧
