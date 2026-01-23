@@ -158,7 +158,7 @@ after_init {
   height2 I := 0;
   cur_stage N V P Q S := (S = prepare ∧ (P = p1_fixed ∧ Q = p2_fixed));
   operator N V P Q := False;
-  cur_view N V := (V = tot_view.zero);
+  cur_view N V := (tot_view.next tot_view.zero V);
   prepared_operator N V P Q := False;
   sent_lock_in_prepare_1 N U P Q L S V := False;
   sent_lock_in_prepare_2 N U P Q L S V := False;
@@ -190,6 +190,7 @@ action set_view (v_cur v_next : view) = {
 }
 
 action pick_operator (op : node) (v : view) (p1 p2 : participant) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view op v
@@ -201,6 +202,7 @@ action pick_operator (op : node) (v : view) (p1 p2 : participant) = {
 
 -- The operator sends a prepare message
 action prepare (op : node) (v : view) (p1 p2 : participant) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view op v
@@ -213,6 +215,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
 }
 
 action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
@@ -239,6 +242,7 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
 
 -- The operator makes a proposal
 action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require ∀ (j : interaction), ¬ parent j ixn_propose
@@ -351,6 +355,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (ixn_propose : inter
 
 -- The nodes respond with a prevote
 action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
@@ -451,6 +456,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : intera
 
 -- The operator responds to a quorum of prevotes with a prevote
 action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require ∀ (i : interaction), ¬ prevoted_operator op v p1 p2 i -- maybe remove?
@@ -475,6 +481,7 @@ action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
 
 -- The nodes respond to the prevote with a precommit
 action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
@@ -496,6 +503,7 @@ action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
 
 -- The operator responds to a quorum of precommits by a precommit and decides on the ixn
 action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view op v
@@ -518,6 +526,7 @@ action precommit (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) 
 
 -- The nodes decide on the ixn on receiving a precommit from the operator
 action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+  require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require cur_view n v
