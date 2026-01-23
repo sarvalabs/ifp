@@ -158,7 +158,7 @@ after_init {
   height2 I := 0;
   cur_stage N V P Q S := (S = prepare ∧ (P = p1_fixed ∧ Q = p2_fixed));
   operator N V P Q := False;
-  cur_view N V := (tot_view.next tot_view.zero V);
+  cur_view N V := (V = tot_view.zero);
   prepared_operator N V P Q := False;
   sent_lock_in_prepare_1 N U P Q L S V := False;
   sent_lock_in_prepare_2 N U P Q L S V := False;
