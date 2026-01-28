@@ -747,27 +747,28 @@ invariant [committed_implies_parent_committed]
 --   ∧ (∀ (i : view) (x : node) (ixn : interaction), (tot_view.le u i ∧ tot_view.lt u V) → ¬ decided x i p1_fixed p2_fixed ixn )) )
 --   → parent I J
 
-invariant [genesis_decided_first]
-  (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
-    (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
+-- invariant [genesis_decided_first]
+--   (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
+--     (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
 
-invariant [genesis_height_zero]
-  ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
-  ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
+-- invariant [genesis_height_zero]
+--   ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
+--   ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
 
-invariant [genesis_view_zero]
-  (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
+-- invariant [genesis_view_zero]
+--   (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
 
--- invariant [genesis_lock_precommit]
+-- -- invariant [genesis_lock_precommit]
 
-invariant [genesis_lock_existence]
-  ((participant_context p1_fixed C1 ∧ ctx.member N C1) → locked N p1_fixed genesis precommit tot_view.zero)
-  ∧ ((participant_context p2_fixed C2 ∧ ctx.member N C2) → locked N p2_fixed genesis precommit tot_view.zero)
+-- invariant [genesis_lock_existence]
+--   ((participant_context p1_fixed C1 ∧ ctx.member N C1) → locked N p1_fixed genesis precommit tot_view.zero)
+--   ∧ ((participant_context p2_fixed C2 ∧ ctx.member N C2) → locked N p2_fixed genesis precommit tot_view.zero)
+
+-- invariant [genesis_has_no_parent]
+--   ¬ parent I genesis
 
 
 /-
-invariant [max_lock_parent_height]
-
 invariant [parent_height]
   parent I J → (height1 I + 1 = height1 J ∧ height2 I + 1 = height2 J)
 
@@ -794,9 +795,6 @@ invariant [ancestor_height]
 
 -- invariant [height_uniqueness_of_decided_2]
 --   (¬ is_byz M ∧ ¬ is_byz N ∧ height2 I = height2 J ∧ decided M U p1_fixed p2_fixed I ∧ decided N V p1_fixed p2_fixed J) → (I = J)
-
--- invariant [genesis_has_no_parent]
---   ∀ (p : interaction), ¬ parent p genesis
 
 -- invariant [same_height_locks_implies_diff_view]
 --   locked N
@@ -873,36 +871,6 @@ invariant [precommit_next_view_discovery]
       (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i precommit v)))
     )
   )
-
-invariant [precommit_next_view_discovery]
-  ∀ (v v2 : view) (i il: interaction)  (c1 c2: nodeset), (
-    (interactions i p1_fixed p2_fixed ∧
-     tot_view.next v v2 ∧
-     v ≠ v2 ∧
-     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
-     (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
-     ixn_contexts i c1 c2 ∧
-     i ≠ genesis ∧
-     il ≠ genesis ∧
-     tot_view.zero ≠ v ∧
-     -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
-     -- ¬ tot_view.lt v2 v ∧ -- No cycles
-     -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
-     -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
-     -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
-     (∀ (n : node), (¬ is_byz n →
-      ((ctx.member n c1 → locked n p1_fixed i precommit v ) ∧
-       (ctx.member n c2 → locked n p2_fixed i precommit v) ∧
-       cur_stage n v p1_fixed p2_fixed commit ∧
-       prepared_node n v2 p1_fixed p2_fixed ∧
-       cur_view n v2
-      )) )) →
-    (∀ (n : node), ¬ is_byz n → (
-      ((ctx.member n c1 ∧ sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed il precommit v) → il = i) ∧
-      ((ctx.member n c2 ∧ sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed il precommit v) → il = i))
-    )
-  )
-
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i il : interaction)  (c1 c2 s1 s2 : nodeset), ( (∀ (n : node),
