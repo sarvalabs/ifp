@@ -163,6 +163,7 @@ after_init {
   sent_lock_in_prepare_1 N U P Q L S V := False;
   sent_lock_in_prepare_2 N U P Q L S V := False;
   proposed N V P Q I := False;
+  proposed_nil N V P Q := False;
   prevoted_operator N V P Q I := False;
   precommitted_operator N V P Q I := False;
   prepared_node N V P Q := False;
