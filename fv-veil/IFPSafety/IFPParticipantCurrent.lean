@@ -843,34 +843,34 @@ invariant [next_view_is_consecutive]
     tot_view.next v1 v2 →
     (tot_view.lt v1 v2 ∧ ¬ ∃ (v_mid : view), (tot_view.lt v1 v_mid ∧ tot_view.lt v_mid v2))
 
--- invariant [precommit_next_view_discovery]
---   ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
---     (interactions i p1_fixed p2_fixed ∧
---      tot_view.next v v2 ∧
---      v ≠ v2 ∧
---      (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
---      (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
---      ixn_contexts i c1 c2 ∧
---      i ≠ genesis ∧
---      -- il ≠ genesis ∧
---      tot_view.zero ≠ v ∧
---      -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
---      -- ¬ tot_view.lt v2 v ∧ -- No cycles
---      -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
---      -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
---      -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
---      (∀ (n : node), (¬ is_byz n →
---       ((ctx.member n c1 → locked n p1_fixed i precommit v ) ∧
---        (ctx.member n c2 → locked n p2_fixed i precommit v) ∧
---        cur_stage n v p1_fixed p2_fixed commit ∧
---        prepared_node n v2 p1_fixed p2_fixed ∧
---        cur_view n v2
---       )) )) →
---     (∀ (n : node), ¬ is_byz n → (
---       (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i precommit v)) ∧
---       (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i precommit v)))
---     )
---   )
+invariant [precommit_next_view_discovery]
+  ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
+    (interactions i p1_fixed p2_fixed ∧
+     tot_view.next v v2 ∧
+     v ≠ v2 ∧
+     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
+     (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
+     ixn_contexts i c1 c2 ∧
+     i ≠ genesis ∧
+     -- il ≠ genesis ∧
+     tot_view.zero ≠ v ∧
+     -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
+     -- ¬ tot_view.lt v2 v ∧ -- No cycles
+     -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
+     -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
+     -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
+     (∀ (n : node), (¬ is_byz n →
+      ((ctx.member n c1 → locked n p1_fixed i precommit v ) ∧
+       (ctx.member n c2 → locked n p2_fixed i precommit v) ∧
+       cur_stage n v p1_fixed p2_fixed commit ∧
+       prepared_node n v2 p1_fixed p2_fixed ∧
+       cur_view n v2
+      )) )) →
+    (∀ (n : node), ¬ is_byz n → (
+      (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i precommit v)) ∧
+      (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i precommit v)))
+    )
+  )
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i il : interaction)  (c1 c2 s1 s2 : nodeset), ( (∀ (n : node),
