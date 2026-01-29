@@ -938,19 +938,19 @@ invariant [stage_init_prepare]
   (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
 
 invariant [stage_1]
-  (cur_stage N V p1_fixed p2_fixed propose)
+  (cur_stage N V p1_fixed p2_fixed propose ∧ ¬ is_byz N)
   → (∃ (il : interaction) (sl : stage) (vl : view), (sent_lock_in_prepare_1 N V p1_fixed p2_fixed il sl vl ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed il sl vl))
 
 invariant [stage_2]
-  (cur_stage N V p1_fixed p2_fixed prevote)
+  (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ is_byz N)
   → (∃ (i : interaction), ((proposed N V p1_fixed p2_fixed i ∧ prevoted_node N V p1_fixed p2_fixed I) ∨ proposed_nil N V p1_fixed p2_fixed))
 
 invariant [stage_3]
-  (cur_stage N V p1_fixed p2_fixed precommit)
+  (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ is_byz N)
     → (∃ (i : interaction), (prevoted_operator N V p1_fixed p2_fixed i ∨ precommitted_node N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i prevote V ∨ locked N p2_fixed i prevote V))
 
 invariant [stage_4]
-  (cur_stage N V p1_fixed p2_fixed commit)
+  (cur_stage N V p1_fixed p2_fixed commit ∧ ¬ is_byz N)
     → (∃ (i : interaction), (precommitted_operator N V p1_fixed p2_fixed i ∨ decided N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i precommit V ∨ locked N p2_fixed i precommit V))
 
 invariant [stage_neg_1]
