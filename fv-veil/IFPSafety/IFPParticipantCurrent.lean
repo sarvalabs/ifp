@@ -603,12 +603,19 @@ invariant [unique_prevote_lock_in_view]
 
 -- Decided only if Quorum of Nodes Prevote-Locked------
 invariant [decided_only_if_quorum_prevote_locked]
-  ∀ (v : view) (ixn : interaction) (n : node),
-    ¬ is_byz n → ( (decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
-      (∃ (c1 c2 s1 s2 : nodeset), (ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-        ∧ ∀ (nc : node), (
-          (ctx.member nc s1 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u))) ∧
-          (ctx.member nc s2 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u))) )) ) )
+  ∀ (v : view) (ixn : interaction) (n : node), (
+    (¬ is_byz n ∧ decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
+    (∃ (c1 c2 s1 s2 : nodeset),
+      (ixn_contexts ixn c1 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+       ∀ (nc : node), ¬ is_byz nc → (
+         ( ctx.member nc s1 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn
+          ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u)) ) ∧
+         ( ctx.member nc s2 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn
+          ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u)) )
+        )
+      )
+    )
+  )
 
 -- invariant [precommitted_operator_only_if_quorum_prevote_locked]
 --   ∀ (v : view) (ixn : interaction) (n : node),
