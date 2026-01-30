@@ -235,14 +235,14 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) = {
      ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
      tot_view.lt VL v ∧
      (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p1 IL precommit VL)
+     ((SL = precommit) ∨ (SL = prevote ∧ ¬ locked n p1 IL precommit VL))
      )
   sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
     (locked n p2 IL SL VL ∧
      ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
      tot_view.lt VL v ∧
      (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p2 IL precommit VL)
+     ((SL = precommit) ∨ (SL = prevote ∧ ¬ locked n p2 IL precommit VL))
      )
   cur_stage n v p1 p2 S := (S = propose)
 }
@@ -753,8 +753,8 @@ invariant [genesis_decided_first]
     (∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis)
 
 invariant [genesis_height_zero]
-  ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis) ∧
-  ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v P Q I) ) ↔ I = genesis)
+  ((height1 I = 0 ∧ (∃ (v : view) (n : node), decided n v p1_fixed p2_fixed I) ) ↔ I = genesis) ∧
+  ((height2 I = 0 ∧ (∃ (v : view) (n : node), decided n v p1_fixed p2_fixed I) ) ↔ I = genesis)
 
 invariant [genesis_view_zero]
   (¬ is_byz N ∧ decided N V P Q I ∧ tot_view.zero = V) → I = genesis
@@ -827,10 +827,10 @@ invariant [prepare_response]
   (¬ is_byz N ∧ prepared_node N V p1_fixed p2_fixed) → ∃ (op : node), prepared_operator op V p1_fixed p2_fixed
 
 invariant [locked_only_if_prepared]
-  ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero ∧ I ≠ genesis) → prepared_node N V p1_fixed p2_fixed
+  ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero ∧ I ≠ genesis ∧ ¬ is_byz N) → prepared_node N V p1_fixed p2_fixed
 
 invariant [precommit_only_if_prepare]
-  ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis) →  prepared_node N V p1_fixed p2_fixed
+  ((cur_stage N V p1_fixed p2_fixed precommit ∨ precommitted_node N V p1_fixed p2_fixed I) ∧ I ≠ genesis ∧ ¬ is_byz N) →  prepared_node N V p1_fixed p2_fixed
 
 -- invariant [precommit_lock_stage]
 --   ((locked N p1_fixed I precommit V ∨ locked N p2_fixed I precommit V) ∧ I ≠ genesis) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
@@ -938,12 +938,12 @@ invariant [stage_init_prepare]
   (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
 
 invariant [stage_1]
-  (cur_stage N V p1_fixed p2_fixed propose ∧ ¬ is_byz N)
+  (cur_stage N V p1_fixed p2_fixed propose ∧ ¬ is_byz N ∧ V ≠ tot_view.zero)
   → (∃ (il : interaction) (sl : stage) (vl : view), (sent_lock_in_prepare_1 N V p1_fixed p2_fixed il sl vl ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed il sl vl))
 
 invariant [stage_2]
   (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ is_byz N)
-  → (∃ (i : interaction), ((proposed N V p1_fixed p2_fixed i ∧ prevoted_node N V p1_fixed p2_fixed I) ∨ proposed_nil N V p1_fixed p2_fixed))
+  → (∃ (i : interaction), ((proposed N V p1_fixed p2_fixed i ∧ prevoted_node N V p1_fixed p2_fixed i) ∨ proposed_nil N V p1_fixed p2_fixed))
 
 invariant [stage_3]
   (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ is_byz N)
