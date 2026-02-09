@@ -1,6 +1,6 @@
 name = "ifp-safety"
 version = "0.1.0"
-defaultTargets = ["ifp-safety"]
+defaultTargets = ["IFPSafety"]
 
 [[lean_lib]]
 name = "IFPSafety"
@@ -13,3 +13,5 @@ root = "Main"
 name = "veil"
 git = "https://github.com/verse-lab/veil.git"
 rev = "main"
+
+

@@ -1,4 +1,8 @@
 import Veil
+import IFPSafety.IFPTheory
+
+set_option linter.dupNamespace false
+
 
 class IFPByzQuorum (node : Type) (is_byz : outParam (node → Prop)) (nset : outParam Type) where
   member (n : node) (s : nset) : Prop
@@ -12,10 +16,11 @@ class IFPByzQuorum (node : Type) (is_byz : outParam (node → Prop)) (nset : out
       (supermajority s1 c ∧ supermajority s2 c) → (∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n)
 
 -- We prove safety of IFP for a single epoch
-veil module IFP
+veil module IFPProtocol
 
 type view
 instantiate tot_view : TotalOrderWithMinimum view
+-- instantiate bg : IFPTheory node participant view interaction stage
 type participant
 immutable individual p1_fixed : participant
 immutable individual p2_fixed : participant
@@ -1111,4 +1116,4 @@ set_option veil.smt.seed 44
 
 #time #check_invariants
 
-end IFP
+end IFPProtocol
