@@ -214,10 +214,10 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   prepared_node n v p1 p2 := True
   sent_lock_in_prepare_1 n v p1 p2 IL SL VL :=
     (IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked n p1 IL SL VL v ∧
-     ctx.member n c1 ∧ tot_view.lt VL v)
+     ctx.member n c1)
   sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
     (IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked n p2 IL SL VL v ∧
-     ctx.member n c1 ∧ tot_view.lt VL v)
+     ctx.member n c2)
   cur_stage n v p1 p2 S := (S = propose)
 }
 
@@ -815,6 +815,10 @@ invariant [next_view_is_consecutive]
   ∀ (v1 v2 : view),
     tot_view.next v1 v2 →
     (tot_view.lt v1 v2 ∧ ¬ ∃ (v_mid : view), (tot_view.lt v1 v_mid ∧ tot_view.lt v_mid v2))
+
+invariant [highest_lock_sent]
+  (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p1_fixed IL SL VL V)
+  ∧ (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p2_fixed IL SL VL V)
 
 invariant [precommit_next_view_discovery]
   ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
