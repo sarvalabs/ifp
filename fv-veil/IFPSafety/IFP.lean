@@ -78,14 +78,6 @@ ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 
 -- `assumptions`
 
--- Assume that there are exactly two such participants among which all ixns occur
--- assumption ∃ (p1 p2 : participant), ( p1 ≠ p2 ∧
---   ( ∀ (i: interaction),  interactions i p1 p2 ) )
-
--- assumption interactions I p1_fixed p2_fixed
-
--- assumption p1_fixed ≠ p2_fixed
-
 assumption ∀ (i : interaction) (p q : participant),
   interactions i p q → (p = p1_fixed ∧ q = p2_fixed)
 
@@ -94,33 +86,6 @@ assumption p1_fixed ≠ p2_fixed
 assumption ¬ (prepare = propose ∨ prepare = prevote ∨ prepare = precommit ∨ prepare = commit ∨
   propose = prevote ∨ propose = precommit ∨ propose = commit ∨ prevote = precommit ∨ prevote = commit ∨ precommit = commit)
 
--- Assume that only two given distinct participants are part of an interaction
--- assumption ∀ (ixn : interaction) (p1 p2 p3: participant),
---   ((interactions ixn p1 p2 ∧ interactions ixn p1 p3) → p2 = p3)
---   ∧ ((interactions ixn p2 p1 ∧ interactions ixn p3 p1) → p2 = p3)
---   ∧ (interactions ixn p1 p2 → p1 ≠ p2)
-
-
--- -- All protocol activity must use the fixed participant pair
--- assumption ∀ (n : node) (v : view) (q1 q2 : participant),
---   (prepared_operator n v q1 q2 ∨ prepared_node n v q1 q2) →
---   ((q1 = p1_fixed ∧ q2 = p2_fixed))
-
--- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
---   (proposed n v q1 q2 i ∨ prevoted_node n v q1 q2 i ∨ precommitted_node n v q1 q2 i) →
---   ((q1 = p1_fixed ∧ q2 = p2_fixed))
-
--- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
---   (prevoted_operator n v q1 q2 i ∨ precommitted_operator n v q1 q2 i) →
---   ((q1 = p1_fixed ∧ q2 = p2_fixed))
-
--- assumption ∀ (n : node) (v : view) (q1 q2 : participant) (i : interaction),
---   decided n v q1 q2 i →
---   ((q1 = p1_fixed ∧ q2 = p2_fixed))
-
--- assumption ∀ (i : interaction), interactions i p1 p2
-
--- Assume that each participant has only one context.
 assumption (participant_context P C1 ∧ participant_context P C2) → C1 = C2
 
 -- `init`
@@ -213,11 +178,19 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
     -- sent_lock_in_prepare n v sl ixnl := True
   prepared_node n v p1 p2 := True
   sent_lock_in_prepare_1 n v p1 p2 IL SL VL :=
-    (IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked n p1 IL SL VL v ∧
-     ctx.member n c1)
+    (locked n p1 IL SL VL ∧
+     ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : Bool), locked n p1 i2 s2 vl2) ∧
+     (SL = true → ¬ locked n p1 IL false VL)
+     )
   sent_lock_in_prepare_2 n v p1 p2 IL SL VL :=
-    (IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked n p2 IL SL VL v ∧
-     ctx.member n c2)
+    (locked n p2 IL SL VL ∧
+     ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
+     tot_view.lt VL v ∧
+     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : Bool), locked n p2 i2 s2 vl2) ∧
+     (SL = true → ¬ locked n p2 IL false VL)
+     )
   cur_stage n v p1 p2 S := (S = propose)
 }
 
@@ -432,7 +405,6 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   cur_stage n v p1 p2 S := (S = prevote) -- move to prevote stage
 }
 
-
 -- The operator responds to a quorum of prevotes with a prevote
 action prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
   require v ≠ tot_view.zero
@@ -638,17 +610,20 @@ invariant [prevote_operator_only_if_quorum_prevoted]
   ¬ is_byz N → (prevoted_operator N V p1_fixed p2_fixed I → (∃ (c1 c2 s1 s2 : nodeset), ixn_contexts I c1 c2 ∧
     ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧ ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → (prevoted_node NC V p1_fixed p2_fixed I)))
 
-invariant [locks_sent_only_after_prepare_1]
-  (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
+-- invariant [locks_sent_only_after_prepare_1]
+--   (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
 
 invariant [locks_sent_only_if_locked_1]
   (¬ is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL) → locked N p1_fixed IL SL VL
 
-invariant [locks_sent_only_after_prepare_2]
-  (¬ is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
+-- invariant [locks_sent_only_after_prepare_2]
+--   (¬ is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL) → prepared_node N V p1_fixed p2_fixed
 
 invariant [locks_sent_only_if_locked_2]
   (¬ is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL) → locked N p2_fixed IL SL VL
+
+invariant [sent_lock_only_if_prepare]
+  (¬ is_byz N ∧ (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL)) → prepared_node N V p1_fixed p2_fixed
 
 invariant [parent_only_if_proposed]
   parent I J ∧ J ≠ genesis → ∃ (n : node) (p1 p2 : participant) (v : view), proposed n v p1 p2 J
@@ -786,11 +761,8 @@ invariant [ancestor_height]
 --     ∧ ∀ (nc : node), ((ctx.member nc s1 → (∃ (ixnl : interaction) (sl : stage) (vl : view), sent_lock_in_prepare_1 nc V p1_fixed p2_fixed ixnl sl vl ) )
 --       ∧ (ctx.member nc s2 → (∃ (ixnl : interaction) (sl : stage) (vl : view), sent_lock_in_prepare_1 nc V p1_fixed p2_fixed ixnl sl vl) )) ))
 
-invariant [interaction_participants]
-  ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
-
-invariant [sent_lock_only_if_prepare]
-  (¬ is_byz N ∧ (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL)) → prepared_node N V p1_fixed p2_fixed
+-- invariant [interaction_participants]
+--   ∀ (i : interaction) (r s : participant), interactions i r s → (r = p1_fixed ∧ s = p2_fixed)
 
 invariant [unique_prepare_operator_each_view]
   ¬ (is_byz N1 ∨ is_byz N2) → ( (prepared_operator N1 V p1_fixed p2_fixed ∧ prepared_operator N2 V p1_fixed p2_fixed) → (N1 = N2) )
@@ -816,38 +788,53 @@ invariant [next_view_is_consecutive]
     tot_view.next v1 v2 →
     (tot_view.lt v1 v2 ∧ ¬ ∃ (v_mid : view), (tot_view.lt v1 v_mid ∧ tot_view.lt v_mid v2))
 
-invariant [highest_lock_sent]
-  (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p1_fixed IL SL VL V)
-  ∧ (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p2_fixed IL SL VL V)
+-- invariant [highest_lock_sent]
+--   (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p1_fixed IL SL VL V)
+--   ∧ (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL → IFPTheory.IsHighestLock tot_view.lt tot_view.le cur_view locked N p2_fixed IL SL VL V)
 
-invariant [precommit_next_view_discovery]
-  ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
-    (interactions i p1_fixed p2_fixed ∧
-     tot_view.next v v2 ∧
-     v ≠ v2 ∧
-     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
-     (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
-     ixn_contexts i c1 c2 ∧
-     i ≠ genesis ∧
-     -- il ≠ genesis ∧
-     tot_view.zero ≠ v ∧
-     -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
-     -- ¬ tot_view.lt v2 v ∧ -- No cycles
-     -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
-     -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
-     -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
-     (∀ (n : node), (¬ is_byz n →
-      ((ctx.member n c1 → locked n p1_fixed i false v ) ∧
-       (ctx.member n c2 → locked n p2_fixed i false v) ∧
-       cur_stage n v p1_fixed p2_fixed commit ∧
-       prepared_node n v2 p1_fixed p2_fixed ∧
-       cur_view n v2
-      )) )) →
-    (∀ (n : node), ¬ is_byz n → (
-      (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v)) ∧
-      (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
-    )
-  )
+invariant [highest_lock_sent]
+  (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL →
+    (cur_view N V ∧
+     locked N p1_fixed IL SL VL ∧
+     tot_view.lt VL V ∧
+     (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p1_fixed i' s' v') ∧
+     (SL = true → ¬ locked N p1_fixed IL false VL)))
+  ∧
+  (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL →
+    (cur_view N V ∧
+     locked N p2_fixed IL SL VL ∧
+     tot_view.lt VL V ∧
+     (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p2_fixed i' s' v') ∧
+     (SL = true → ¬ locked N p2_fixed IL false VL)))
+
+-- invariant [precommit_next_view_discovery]
+--   ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
+--     (interactions i p1_fixed p2_fixed ∧
+--      tot_view.next v v2 ∧
+--      v ≠ v2 ∧
+--      (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
+--      (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
+--      ixn_contexts i c1 c2 ∧
+--      i ≠ genesis ∧
+--      -- il ≠ genesis ∧
+--      tot_view.zero ≠ v ∧
+--      -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
+--      -- ¬ tot_view.lt v2 v ∧ -- No cycles
+--      -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
+--      -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
+--      -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
+--      (∀ (n : node), (¬ is_byz n →
+--       ((ctx.member n c1 → locked n p1_fixed i false v ) ∧
+--        (ctx.member n c2 → locked n p2_fixed i false v) ∧
+--        cur_stage n v p1_fixed p2_fixed commit ∧
+--        prepared_node n v2 p1_fixed p2_fixed ∧
+--        cur_view n v2
+--       )) )) →
+--     (∀ (n : node), ¬ is_byz n → (
+--       (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v)) ∧
+--       (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
+--     )
+--   )
 
 -- invariant [precommit_next_view_discovery_sup]
 --   ∀ (v v2 : view) (i il : interaction)  (c1 c2 s1 s2 : nodeset), ( (∀ (n : node),
@@ -953,17 +940,17 @@ invariant [stage_act_2]
   ((sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL ∨ prepared_node N V p1_fixed p2_fixed ∨ proposed N V p1_fixed p2_fixed I ∨ proposed_nil N V p1_fixed p2_fixed) ∧ ¬ is_byz N ∧ I ≠ genesis)
   → (cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
--- invariant [stage_act_3]
---   ((prevoted_node N V p1_fixed p2_fixed I ∨ prevoted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
---   → (cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+invariant [stage_act_3]
+  ((prevoted_node N V p1_fixed p2_fixed I ∨ prevoted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
--- invariant [stage_act_4]
---   ((locked N p1_fixed I true V ∨ locked N p2_fixed I true V ∨ precommitted_node N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
---   → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
+invariant [stage_act_4]
+  ((locked N p1_fixed I true V ∨ locked N p2_fixed I true V ∨ precommitted_node N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
--- invariant [stage_act_5]
---   ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V ∨ decided N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
---   → (cur_stage N V p1_fixed p2_fixed commit)
+invariant [stage_act_5]
+  ((locked N p1_fixed I false V ∨ locked N p2_fixed I false V ∨ decided N V p1_fixed p2_fixed I) ∧ ¬ is_byz N ∧ I ≠ genesis)
+  → (cur_stage N V p1_fixed p2_fixed commit)
 
 
 
