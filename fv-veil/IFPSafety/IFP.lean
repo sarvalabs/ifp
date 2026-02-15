@@ -134,6 +134,8 @@ action set_view (v_cur v_next : view) = {
   require ∀ (n : node), cur_view n v_cur -- Why not, `∀ (n:node), cur_view n v_cur`
   require tot_view.next v_cur v_next
   cur_view N V := (V = v_next)
+  -- sent_lock_in_prepare_1 N V P1 P2 IL SL v_next := False
+  -- sent_lock_in_prepare_2 N V P1 P2 IL SL v_next := False
 }
 
 action pick_operator (op : node) (v : view) (p1 p2 : participant)= {
@@ -779,6 +781,8 @@ invariant [precommit_only_if_prepare]
 -- invariant [precommit_lock_stage]
 --   ((locked N p1_fixed I precommit V ∨ locked N p2_fixed I precommit V) ∧ I ≠ genesis) → (cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit)
 
+
+
 invariant [cur_stage_exists]
   cur_stage N V p1_fixed p2_fixed prepare ∨ cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prevote
   ∨ cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed commit
@@ -794,15 +798,13 @@ invariant [next_view_is_consecutive]
 
 invariant [highest_lock_sent]
   (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL →
-    (cur_view N V ∧
-     locked N p1_fixed IL SL VL ∧
+    (locked N p1_fixed IL SL VL ∧
      tot_view.lt VL V ∧
      (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p1_fixed i' s' v') ∧
      (SL = true → ¬ locked N p1_fixed IL false VL)))
   ∧
   (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL →
-    (cur_view N V ∧
-     locked N p2_fixed IL SL VL ∧
+    (locked N p2_fixed IL SL VL ∧
      tot_view.lt VL V ∧
      (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p2_fixed i' s' v') ∧
      (SL = true → ¬ locked N p2_fixed IL false VL)))
@@ -1072,6 +1074,6 @@ set_option veil.smt.seed 44
 --set_option veil.smt.timeout 10
 -- set_option veil.smt.solver "z3"
 
-#time #check_invariants
+#time #check_invariants!
 
 end IFPProtocol
