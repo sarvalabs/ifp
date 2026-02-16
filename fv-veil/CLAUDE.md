@@ -67,32 +67,63 @@ The operator's proposal decision after collecting locks from both contexts:
 - **Genesis interaction**: Special initial interaction decided at `tot_view.zero`. All nodes start with a precommit lock on genesis for both participants. Genesis has height 0 and no parent.
 - **Chain growth**: New interactions are created via `propose` by setting `parent ixn_max ixn_propose` and updating `ancestor` transitively. Heights increment by 1 from parent.
 
-### Safety Proof Strategy (from Fast-HotStuff & Jolteon)
+### Safety Proof Strategy (Restricted IFP with 2 Participants)
 
-The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). The safety argument follows this structure:
+The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Safety is established through 4 key invariants:
 
-**Key lemmas (mapped from Fast-HotStuff/Jolteon to IFP):**
+**SAFETY-1 (main_safety):** If two honest nodes have decided two interactions I1 and I2, then one is an ancestor of the other.
+- Dependencies: INV-1, INV-2, INV-3, INV-4
 
-1. **Same-view uniqueness** (Fast-HotStuff Lemma 1, Jolteon Observation 1): At most one interaction can get a prevoteQC (quorum of prevotes) in a given view. Honest nodes only prevote once per view. By quorum intersection, two conflicting prevoteQCs in the same view are impossible.
-   - Model invariant: `unique_prevote_nodes`, `unique_prevote_lock_in_view`
+**INV-1 (unique_prevote):** Honest nodes cannot prevote on two different interactions in a given view.
+- Dependencies: None
+- Follows from: nodes can only prevote on at most one interaction per view. Key procedures are those related to prevote stage.
+- Model: `unique_prevote_nodes`
 
-2. **Lock propagation** (Fast-HotStuff Lemma 2, Jolteon Lemma 2): If an honest node has a precommit lock (= decided) for interaction I at view v, then in any subsequent view's prepare phase, the operator will discover a lock at least as high as v. This is because a supermajority locked onto I's prevoteQC, and by quorum intersection any future supermajority of prepare responses includes at least one honest node carrying that lock.
-   - Model invariant: `decided_only_if_quorum_prevote_locked`, `highest_lock_sent`
+**INV-2 (unique_prevote_lock):** Honest nodes cannot be prevote-locked for different interactions in a given view.
+- Dependencies: INV-1
+- Follows from: INV-1 + quorum intersection (two supermajorities share an honest node, who only prevoted for one interaction).
+- Model: `unique_prevote_lock_in_view`
 
-3. **No conflicting commits** (Fast-HotStuff Lemma 3/5, Jolteon Lemma 3 + Theorem 2): If interaction I is decided at view v, then any interaction decided at view v' > v must be a descendant of I. The operator at v' discovers the lock for I, and the proposal rules force extending I (not conflicting).
-   - Model safety: `main_safety` — `(decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)`
+**INV-3 (commit_only_if_quorum_locked):** If an honest node has decided an interaction in a view, then a quorum of nodes has prevote-locked on it during that view.
+- Dependencies: None
+- Follows from: precommitQC is required for decide, which requires prevoteQC, which means a supermajority from each context prevoted → prevote-locked.
+- Model: `decided_only_if_quorum_prevote_locked`
 
-**Jolteon's 2-chain commit rule** (directly applicable to IFP):
-- A block/interaction is committed when there are two adjacent certified rounds: B ← QC_B ← B' with consecutive rounds. In IFP terms: prevoteQC (vote lock) in view v, followed by precommitQC (commit lock) in view v → decide.
+**INV-4 (lock_discovery):** If a quorum of nodes has committed an interaction T in view v, then in every later view v' > v, the operator during prepare will discover either (1) a prevote/precommit lock on T, or (2) a prevote/precommit lock on a descendant of T from some view v_l > v.
+- Dependencies: INV-3
+- Follows from: INV-3 + quorum intersection guaranteeing one of the locked nodes sends its lock in prepare responses.
+- This is the **hardest invariant** — it bridges committed state to future views.
 
-**Jolteon's voting rule** (maps to IFP's respond_propose):
-- A node votes for a proposal if EITHER:
-  1. The proposal directly extends the previous round's QC (happy path), OR
-  2. The proposal extends the highest QC found in the TC (timeout/view-change case), AND that QC is at least as high as the max QC in the TC.
-- In IFP: this maps to the `respond_propose` action checking that the proposed interaction is consistent with the highest locks from both contexts.
+### Protocol Stage Details (Precise)
 
-**Fast-HotStuff's AggQC / proof-of-highQC**:
-- The operator must prove it is extending the highest known lock. In IFP, this is modeled by requiring supermajority prepare responses from both contexts, extracting the highest lock (`ixn_max_1/2`), and proposing accordingly.
+**Prepare:**
+- Operator sends Prepare to each participant's context.
+- Validators collect Prepare messages for interactions involving their participant until PrepareTimeout, then choose one to respond to (others get PrepareNil).
+- Prepare response contains the **highest lockedQC** for the participant.
+
+**Propose:**
+- Operator collects quorum of Prepare/PrepareNil from contexts.
+- Participant set = those from whose contexts a supermajority of Prepare responses were received.
+- Extracts highest lockedQCs for each participant. Ordering: height first, then stage (precommit > prevote), then view.
+- Removes lockedQCs if there is a participant p in it with a higher QC for p than the lockedQC.
+- Decision logic:
+  - Unique prevoteQC left → **repropose** that interaction
+  - All precommitQCs → **extend** (new interaction with parent)
+  - Otherwise → **no proposal** (nil)
+- Validators check: valid operator, belongs to ICS, didn't prevote on another interaction with any of the participants, interaction correctly extends latest states per the proposal approach.
+
+**Prevote:**
+- Operator collects quorum of Prevote messages, broadcasts prevoteQC to ICS.
+- Validators on receiving valid prevoteQC: respond with Precommit, and set lockedQC to prevoteQC **unless** already holding a precommitQC for the same interaction from an earlier view.
+
+**Precommit:**
+- Operator collects quorum of Precommit messages, broadcasts precommitQC to ICS.
+- Validators on receiving valid precommitQC: **decide** the interaction and set lockedQC to precommitQC.
+
+### Reference Protocols
+
+- **Fast-HotStuff** (`fasthotstuff-jnfg20.pdf`): 2-chain basic BFT. Safety: Lemma 1 (same-view uniqueness), Lemma 2 (lock propagation via highQC discovery), Lemma 3 (no conflicting commits). Operator must include AggQC (proof of highQC from n-f replicas).
+- **Jolteon** (`jolteonditto-gkss21.pdf`): 2-chain HotStuff variant. Safety: Observation 1 (one QC per round), Lemma 2 (lock propagation), Lemma 3 (certified blocks extend globally direct-committed blocks), Theorem 2 (total order). Voting rule: extend previous round's QC (happy path) or highest QC in TC (view-change).
 
 ### Modeling Constraints
 
