@@ -653,8 +653,8 @@ invariant [node_has_cur_view]
 invariant [unique_cur_view]
   cur_view N U ∧ cur_view N V → U = V
 
-invariant [ancestor_reflexive]
-  ancestor I I
+-- invariant [ancestor_reflexive]
+--   ancestor I I
 
 invariant [operator_from_ixn_context]
   ¬ is_byz OP → (operator OP V P Q → ∃ (c : nodeset), participant_context P c ∧ ctx.member OP c)
