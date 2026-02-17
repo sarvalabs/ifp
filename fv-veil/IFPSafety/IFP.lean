@@ -959,6 +959,13 @@ invariant [stage_act_5]
 -- invariant [unique_lock_in_view]
 --   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed) ) → (I1 = I2)
 
+-- A single honest node can only have locks on one interaction per view per participant.
+-- This follows from: (1) init only creates genesis precommit locks at view 0,
+-- (2) respond_prevote/respond_precommit require v ≠ 0, (3) stage progression ensures
+-- at most one interaction is locked per view, and (4) propose requires ixn ≠ genesis.
+invariant [unique_lock_interaction_per_view]
+  (¬ is_byz N ∧ locked N P I1 S1 V ∧ locked N P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed)) → I1 = I2
+
 /-
 invariant [decided_only_if_precommitted_operator]
   ∀ (v : view) (p1 p2 : participant) (ixn : interaction) (n : node),
@@ -1074,7 +1081,6 @@ set_option veil.smt.seed 44
 --set_option veil.smt.timeout 10
 -- set_option veil.smt.solver "z3"
 
-FlK5COGnHZm6dHkl37PJk1L9oTUdUg9Zibk1nb8QmdtX3uEC#_vQOi7BjF-dg6NyG5M1NDo2cNwo6OVXGDRsobiQTBDc
 
 #time #check_invariants!
 
@@ -1099,5 +1105,28 @@ FlK5COGnHZm6dHkl37PJk1L9oTUdUg9Zibk1nb8QmdtX3uEC#_vQOi7BjF-dg6NyG5M1NDo2cNwo6OVX
     simp only [initSimp, invSimp, IFPProtocol.genesis_height_zero] at *
     obtain ⟨st₀, rfl⟩ := a_1
     simp_all
+
+@[invProof]
+  theorem respond_prepare_tr_unique_lock_sent :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
+                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+              st st' →
+              (@IFPProtocol.unique_lock_sent view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    unhygienic intros
+    solve_clause[IFPProtocol.respond_prepare.tr] IFPProtocol.unique_lock_sent
 
 end IFPProtocol
