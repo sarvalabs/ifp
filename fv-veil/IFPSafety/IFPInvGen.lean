@@ -499,6 +499,6 @@ set_option veil.smt.model.minimize true
 set_option veil.vc_gen "transition"
 set_option veil.smt.seed 44
 
--- #check_invariants!
+#check_invariants
 
 end IFPProtocol
