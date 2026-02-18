@@ -199,6 +199,115 @@ set_option synthInstance.maxSize 8192       -- Required for large proof search
 
 The core property proven: if two honest (non-Byzantine) nodes decide on interactions for the same participants, those interactions must be ancestrally related (consensus agreement).
 
+## Invariant Dependency Tree
+
+The safety proof is structured as a dependency tree. Each invariant may require other invariants
+to be present for the SMT solver to verify it across all transitions. The tree below shows
+`X → Y` meaning "X requires Y to be verified."
+
+### Tier 0: Goal
+
+```
+main_safety
+├── INV1_unique_prevote_nodes
+├── INV2_unique_prevote_lock_in_view
+├── INV3_decided_only_if_quorum_prevote_locked
+└── INV4_quorum_locked_implies_lock_of_descendant_discovered
+```
+
+### Tier 1: Core Safety Invariants
+
+```
+INV1_unique_prevote_nodes
+├── unique_stage                  (prevent double-stage allowing double-prevote)
+└── stage_neg_3                   (propose/prepare → no prevotes exist)
+
+INV2_unique_prevote_lock_in_view
+├── INV1_unique_prevote_nodes     (unique prevotes → quorum intersection → unique locks)
+├── prevote_lock_only_if_quorun_prevoted  (lock ↔ quorum prevoted)
+└── unique_lock_interaction_per_view      (one lock per view per participant)
+
+INV3_decided_only_if_quorum_prevote_locked
+├── precommitted_node_implies_lock        (precommit node → lock exists)
+├── precommit_lock_implies_prevoted       (precommit lock → prevoted)
+└── prevote_operator_only_if_quorum_prevoted  (prevote operator → quorum)
+
+INV4_quorum_locked_implies_lock_of_descendant_discovered
+├── locks_sent_only_if_locked_1           (sent lock is real, p1)
+├── locks_sent_only_if_locked_2           (sent lock is real, p2)
+├── highest_lock_sent                     (sent lock is highest)
+├── genesis_lock_existence                (base case: genesis locks exist)
+├── genesis_lock_only_at_zero             (genesis locks only at view 0)
+└── locked_only_if_prepared               (non-genesis locks require prepare)
+```
+
+### Tier 2: Supporting Invariants (and their own dependencies)
+
+```
+unique_lock_interaction_per_view
+├── stage_neg_2                   (prevote/propose/prepare → no locks at that view)
+├── unique_stage                  (one stage per view)
+└── genesis_lock_only_at_zero     (genesis locks don't interfere)
+
+precommitted_node_implies_lock
+└── stage_neg_2                   (wrong stage → no precommits or locks)
+
+precommit_lock_implies_prevoted
+└── stage_neg_1                   (before commit → no precommit locks)
+
+highest_lock_sent
+├── locked_only_if_prepared       (locks need prepare)
+└── genesis_lock_only_at_zero     (genesis locks are at view 0)
+
+prevote_lock_only_if_quorun_prevoted
+└── (self-contained from respond_prevote preconditions)
+
+prevote_operator_only_if_quorum_prevoted
+└── (self-contained from prevote preconditions)
+
+locks_sent_only_if_locked_1/2
+└── (self-contained from respond_prepare definition)
+
+genesis_lock_existence
+└── (established at init, no action removes genesis locks)
+```
+
+### Tier 3: Structural Invariants (leaf nodes, no further dependencies)
+
+```
+unique_stage                ← structural, from action stage updates
+stage_neg_1                 ← structural (before commit → no precommit locks/decides)
+stage_neg_2                 ← structural (before precommit → no locks/precommits)
+stage_neg_3                 ← structural (before prevote → no prevotes)
+stage_neg_4                 ← structural (prepare stage → nothing sent)
+stage_init_prepare          ← structural (unprepared → prepare stage)
+genesis_lock_only_at_zero   ← structural (init sets V=0, actions require V≠0)
+locked_only_if_prepared     ← structural (lock actions require prepare first)
+unique_cur_view             ← structural (set_view replaces)
+node_has_cur_view           ← structural (init sets, set_view replaces)
+cur_stage_exists            ← structural (always one of 5 stages)
+```
+
+### Impact Ranking (for `/infer-invs`)
+
+When multiple invariants are failing, prioritize fixes by **impact-to-effort ratio**:
+
+| Priority | Invariant | Impact | Effort | Rationale |
+|----------|-----------|--------|--------|-----------|
+| 1 | `unique_stage` | Very High | Low | Unblocks stage_neg_*, unique_lock, many others |
+| 2 | `stage_neg_2` | High | Low | Unblocks unique_lock_per_view, precommitted_node_implies_lock |
+| 3 | `genesis_lock_only_at_zero` | High | Low | Unblocks unique_lock_per_view, highest_lock_sent, INV4 |
+| 4 | `stage_neg_1` | Medium | Low | Unblocks precommit_lock_implies_prevoted |
+| 5 | `stage_neg_3` | Medium | Low | Unblocks INV1 |
+| 6 | `locked_only_if_prepared` | Medium | Low | Unblocks highest_lock_sent, INV4 |
+| 7 | `precommitted_node_implies_lock` | Medium | Medium | Unblocks INV3 |
+| 8 | `highest_lock_sent` | Medium | Medium | Unblocks INV4 |
+| 9 | `stage_neg_4` | Low | Low | Only for stage_1 |
+| 10 | `stage_init_prepare` | Low | Low | Supporting |
+
+**Key principle**: Tier 3 (structural) invariants are cheap to add and unblock many Tier 2 invariants.
+Always add needed Tier 3 invariants first before attempting Tier 2 or Tier 1 fixes.
+
 ## Key Dependencies
 
 | Package | Purpose |
