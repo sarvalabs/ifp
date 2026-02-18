@@ -657,6 +657,9 @@ invariant [genesis_lock_existence]
   ((participant_context p1_fixed C1 ∧ ctx.member N C1) → locked N p1_fixed genesis false tot_view.zero)
   ∧ ((participant_context p2_fixed C2 ∧ ctx.member N C2) → locked N p2_fixed genesis false tot_view.zero)
 
+invariant [genesis_lock_only_at_zero]
+  (locked N P genesis S V) → (V = tot_view.zero ∧ S = false)
+
 invariant [genesis_has_no_parent]
   ¬ parent I genesis
 
@@ -788,19 +791,19 @@ invariant [stage_init_prepare]
   (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
 
 invariant [stage_1]
-  (cur_stage N V p1_fixed p2_fixed propose)
+  (cur_stage N V p1_fixed p2_fixed propose ∧ ¬ is_byz N)
   → (∃ (il : interaction) (sl : Bool) (vl : view), (sent_lock_in_prepare_1 N V p1_fixed p2_fixed il sl vl ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed il sl vl))
 
 invariant [stage_2]
-  (cur_stage N V p1_fixed p2_fixed prevote)
-  → (∃ (i : interaction), ((proposed N V p1_fixed p2_fixed i ∧ prevoted_node N V p1_fixed p2_fixed I) ∨ proposed_nil N V p1_fixed p2_fixed))
+  (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ is_byz N)
+  → (∃ (i : interaction), ((∃ (op : node), proposed op V p1_fixed p2_fixed i) ∧ prevoted_node N V p1_fixed p2_fixed i) ∨ (∃ (op : node), proposed_nil op V p1_fixed p2_fixed))
 
 invariant [stage_3]
-  (cur_stage N V p1_fixed p2_fixed precommit)
+  (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ is_byz N)
     → (∃ (i : interaction), (prevoted_operator N V p1_fixed p2_fixed i ∨ precommitted_node N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i true V ∨ locked N p2_fixed i true V))
 
 invariant [stage_4]
-  (cur_stage N V p1_fixed p2_fixed commit)
+  (cur_stage N V p1_fixed p2_fixed commit ∧ ¬ is_byz N)
     → (∃ (i : interaction), (precommitted_operator N V p1_fixed p2_fixed i ∨ decided N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i false V ∨ locked N p2_fixed i false V))
 
 invariant [stage_neg_1]
@@ -1047,75 +1050,674 @@ set_option veil.smt.seed 44
 -- set_option veil.smt.solver "z3"
 
 
-#time #check_invariants!
+-- #time #check_invariants!
+
+@[invProof]
+  theorem respond_prepare_tr_stage_1 :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.stage_1 view view_dec view_ne participant participant_dec participant_ne
+                  node node_dec node_ne interaction interaction_dec interaction_ne nodeset
+                  nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.respond_prepare.tr]IFPProtocol.stage_1)
+
+  @[invProof]
+  theorem propose_tr_INV3_decided_only_if_quorum_prevote_locked :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.INV3_decided_only_if_quorum_prevote_locked view view_dec view_ne
+                  participant participant_dec participant_ne node node_dec node_ne interaction
+                  interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
+                  stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.propose.tr]IFPProtocol.INV3_decided_only_if_quorum_prevote_locked)
+
+  @[invProof]
+  theorem propose_tr_prevote_lock_only_if_quorun_prevoted :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.prevote_lock_only_if_quorun_prevoted view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.propose.tr]IFPProtocol.prevote_lock_only_if_quorun_prevoted)
+
+  @[invProof]
+  theorem propose_tr_prevote_operator_only_if_quorum_prevoted :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.prevote_operator_only_if_quorum_prevoted view view_dec view_ne
+                  participant participant_dec participant_ne node node_dec node_ne interaction
+                  interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
+                  stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.propose.tr]IFPProtocol.prevote_operator_only_if_quorum_prevoted)
+
+  @[invProof]
+  theorem propose_tr_parent_only_if_proposed :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.parent_only_if_proposed view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros); solve_clause[IFPProtocol.propose.tr]IFPProtocol.parent_only_if_proposed)
+
+  @[invProof]
+  theorem propose_tr_committed_implies_parent_committed :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.committed_implies_parent_committed view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.propose.tr]IFPProtocol.committed_implies_parent_committed)
+
+  @[invProof]
+  theorem propose_tr_genesis_decided_first :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.genesis_decided_first view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.propose.tr]IFPProtocol.genesis_decided_first)
+
+  @[invProof]
+  theorem propose_tr_genesis_height_zero :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.genesis_height_zero view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.propose.tr]IFPProtocol.genesis_height_zero)
+
+  @[invProof]
+  theorem propose_tr_stage_1 :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.stage_1 view view_dec view_ne participant participant_dec participant_ne
+                  node node_dec node_ne interaction interaction_dec interaction_ne nodeset
+                  nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.propose.tr]IFPProtocol.stage_1)
+
+  @[invProof]
+  theorem respond_propose_tr_INV3_decided_only_if_quorum_prevote_locked :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.INV3_decided_only_if_quorum_prevote_locked view view_dec view_ne
+                  participant participant_dec participant_ne node node_dec node_ne interaction
+                  interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
+                  stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_propose.tr]IFPProtocol.INV3_decided_only_if_quorum_prevote_locked)
+
+  @[invProof]
+  theorem respond_propose_tr_prevote_lock_only_if_quorun_prevoted :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.prevote_lock_only_if_quorun_prevoted view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_propose.tr]IFPProtocol.prevote_lock_only_if_quorun_prevoted)
+
+  @[invProof]
+  theorem respond_propose_tr_prevote_operator_only_if_quorum_prevoted :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.prevote_operator_only_if_quorum_prevoted view view_dec view_ne
+                  participant participant_dec participant_ne node node_dec node_ne interaction
+                  interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
+                  stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_propose.tr]IFPProtocol.prevote_operator_only_if_quorum_prevoted)
+
+  @[invProof]
+  theorem respond_propose_tr_stage_2 :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_propose.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.stage_2 view view_dec view_ne participant participant_dec participant_ne
+                  node node_dec node_ne interaction interaction_dec interaction_ne nodeset
+                  nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.respond_propose.tr]IFPProtocol.stage_2)
+
+  @[invProof]
+  theorem respond_prevote_tr_INV2_unique_prevote_lock_in_view :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.INV2_unique_prevote_lock_in_view view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.INV2_unique_prevote_lock_in_view)
+
+  @[invProof]
+  theorem respond_prevote_tr_locked_only_if_prepared :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.locked_only_if_prepared view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.locked_only_if_prepared)
+
+  @[invProof]
+  theorem respond_prevote_tr_precommit_only_if_prepare :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.precommit_only_if_prepare view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.precommit_only_if_prepare)
+
+  @[invProof]
+  theorem respond_prevote_tr_highest_lock_sent :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.highest_lock_sent view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros); solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.highest_lock_sent)
+
+  @[invProof]
+  theorem respond_prevote_tr_stage_3 :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.stage_3 view view_dec view_ne participant participant_dec participant_ne
+                  node node_dec node_ne interaction interaction_dec interaction_ne nodeset
+                  nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.stage_3)
+
+  @[invProof]
+  theorem respond_prevote_tr_unique_lock_interaction_per_view :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.unique_lock_interaction_per_view view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.unique_lock_interaction_per_view)
+
+  @[invProof]
+  theorem respond_precommit_tr_INV3_decided_only_if_quorum_prevote_locked :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.INV3_decided_only_if_quorum_prevote_locked view view_dec view_ne
+                  participant participant_dec participant_ne node node_dec node_ne interaction
+                  interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
+                  stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.INV3_decided_only_if_quorum_prevote_locked)
+
+  @[invProof]
+  theorem respond_precommit_tr_committed_implies_parent_committed :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.committed_implies_parent_committed view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.committed_implies_parent_committed)
+
+  @[invProof]
+  theorem respond_precommit_tr_genesis_decided_first :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.genesis_decided_first view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.genesis_decided_first)
+
+  @[invProof]
+  theorem respond_precommit_tr_genesis_height_zero :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.genesis_height_zero view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.genesis_height_zero)
+
+  @[invProof]
+  theorem respond_precommit_tr_highest_lock_sent :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.highest_lock_sent view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.highest_lock_sent)
+
+  @[invProof]
+  theorem respond_precommit_tr_precommit_lock_implies_prevoted :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.precommit_lock_implies_prevoted view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.precommit_lock_implies_prevoted)
+
+  @[invProof]
+  theorem respond_precommit_tr_stage_neg_1 :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.stage_neg_1 view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by ((unhygienic intros); solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.stage_neg_1)
+
+  @[invProof]
+  theorem respond_precommit_tr_unique_lock_interaction_per_view :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st st' →
+              (@IFPProtocol.unique_lock_interaction_per_view view view_dec view_ne participant
+                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+                  tot_view ctx)
+                st' :=
+    by
+    ((unhygienic intros);
+      solve_clause[IFPProtocol.respond_precommit.tr]IFPProtocol.unique_lock_interaction_per_view)
 
 
--- @[invProof]
---   theorem respond_prepare_tr_stage_1 :
---       ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
---         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                 stage stage_dec stage_ne is_byz tot_view ctx).assumptions
---             st →
---           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                   stage stage_dec stage_ne is_byz tot_view ctx).inv
---               st →
---             (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
---                   participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
---                   nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
---                 st st' →
---               (@IFPProtocol.stage_1 view view_dec view_ne participant participant_dec participant_ne
---                   node node_dec node_ne interaction interaction_dec interaction_ne nodeset
---                   nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
---                 st' :=
---     by
---     unhygienic intros
---     solve_clause[IFPProtocol.respond_prepare.tr]IFPProtocol.stage_1
 
 
--- @[invProof]
---   theorem init_genesis_height_zero :
---       ∀ (st : @State view participant node interaction nodeset stage is_byz),
---         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                 stage stage_dec stage_ne is_byz tot_view ctx).assumptions
---             st →
---           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                   stage stage_dec stage_ne is_byz tot_view ctx).init
---               st →
---             (@IFPProtocol.genesis_height_zero view view_dec view_ne participant participant_dec
---                 participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
---                 nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
---               st :=
---     by
---     unhygienic intros
---     simp only [initSimp, invSimp, IFPProtocol.genesis_height_zero] at *
---     obtain ⟨st₀, rfl⟩ := a_1
---     simp_all
+@[invProof]
+  theorem init_genesis_height_zero :
+      ∀ (st : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).init
+              st →
+            (@IFPProtocol.genesis_height_zero view view_dec view_ne participant participant_dec
+                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+              st :=
+    by
+    unhygienic intros
+    simp only [initSimp, invSimp, IFPProtocol.genesis_height_zero] at *
+    obtain ⟨st₀, rfl⟩ := a_1
+    simp_all
 
--- @[invProof]
---   theorem respond_prepare_tr_unique_lock_sent :
---       ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
---         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                 stage stage_dec stage_ne is_byz tot_view ctx).assumptions
---             st →
---           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                   stage stage_dec stage_ne is_byz tot_view ctx).inv
---               st →
---             (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
---                 participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
---                 nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
---               st st' →
---               (@IFPProtocol.unique_lock_sent view view_dec view_ne participant participant_dec
---                   participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
---                   nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
---                 st' :=
---     by
---     unhygienic intros
---     solve_clause[IFPProtocol.respond_prepare.tr] IFPProtocol.unique_lock_sent
+@[invProof]
+  theorem respond_prepare_tr_unique_lock_sent :
+      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+            st →
+          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                  stage stage_dec stage_ne is_byz tot_view ctx).inv
+              st →
+            (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
+                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+              st st' →
+              (@IFPProtocol.unique_lock_sent view view_dec view_ne participant participant_dec
+                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+                st' :=
+    by
+    unhygienic intros
+    solve_clause[IFPProtocol.respond_prepare.tr] IFPProtocol.unique_lock_sent
 
 end IFPProtocol

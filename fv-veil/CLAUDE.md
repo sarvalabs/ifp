@@ -134,6 +134,10 @@ The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Saf
 
 *To be documented — will track which invariant×transition pairs have manual `@[invProof]` theorems vs. auto-verified vs. pending.*
 
+## Important Workflow Rules
+
+- **NEVER run `lake build` or `lake lean`**. The user checks results via the Lean InfoView in their IDE. If you need output (e.g., error messages, counterexamples, proof states), ask the user to provide it from InfoView.
+
 ## Build Commands
 
 ```bash
