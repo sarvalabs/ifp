@@ -484,6 +484,57 @@ invariant [genesis_lock_existence]
 
 
 -- ####################################################################
+-- # Supporting Invariants (added by inference)
+-- ####################################################################
+
+-- Tier 3: Structural (leaf nodes, no further dependencies)
+
+-- One stage per node per view (prevents double-stage allowing double-prevote)
+invariant [unique_stage]
+  (¬ is_byz N ∧ cur_stage N V p1_fixed p2_fixed S1 ∧ cur_stage N V p1_fixed p2_fixed S2) → S1 = S2
+
+-- Genesis locks are only created at init with S=false, V=zero
+invariant [genesis_lock_only_at_zero]
+  (locked N P genesis S V) → (V = tot_view.zero ∧ S = false)
+
+-- Non-genesis locks require preparation at the same view
+invariant [locked_only_if_prepared]
+  ((locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero ∧ I ≠ genesis) → prepared_node N V p1_fixed p2_fixed
+
+-- At precommit/prevote/propose/prepare stage: no non-genesis decide or precommit locks at current view
+invariant [stage_neg_1]
+  ((cur_stage N V p1_fixed p2_fixed precommit ∨ cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N) → ¬ (decided N V p1_fixed p2_fixed I ∨ locked N p1_fixed I false V ∨ locked N p2_fixed I false V)
+
+-- At prevote/propose/prepare stage: no non-genesis locks or precommit state at current view
+invariant [stage_neg_2]
+  ((cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
+  ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N) → ¬ (precommitted_node N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
+
+-- Tier 2: Supporting (depends on Tier 3)
+
+-- Precommitted node implies it prevoted for the same interaction
+invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
+  ¬ is_byz N → (precommitted_node N V P Q I → prevoted_node N V P Q I)
+
+-- Precommitted node implies a lock exists for it
+invariant [precommitted_node_implies_lock]
+  ∀ (v : view) (ixn : interaction) (n : node),
+    ¬ is_byz n → ((precommitted_node n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
+      (∃ (c1 c2 : nodeset),
+        ixn_contexts ixn c1 c2 ∧
+        (ctx.member n c1 → ∃ (u : view), tot_view.le u v ∧ (locked n p1_fixed ixn true u ∨ locked n p1_fixed ixn false u)) ∧
+        (ctx.member n c2 → ∃ (u : view), tot_view.le u v ∧ (locked n p2_fixed ixn true u ∨ locked n p2_fixed ixn false u))))
+
+-- Ancestor is reflexive and defined inductively (fixes main_safety for same-interaction decisions)
+invariant [ancestor_def]
+  ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+
+-- Decision requires a precommit operator (rules out spurious P=Q decisions)
+invariant [decide_only_if_precommit_operator]
+  (¬ is_byz N ∧ decided OP V P Q I ∧ I ≠ genesis) → (∃ (op : node), (operator op V P Q ∧ precommitted_operator op V P Q I))
+
+-- ####################################################################
 -- # Main Safety Property
 -- ####################################################################
 
