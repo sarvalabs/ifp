@@ -167,6 +167,7 @@ action prepare (op : node) (v : view) (p1 p2 : participant) = {
 action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) = {
   -- require ¬ prepare_timed_out n v
   -- TODO: incorporate prepare timeout and ordering and responding to one
+  require v ≠ tot_view.zero -- prepare action requires v ≠ zero, so respond_prepare inherits this
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require participant_context p1 c1 ∧ participant_context p2 c2
@@ -657,6 +658,8 @@ invariant [genesis_lock_existence]
   ((participant_context p1_fixed C1 ∧ ctx.member N C1) → locked N p1_fixed genesis false tot_view.zero)
   ∧ ((participant_context p2_fixed C2 ∧ ctx.member N C2) → locked N p2_fixed genesis false tot_view.zero)
 
+-- Genesis locks are only created at init with S=false, V=zero.
+-- No action creates new genesis locks (propose requires ixn ≠ genesis).
 invariant [genesis_lock_only_at_zero]
   (locked N P genesis S V) → (V = tot_view.zero ∧ S = false)
 
@@ -1071,7 +1074,9 @@ set_option veil.smt.seed 44
                   node node_dec node_ne interaction interaction_dec interaction_ne nodeset
                   nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
                 st' :=
-    by ((unhygienic intros); solve_clause[IFPProtocol.respond_prepare.tr]IFPProtocol.stage_1)
+    by
+    unhygienic intros
+    solve_clause[IFPProtocol.respond_prepare.tr] IFPProtocol.stage_1
 
   @[invProof]
   theorem propose_tr_INV3_decided_only_if_quorum_prevote_locked :
