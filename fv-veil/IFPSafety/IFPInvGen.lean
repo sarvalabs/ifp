@@ -170,6 +170,7 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require p1 ≠ p2
   require participant_context p1 c1 ∧ participant_context p2 c2
   require ∀ (j : interaction), ¬ parent j ixn_propose
+  require ∀ (j : interaction), ¬ parent ixn_propose j
   require height1 ixn_propose = 0 ∧ height2 ixn_propose = 0
   require cur_view op v
   require operator op v p1 p2
@@ -527,9 +528,13 @@ invariant [precommitted_node_implies_lock]
         (ctx.member n c1 → ∃ (u : view), tot_view.le u v ∧ (locked n p1_fixed ixn true u ∨ locked n p1_fixed ixn false u)) ∧
         (ctx.member n c2 → ∃ (u : view), tot_view.le u v ∧ (locked n p2_fixed ixn true u ∨ locked n p2_fixed ixn false u))))
 
--- Ancestor is reflexive and defined inductively (fixes main_safety for same-interaction decisions)
-invariant [ancestor_def]
-  ancestor I J ↔ (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+-- Ancestor is at most the transitive closure of parent (forward direction)
+invariant [ancestor_def_fwd]
+  ancestor I J → (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+
+-- Ancestor includes the transitive closure of parent (backward direction)
+invariant [ancestor_def_bwd]
+  (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J) → ancestor I J
 
 -- Decision requires a precommit operator (rules out spurious P=Q decisions)
 invariant [decide_only_if_precommit_operator]
@@ -553,9 +558,14 @@ safety [main_safety]
 
 set_option veil.printCounterexamples true
 set_option veil.smt.model.minimize true
-set_option veil.vc_gen "transition"
+set_option veil.smt.translator "SmtTranslator.leanSmt"
+set_option veil.smt.reconstructProofs true
+-- set_option veil.vc_gen "transition"
 set_option veil.smt.seed 44
+-- set_option veil.smt.timeout 10
+-- set_option veil.smt.solver "z3"
 
-#check_invariants
+#check_invariants!
+
 
 end IFPProtocol

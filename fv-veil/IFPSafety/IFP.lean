@@ -203,7 +203,8 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require participant_context p1 c1 ∧ participant_context p2 c2
-  require ∀ (j : interaction), ¬ parent j ixn_propose
+  require ¬ parent J ixn_propose
+  require ¬ parent ixn_propose J
   require height1 ixn_propose = 0 ∧ height2 ixn_propose = 0
   require cur_view op v
   require operator op v p1 p2
