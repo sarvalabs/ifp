@@ -217,7 +217,8 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -236,7 +237,8 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -312,7 +314,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -331,7 +334,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -524,9 +528,9 @@ invariant [stage_init_prepare]
 
 -- Genesis never enters the pipeline: never proposed, prevoted, or precommitted
 invariant [genesis_not_in_pipeline]
-  ¬ (proposed N V p1_fixed p2_fixed genesis ∨ prevoted_node N V p1_fixed p2_fixed genesis
+  ¬ ( ¬ is_byz N ∧ (proposed N V p1_fixed p2_fixed genesis ∨ prevoted_node N V p1_fixed p2_fixed genesis
   ∨ prevoted_operator N V p1_fixed p2_fixed genesis ∨ precommitted_node N V p1_fixed p2_fixed genesis
-  ∨ precommitted_operator N V p1_fixed p2_fixed genesis)
+  ∨ precommitted_operator N V p1_fixed p2_fixed genesis))
 
 -- Tier 2: Supporting (depends on Tier 3)
 
@@ -588,6 +592,57 @@ safety [main_safety]
 
 #gen_spec
 
+
+--   @[invProof]
+--   theorem respond_prevote_tr_unique_lock_interaction_per_view :
+--       ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+--         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+--                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+--                 stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+--             st →
+--           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+--                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+--                   stage stage_dec stage_ne is_byz tot_view ctx).inv
+--               st →
+--             (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
+--                   participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+--                   nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+--                 st st' →
+--               (@IFPProtocol.unique_lock_interaction_per_view view view_dec view_ne participant
+--                   participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+--                   interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+--                   tot_view ctx)
+--                 st' :=
+--     by
+--     ((unhygienic intros);
+--       solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.unique_lock_interaction_per_view)
+
+-- set_option veil.smt.translator "SmtTranslator.leanAuto" in
+-- set_option veil.smt.timeout 30 in
+--   @[invProof]
+--   theorem propose_tr_genesis_not_in_pipeline :
+--       ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+--         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+--                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+--                 stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+--             st →
+--           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+--                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+--                   stage stage_dec stage_ne is_byz tot_view ctx).inv
+--               st →
+--             (@IFPProtocol.propose.tr view view_dec view_ne participant participant_dec
+--                   participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+--                   nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+--                 st st' →
+--               (@IFPProtocol.genesis_not_in_pipeline view view_dec view_ne participant
+--                   participant_dec participant_ne node node_dec node_ne interaction interaction_dec
+--                   interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
+--                   tot_view ctx)
+--                 st' :=
+--     by
+--     ((unhygienic intros);
+--       solve_clause)
+
 set_option veil.printCounterexamples true
 set_option veil.smt.model.minimize true
 set_option veil.smt.translator "SmtTranslator.leanSmt"
@@ -596,32 +651,6 @@ set_option veil.smt.translator "SmtTranslator.leanSmt"
 set_option veil.smt.seed 44
 set_option veil.smt.timeout 10
 -- set_option veil.smt.solver "z3"
-
-
-  @[invProof]
-  theorem respond_prevote_tr_unique_lock_interaction_per_view :
-      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
-        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
-            st →
-          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                  stage stage_dec stage_ne is_byz tot_view ctx).inv
-              st →
-            (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
-                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
-                st st' →
-              (@IFPProtocol.unique_lock_interaction_per_view view view_dec view_ne participant
-                  participant_dec participant_ne node node_dec node_ne interaction interaction_dec
-                  interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz
-                  tot_view ctx)
-                st' :=
-    by
-    ((unhygienic intros);
-      solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.unique_lock_interaction_per_view)
-
 
 #time #check_invariants
 

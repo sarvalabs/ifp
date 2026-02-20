@@ -254,7 +254,8 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧ -- added to require but is also an assumption
@@ -274,7 +275,8 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧ -- added to require but is also an assumption
@@ -363,7 +365,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧ -- added to require but is also an assumption
@@ -383,7 +386,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧ -- added to require but is also an assumption
