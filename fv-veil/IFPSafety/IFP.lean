@@ -447,7 +447,7 @@ action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require cur_stage n v p1 p2 prevote -- in prevote stage
   require ixn_contexts ixn c1 c2
   require ctx.member n c1 ∨ ctx.member n c2
-  require prepared_node n v p1 p2
+  -- require prepared_node n v p1 p2
   require ∃ (op : node), operator op v p1 p2 ∧ prevoted_operator op v p1 p2 ixn
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v p1 p2 ixn
