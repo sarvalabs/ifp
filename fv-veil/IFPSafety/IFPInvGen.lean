@@ -513,6 +513,21 @@ invariant [stage_neg_2]
   ((cur_stage N V p1_fixed p2_fixed prevote ∨ cur_stage N V p1_fixed p2_fixed propose
   ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N) → ¬ (precommitted_node N V p1_fixed p2_fixed I ∨ precommitted_operator N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
 
+-- At propose/prepare stage: no prevotes, prevote-operators, or locks at current view
+invariant [stage_neg_3]
+  ((cur_stage N V p1_fixed p2_fixed propose ∨ cur_stage N V p1_fixed p2_fixed prepare) ∧ I ≠ genesis ∧ ¬ is_byz N)
+  → ¬ (prevoted_node N V p1_fixed p2_fixed I ∨ prevoted_operator N V p1_fixed p2_fixed I ∨ locked N p1_fixed I S V ∨ locked N p2_fixed I S V)
+
+-- If not prepared, must be at prepare stage (contrapositive: past prepare → prepared)
+invariant [stage_init_prepare]
+  (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
+
+-- Genesis never enters the pipeline: never proposed, prevoted, or precommitted
+invariant [genesis_not_in_pipeline]
+  ¬ (proposed N V p1_fixed p2_fixed genesis ∨ prevoted_node N V p1_fixed p2_fixed genesis
+  ∨ prevoted_operator N V p1_fixed p2_fixed genesis ∨ precommitted_node N V p1_fixed p2_fixed genesis
+  ∨ precommitted_operator N V p1_fixed p2_fixed genesis)
+
 -- Tier 2: Supporting (depends on Tier 3)
 
 -- Precommitted node implies it prevoted for the same interaction
@@ -539,6 +554,23 @@ invariant [ancestor_def_bwd]
 -- Decision requires a precommit operator (rules out spurious P=Q decisions)
 invariant [decide_only_if_precommit_operator]
   (¬ is_byz N ∧ decided OP V P Q I ∧ I ≠ genesis) → (∃ (op : node), (operator op V P Q ∧ precommitted_operator op V P Q I))
+
+-- At prevote stage, node prevoted for the proposed interaction (or proposed_nil)
+invariant [stage_2]
+  (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ is_byz N)
+  → (∃ (i : interaction), ((∃ (op : node), proposed op V p1_fixed p2_fixed i) ∧ prevoted_node N V p1_fixed p2_fixed i) ∨ (∃ (op : node), proposed_nil op V p1_fixed p2_fixed))
+
+-- Only one proposal per view (same interaction and operator)
+invariant [unique_proposal]
+  ¬ (is_byz N1 ∨ is_byz N2) → ( (proposed N1 V p1_fixed p2_fixed I1 ∧ proposed N2 V p1_fixed p2_fixed I2) → (I1 = I2 ∧ N1 = N2) )
+
+-- Honest node prevoted → a proposal exists for that interaction
+invariant [prevote_implies_proposed]
+  (prevoted_node N V p1_fixed p2_fixed I ∧ ¬ is_byz N) → ∃ (op : node), proposed op V p1_fixed p2_fixed I
+
+-- Honest node precommitted → a proposal exists for that interaction
+invariant [precommit_only_if_propose]
+  (¬ is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → (∃ (op : node), operator op V p1_fixed p2_fixed ∧ proposed op V p1_fixed p2_fixed I)
 
 -- ####################################################################
 -- # Main Safety Property
@@ -589,51 +621,6 @@ set_option veil.smt.timeout 10
     by
     ((unhygienic intros);
       solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.unique_lock_interaction_per_view)
-
-@[invProof]
-  theorem init_genesis_height_zero :
-      ∀ (st : @State view participant node interaction nodeset stage is_byz),
-        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
-            st →
-          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                  stage stage_dec stage_ne is_byz tot_view ctx).init
-              st →
-            (@IFPProtocol.genesis_height_zero view view_dec view_ne participant participant_dec
-                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
-              st :=
-    by
-    unhygienic intros
-    simp only [initSimp, invSimp, IFPProtocol.genesis_height_zero] at *
-    obtain ⟨st₀, rfl⟩ := a_1
-    simp_all
-
-@[invProof]
-  theorem respond_prepare_tr_unique_lock_sent :
-      ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
-        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                stage stage_dec stage_ne is_byz tot_view ctx).assumptions
-            st →
-          (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-                  node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-                  stage stage_dec stage_ne is_byz tot_view ctx).inv
-              st →
-            (@IFPProtocol.respond_prepare.tr view view_dec view_ne participant participant_dec
-                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
-              st st' →
-              (@IFPProtocol.unique_lock_sent view view_dec view_ne participant participant_dec
-                  participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-                  nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
-                st' :=
-    by
-    unhygienic intros
-    solve_clause[IFPProtocol.respond_prepare.tr] IFPProtocol.unique_lock_sent
-
 
 
 #time #check_invariants
