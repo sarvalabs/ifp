@@ -348,6 +348,9 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
       )
     )
   )
+  -- valid proposal pattern: repropose or extend (otherwise should be nil)
+  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2)
+        ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2)
   require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
     (parent ixn_max_1 ixn
