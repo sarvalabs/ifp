@@ -229,7 +229,8 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -248,7 +249,8 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -269,7 +271,6 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
     parent ixn_max_1 ixn_propose := decide $ (ixn_max_1 ≠ ixn_propose);
     ancestor A ixn_propose := decide $ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
     proposed op v p1 p2 ixn_propose := true;
-    -- let h_ixn_propose :| height ixn_max_1 + 1;
     height ixn_propose := height ixn_max_1 + 1;
   if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 ≠ ixn_max_2) then
     proposed_nil op v p1 p2 := true;
@@ -285,6 +286,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require interactions ixn p1 p2
   require ∃ (op : node), operator op v p1 p2 ∧ proposed op v p1 p2 ixn
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
+  require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
@@ -324,7 +326,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_1 : node), (
     ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1 ∧
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -343,7 +346,8 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (n_max_2 : node), (
     ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
       (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
         interactions ixn_l p1 p2 ∧
@@ -356,11 +360,13 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
       )
     )
   )
+  -- valid proposal pattern: repropose or extend (otherwise should be nil)
+  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2)
+        ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2)
   require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
-    (parent ixn_max_1 ixn
-    ∧ (ixn_max_1 ≠ ixn → height ixn = height ixn_max_1 + 1)
-    ∧ (ixn_max_1 = ixn → height ixn = height ixn_max_1) )
+    (ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
+    ∧ height ixn = height ixn_max_1 + 1)
   prevoted_node n v p1 p2 ixn := true
   cur_stage n v p1 p2 S := decide $ (S = prevote)
 }

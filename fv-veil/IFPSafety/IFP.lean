@@ -407,11 +407,9 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
   -- extended if both are commits and are same ixn
   require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
-    (parent ixn_max_1 ixn
-    ∧ (ixn_max_1 ≠ ixn → height1 ixn = height1 ixn_max_1 + 1)
-    ∧ (ixn_max_1 = ixn → height1 ixn = height1 ixn_max_1)
-    ∧ (ixn_max_1 ≠ ixn → height2 ixn = height2 ixn_max_1 + 1)
-    ∧ (ixn_max_1 = ixn → height2 ixn = height2 ixn_max_1) )
+    (ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
+    ∧ height1 ixn = height1 ixn_max_1 + 1
+    ∧ height2 ixn = height2 ixn_max_1 + 1)
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 S := (S = prevote) -- move to prevote stage
 }
