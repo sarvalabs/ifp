@@ -454,15 +454,15 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
 -- INV4: If a quorum has prevote-locked onto an interaction in view v, then in the Prepare stage of
 -- later views, a lock from at least view v and descendant of ixn is discovered
 -- (commented out: working on supporting invariants first)
--- invariant [INV4_quorum_locked_implies_lock_of_descendant_discovered]
---   ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
---   (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
---   ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn true v) ∧ (ctx.member n s2 → locked n p2 ixn true v)))
---   ∧ tot_view.lt v vp ) →
---   ((∃ (op : node), prepared_operator op vp p1 p2) → (
---   ( ∃ (n1 : node) (c1 : nodeset) (ixnl1 : interaction) (sl1 : Bool) (vl1 : view), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixnl1 sl1 vl1 ∧ tot_view.le v vl1 ∧ ancestor ixn ixnl1) )
---   ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : Bool) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ ancestor ixn ixnl2) )
---   ))
+invariant [INV4_quorum_locked_implies_lock_of_descendant_discovered]
+  ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
+  (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+  ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn true v) ∧ (ctx.member n s2 → locked n p2 ixn true v)))
+  ∧ tot_view.lt v vp ) →
+  ((∃ (op : node), (∃ (ixn_prop : interaction), proposed op vp p1 p2 ixn_prop) ∨ proposed_nil op vp p1 p2) → (
+  ( ∃ (n1 : node) (c1 : nodeset) (ixnl1 : interaction) (sl1 : Bool) (vl1 : view), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixnl1 sl1 vl1 ∧ tot_view.le v vl1 ∧ ancestor ixn ixnl1) )
+  ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : Bool) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ ancestor ixn ixnl2) )
+  ))
 
 -- Supporting: Prevote lock implies a quorum prevoted for the interaction
 invariant [prevote_lock_only_if_quorun_prevoted]
@@ -498,12 +498,65 @@ invariant [genesis_lock_existence]
   ((participant_context p1_fixed C1 ∧ ctx.member N C1) → locked N p1_fixed genesis false tot_view.zero)
   ∧ ((participant_context p2_fixed C2 ∧ ctx.member N C2) → locked N p2_fixed genesis false tot_view.zero)
 
+invariant [highest_lock_sent]
+  (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL →
+    (locked N p1_fixed IL SL VL ∧
+     tot_view.lt VL V ∧
+     (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p1_fixed i' s' v') ∧
+     (SL = true → ¬ locked N p1_fixed IL false VL)))
+  ∧
+  (sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL →
+    (locked N p2_fixed IL SL VL ∧
+     tot_view.lt VL V ∧
+     (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N p2_fixed i' s' v') ∧
+     (SL = true → ¬ locked N p2_fixed IL false VL)))
+
+invariant [precommit_next_view_discovery]
+  ∀ (v v2 : view) (i : interaction)  (c1 c2: nodeset), (
+    (interactions i p1_fixed p2_fixed ∧
+     tot_view.next v v2 ∧
+     v ≠ v2 ∧
+     (∃ (op : node),  (¬ is_byz op ∧ operator op v2 p1_fixed p2_fixed ∧ prepared_operator op v2 p1_fixed p2_fixed)) ∧
+     (∃ (m : node), (¬ is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
+     ixn_contexts i c1 c2 ∧
+     i ≠ genesis ∧
+     -- il ≠ genesis ∧
+     tot_view.zero ≠ v ∧
+     -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
+     -- ¬ tot_view.lt v2 v ∧ -- No cycles
+     -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
+     -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
+     -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
+     (∀ (n : node), (¬ is_byz n →
+      ((ctx.member n c1 → locked n p1_fixed i false v ) ∧
+       (ctx.member n c2 → locked n p2_fixed i false v) ∧
+       cur_stage n v p1_fixed p2_fixed commit ∧
+       prepared_node n v2 p1_fixed p2_fixed ∧
+       cur_view n v2
+      )) )) →
+    (∀ (n : node), ¬ is_byz n → (
+      (ctx.member n c1 → (sent_lock_in_prepare_1 n v2 p1_fixed p2_fixed i false v)) ∧
+      (ctx.member n c2 → (sent_lock_in_prepare_2 n v2 p1_fixed p2_fixed i false v)))
+    )
+  )
 
 -- ####################################################################
 -- # Supporting Invariants (added by inference)
 -- ####################################################################
 
 -- Tier 3: Structural (leaf nodes, no further dependencies)
+
+-- Each node has exactly one current view (set_view replaces functionally)
+invariant [unique_cur_view]
+  cur_view N U ∧ cur_view N V → U = V
+
+-- Every node always has some current view
+invariant [node_has_cur_view]
+  ∀ (n : node), ∃ (v : view), cur_view n v
+
+-- Nodes can only be prepared for views they have reached (current or past)
+invariant [prepared_only_at_cur_or_past_view]
+  (prepared_node N V p1_fixed p2_fixed ∧ ¬ is_byz N ∧ cur_view N V2) → tot_view.le V V2
 
 -- One stage per node per view (prevents double-stage allowing double-prevote)
 invariant [unique_stage]
@@ -550,11 +603,26 @@ invariant [genesis_not_in_pipeline]
   ∨ prevoted_operator N V p1_fixed p2_fixed genesis ∨ precommitted_node N V p1_fixed p2_fixed genesis
   ∨ precommitted_operator N V p1_fixed p2_fixed genesis))
 
+-- At prevote stage, node has prevoted for some interaction
+-- (respond_propose is the only transition setting cur_stage to prevote, and it also sets prevoted_node)
+invariant [prevote_stage_implies_prevoted]
+  (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ is_byz N) → ∃ I, prevoted_node N V p1_fixed p2_fixed I
+
+-- At precommit stage, node has precommitted for some interaction
+-- (respond_prevote is the only transition setting cur_stage to precommit, and it also sets precommitted_node)
+invariant [precommit_stage_implies_precommitted]
+  (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ is_byz N) → ∃ I, precommitted_node N V p1_fixed p2_fixed I
+
 -- Tier 2: Supporting (depends on Tier 3)
 
+-- Cross-node unique prevote: all honest prevotes in a view agree on the interaction
+-- Follows from prevote_implies_proposed + unique_operator + unique_proposed_interaction
+invariant [cross_node_unique_prevote]
+  (¬ (is_byz N1 ∨ is_byz N2) ∧ prevoted_node N1 V p1_fixed p2_fixed I1 ∧ prevoted_node N2 V p1_fixed p2_fixed I2) → I1 = I2
+
 -- Precommitted node implies it prevoted for the same interaction
--- invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
---   (¬ is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → prevoted_node N V p1_fixed p2_fixed I
+invariant [precommit_nodes_only_if_prevoted_for_same_ixn]
+  (¬ is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → prevoted_node N V p1_fixed p2_fixed I
 
 -- Precommitted node implies a lock exists for it
 invariant [precommitted_node_implies_lock]
@@ -601,6 +669,15 @@ invariant [prevote_implies_proposed]
 invariant [precommit_only_if_propose]
   (¬ is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → (∃ (op : node), operator op V p1_fixed p2_fixed ∧ proposed op V p1_fixed p2_fixed I)
 
+invariant [prepare_response_only_on_prepare]
+  ¬ is_byz N → (prepared_node N V P Q → ∃ (op : node), operator op V P Q ∧ prepared_operator op V P Q)
+
+invariant [prevote_only_by_operator]
+  ¬ is_byz N → (prevoted_operator OP V P Q I → operator OP V P Q)
+
+invariant [precommit_only_by_operator]
+  (¬ is_byz OP ∧ precommitted_operator OP V P Q I) → operator OP V P Q
+
 -- ####################################################################
 -- # Main Safety Property
 -- ####################################################################
@@ -611,8 +688,8 @@ invariant [precommit_only_if_propose]
 --   (¬ is_byz N1 ∧ ¬ is_byz N2 ∧ decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)
 
 -- Placeholder safety (trivially true, keeps #gen_spec happy)
-safety [main_safety]
-  True
+-- safety [main_safety]
+--   True
 
 
 #gen_spec
@@ -673,7 +750,7 @@ set_option veil.smt.model.minimize true
 set_option veil.smt.translator "SmtTranslator.leanSmt"
 -- set_option veil.smt.reconstructProofs true
 -- set_option veil.vc_gen "transition"
-set_option veil.smt.seed 45
+set_option veil.smt.seed 43
 set_option veil.smt.timeout 25
 -- set_option veil.smt.solver "z3"
 
@@ -821,6 +898,7 @@ set_option veil.smt.timeout 30 in
 -- witnesses transfer directly since prevoted_node is monotone and decided/locked are
 -- unchanged. SMT times out on the full formula; selective unfolding reduces formula size.
 -- simp_all can't transport existential witnesses; sauto_all (SMT on smaller formula) can.
+set_option maxHeartbeats 400000 in
 set_option veil.smt.translator "SmtTranslator.leanAuto" in
 set_option veil.smt.timeout 30 in
   @[invProof]
@@ -850,25 +928,25 @@ set_option veil.smt.timeout 30 in
                   interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
                   stage_ne is_byz tot_view ctx)
                 st' := by
-    unhygienic intros
-    -- Unfold INV3 in goal, expose ∀ v ixn n
-    simp only [IFPProtocol.INV3_decided_only_if_quorum_prevote_locked]
+    intro st st' _ h_inv h_tr
+    -- Extract just pre-state INV3 from the invariant conjunction (3rd conjunct)
+    simp only [invSimpTopLevel] at h_inv
+    have h_pre := h_inv.2.2.1
+    clear h_inv
+    -- Unfold INV3 in pre-state and goal
+    simp only [IFPProtocol.INV3_decided_only_if_quorum_prevote_locked] at h_pre ⊢
     intro v_inv ixn_inv n_inv
-    -- Unfold action state changes + normalize
-    simp only [actSimp, smtSimp, logicSimp] at *
-    -- Split invariant conjunction into individual hypotheses
-    simp only [invSimpTopLevel] at *
-    sdestruct_hyps
-    -- Re-unfold pre-state INV3 so SMT can use its witnesses
-    simp only [IFPProtocol.INV3_decided_only_if_quorum_prevote_locked, smtSimp, logicSimp] at *
-    -- SMT on reduced formula: pre-state INV3 + prevoted_node monotone (P → (Q → P))
-    sauto_all
+    -- Unfold action in transition + goal only (context is now small)
+    simp only [actSimp, smtSimp, logicSimp] at h_tr ⊢
+    -- Pre-state witnesses transfer: decided unchanged, prevoted_node monotone
+    aesop
 
 
 -- Manual proof: respond_propose × prevote_lock_only_if_quorun_prevoted
 -- Same root cause as INV3: respond_propose's huge precondition causes SMT timeout.
 -- The invariant's conclusion references prevoted_node (monotone) and locked (unchanged).
 -- Pre-state witnesses transfer directly. sauto_all on smaller formula after selective unfolding.
+set_option maxHeartbeats 400000 in
 set_option veil.smt.translator "SmtTranslator.leanAuto" in
 set_option veil.smt.timeout 30 in
   @[invProof]
@@ -898,19 +976,48 @@ set_option veil.smt.timeout 30 in
                   interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec
                   stage_ne is_byz tot_view ctx)
                 st' := by
-    unhygienic intros
-    -- Unfold invariant in goal, expose implicit ∀ N I V
-    simp only [IFPProtocol.prevote_lock_only_if_quorun_prevoted]
+    intro st st' _ h_inv h_tr
+    -- Extract just pre-state prevote_lock from the invariant conjunction (5th conjunct)
+    simp only [invSimpTopLevel] at h_inv
+    have h_pre := h_inv.2.2.2.2.1
+    clear h_inv
+    -- Unfold invariant in pre-state and goal
+    simp only [IFPProtocol.prevote_lock_only_if_quorun_prevoted] at h_pre ⊢
     intro N_inv I_inv V_inv
-    -- Unfold action state changes + normalize
-    simp only [actSimp, smtSimp, logicSimp] at *
-    -- Split invariant conjunction into individual hypotheses
-    simp only [invSimpTopLevel] at *
-    sdestruct_hyps
-    -- Re-unfold pre-state invariant so SMT can use its witnesses
-    simp only [IFPProtocol.prevote_lock_only_if_quorun_prevoted, smtSimp, logicSimp] at *
-    -- SMT on reduced formula: pre-state inv + prevoted_node monotone
-    sauto_all
+    -- Unfold action in transition + goal only (context is now small)
+    simp only [actSimp, smtSimp, logicSimp] at h_tr ⊢
+    -- Pre-state witnesses transfer: locked unchanged, prevoted_node monotone
+    aesop
 
+
+-- Manual proof: respond_precommit × stage_neg_1
+-- respond_precommit atomically moves cur_stage to commit while adding precommit locks/decides,
+-- so stage_neg_1's antecedent (stage ∈ {precommit,prevote,propose,prepare}) is always false
+-- in the post-state. The if-then branching on ctx.member confuses the SMT solver.
+set_option maxHeartbeats 400000 in
+set_option veil.smt.translator "SmtTranslator.leanAuto" in
+set_option veil.smt.timeout 60 in
+@[invProof]
+theorem respond_precommit_tr_stage_neg_1 :
+    ∀ (st st' : @State view participant node interaction nodeset stage is_byz),
+      (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+              node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+              stage stage_dec stage_ne is_byz tot_view ctx).assumptions
+          st →
+        (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
+                node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
+                stage stage_dec stage_ne is_byz tot_view ctx).inv
+            st →
+          (@IFPProtocol.respond_precommit.tr view view_dec view_ne participant participant_dec
+                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+              st st' →
+            (@IFPProtocol.stage_neg_1 view view_dec view_ne participant participant_dec
+                participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
+                nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne is_byz tot_view ctx)
+              st' := by
+  -- Use solve_clause with isolate: projects only stage_neg_1 from conjunction
+  -- stage_neg_1 is FO (no nodesets), so SMT can handle it
+  solve_clause[IFPProtocol.respond_precommit.tr] IFPProtocol.stage_neg_1
 
 end IFPProtocol
