@@ -230,7 +230,35 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   cur_stage n v p1 p2 S := (S = propose)
 }
 
-action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) = {
+-- Repropose: both highest locks are prevote locks for the same interaction
+action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) = {
+  require v ≠ tot_view.zero
+  require (p1 = p1_fixed ∧ p2 = p2_fixed)
+  require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
+  require cur_view op v
+  require operator op v p1 p2
+  require ctx.member op c1 ∨ ctx.member op c2
+  require prepared_operator op v p1 p2
+  require cur_stage op v p1 p2 propose
+  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
+  require valid_lock_quorum_1 v p1 p2 c1 c2
+  require valid_lock_quorum_2 v p1 p2 c1 c2
+  let ixn_max_1 : interaction ← fresh
+  let s_max_1 : Bool ← fresh
+  let v_max_1 : view ← fresh
+  require is_highest_lock_1 v p1 p2 c1 ixn_max_1 s_max_1 v_max_1
+  let ixn_max_2 : interaction ← fresh
+  let s_max_2 : Bool ← fresh
+  let v_max_2 : view ← fresh
+  require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
+  require s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2
+  proposed op v p1 p2 ixn_max_1 := True
+}
+
+-- Extend: both highest locks are precommit locks for the same interaction
+action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) = {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -243,8 +271,9 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require ctx.member op c1 ∨ ctx.member op c2
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 propose
-  require ixn_propose ≠ genesis;
+  require ixn_propose ≠ genesis
   require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
   require valid_lock_quorum_1 v p1 p2 c1 c2
   require valid_lock_quorum_2 v p1 p2 c1 c2
   let ixn_max_1 : interaction ← fresh
@@ -255,20 +284,44 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   let s_max_2 : Bool ← fresh
   let v_max_2 : view ← fresh
   require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
+  require s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2
   require ixn_max_1 ≠ ixn_propose
   require ¬ (ancestor ixn_max_1 ixn_propose ∨ ancestor ixn_propose ixn_max_1)
-  if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) then
-    proposed op v p1 p2 ixn_max_1 := True;
-  if (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) then
-    parent ixn_max_1 ixn_propose := (ixn_max_1 ≠ ixn_propose);
-    ancestor A ixn_propose := ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
-    proposed op v p1 p2 ixn_propose := True;
-    height1 ixn_propose := height1 ixn_max_1 + 1;
-    height2 ixn_propose := height2 ixn_max_2 + 1
-  if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 ≠ ixn_max_2) then
-    proposed_nil op v p1 p2 := True;
+  parent ixn_max_1 ixn_propose := (ixn_max_1 ≠ ixn_propose);
+  ancestor A ixn_propose := ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
+  proposed op v p1 p2 ixn_propose := True;
+  height1 ixn_propose := height1 ixn_max_1 + 1;
+  height2 ixn_propose := height2 ixn_max_2 + 1
 }
 
+-- Nil proposal: both highest locks are prevote locks for different interactions
+action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) = {
+  require v ≠ tot_view.zero
+  require (p1 = p1_fixed ∧ p2 = p2_fixed)
+  require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
+  require cur_view op v
+  require operator op v p1 p2
+  require ctx.member op c1 ∨ ctx.member op c2
+  require prepared_operator op v p1 p2
+  require cur_stage op v p1 p2 propose
+  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
+  require valid_lock_quorum_1 v p1 p2 c1 c2
+  require valid_lock_quorum_2 v p1 p2 c1 c2
+  let ixn_max_1 : interaction ← fresh
+  let s_max_1 : Bool ← fresh
+  let v_max_1 : view ← fresh
+  require is_highest_lock_1 v p1 p2 c1 ixn_max_1 s_max_1 v_max_1
+  let ixn_max_2 : interaction ← fresh
+  let s_max_2 : Bool ← fresh
+  let v_max_2 : view ← fresh
+  require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
+  require s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 ≠ ixn_max_2
+  proposed_nil op v p1 p2 := True
+}
+
+-- Nodes respond to a proposal with a prevote (independently validates the proposal)
 action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
@@ -281,6 +334,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
+  -- Independent validation: node verifies quorum locks and proposal consistency
   require valid_lock_quorum_1 v p1 p2 c1 c2
   require valid_lock_quorum_2 v p1 p2 c1 c2
   let ixn_max_1 : interaction ← fresh
@@ -291,7 +345,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   let s_max_2 : Bool ← fresh
   let v_max_2 : view ← fresh
   require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
-  -- valid proposal pattern: repropose or extend (otherwise should be nil)
+  -- Valid proposal pattern: repropose or extend
   require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2 ∧ ixn_max_1 = ixn)
         ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2
            ∧ ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
