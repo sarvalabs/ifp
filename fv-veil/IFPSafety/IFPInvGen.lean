@@ -69,6 +69,72 @@ function height2 : interaction → Nat
 ghost relation ixn_contexts (I : interaction) (C D : nodeset) :=
 ∃ (p q : participant), interactions I p q ∧ participant_context p C ∧ participant_context q D
 
+-- Quorum of valid locks sent from p1's context
+ghost relation valid_lock_quorum_1 (V : view) (P1 P2 : participant) (C1 C2 : nodeset) :=
+  ∃ (s1 : nodeset), (
+    ctx.supermajority s1 C1 ∧ (
+      ∀ (n : node), (
+        ctx.member n s1 → (prepared_node n V P1 P2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_1 n V P1 P2 ixnl sl vl
+          ∧ locked n P1 ixnl sl vl
+          ∧ tot_view.le vl V
+          ∧ ctx.supermajority t1 C1 ∧ ctx.supermajority t2 C2
+          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl P1 P2 ixnl)) )
+          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl P1 P2 ixnl)) )
+          ∧ interactions ixnl P1 P2
+        )))))
+
+-- Quorum of valid locks sent from p2's context
+ghost relation valid_lock_quorum_2 (V : view) (P1 P2 : participant) (C1 C2 : nodeset) :=
+  ∃ (s2 : nodeset), (
+    ctx.supermajority s2 C2 ∧ (
+      ∀ (n : node), (
+        ctx.member n s2 → (prepared_node n V P1 P2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_2 n V P1 P2 ixnl sl vl
+          ∧ locked n P1 ixnl sl vl
+          ∧ tot_view.le vl V
+          ∧ ctx.supermajority t1 C1 ∧ ctx.supermajority t2 C2
+          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl P1 P2 ixnl)) )
+          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl P1 P2 ixnl)) )
+          ∧ interactions ixnl P1 P2
+        )))))
+
+-- Highest lock from p1's context (by height1, then stage, then view)
+ghost relation is_highest_lock_1 (V : view) (P1 P2 : participant) (C1 : nodeset) (IX : interaction) (S : Bool) (VL : view) :=
+  ∃ (n_max : node), (
+    ctx.member n_max C1
+    ∧ interactions IX P1 P2
+    ∧ sent_lock_in_prepare_1 n_max V P1 P2 IX S VL
+    ∧ locked n_max P1 IX S VL ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
+      (ctx.member n_l C1 ∧ sent_lock_in_prepare_1 n_l V P1 P2 ixn_l s_l v_l) → (
+        interactions ixn_l P1 P2 ∧
+        (
+          height1 ixn_l < height1 IX
+          ∨ (height1 ixn_l = height1 IX ∧ s_l = true ∧ S = false)
+          ∨ (height1 ixn_l = height1 IX ∧ s_l = S ∧ tot_view.le v_l VL)
+          ∨ (ixn_l = IX ∧ s_l = S ∧ v_l = VL)
+        ))))
+
+-- Highest lock from p2's context (by height2, then stage, then view)
+ghost relation is_highest_lock_2 (V : view) (P1 P2 : participant) (C2 : nodeset) (IX : interaction) (S : Bool) (VL : view) :=
+  ∃ (n_max : node), (
+    ctx.member n_max C2
+    ∧ interactions IX P1 P2
+    ∧ sent_lock_in_prepare_2 n_max V P1 P2 IX S VL
+    ∧ locked n_max P2 IX S VL ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
+      (ctx.member n_l C2 ∧ sent_lock_in_prepare_2 n_l V P1 P2 ixn_l s_l v_l) → (
+        interactions ixn_l P1 P2 ∧
+        (
+          height2 ixn_l < height2 IX
+          ∨ (height2 ixn_l = height2 IX ∧ s_l = true ∧ S = false)
+          ∨ (height2 ixn_l = height2 IX ∧ s_l = S ∧ tot_view.le v_l VL)
+          ∨ (ixn_l = IX ∧ s_l = S ∧ v_l = VL)
+        ))))
+
 -- `assumptions`
 
 assumption ∀ (i : interaction) (p q : participant),
@@ -179,78 +245,16 @@ action propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (i
   require cur_stage op v p1 p2 propose
   require ixn_propose ≠ genesis;
   require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
-  require ∃ (s1 : nodeset), (
-    ctx.supermajority s1 c1 ∧ (
-      ∀ (n : node), (
-        ctx.member n s1 → (prepared_node n v p1 p2 ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
-          sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl
-          ∧ locked n p1 ixnl sl vl
-          ∧ tot_view.le vl v
-          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
-          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
-          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
-          ∧ interactions ixnl p1 p2
-        )
-      ))
-    )
-  )
-  require ∃ (s2 : nodeset), (
-    ctx.supermajority s2 c2 ∧ (
-      ∀ (n : node), (
-        ctx.member n s2 → (prepared_node n v p1 p2 ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
-          sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl
-          ∧ locked n p1 ixnl sl vl
-          ∧ tot_view.le vl v
-          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
-          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
-          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
-          ∧ interactions ixnl p1 p2
-        )
-      ))
-    )
-  )
+  require valid_lock_quorum_1 v p1 p2 c1 c2
+  require valid_lock_quorum_2 v p1 p2 c1 c2
   let ixn_max_1 : interaction ← fresh
   let s_max_1 : Bool ← fresh
   let v_max_1 : view ← fresh
-  require ∃ (n_max_1 : node), (
-    ctx.member n_max_1 c1
-    ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
-    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
-      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height1 ixn_l < height1 ixn_max_1
-          ∨ (height1 ixn_l = height1 ixn_max_1 ∧ s_l = true ∧ s_max_1 = false)
-          ∨ (height1 ixn_l = height1 ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
-          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
-        )
-      )
-    )
-  )
+  require is_highest_lock_1 v p1 p2 c1 ixn_max_1 s_max_1 v_max_1
   let ixn_max_2 : interaction ← fresh
   let s_max_2 : Bool ← fresh
   let v_max_2 : view ← fresh
-  require ∃ (n_max_2 : node), (
-    ctx.member n_max_2 c2
-    ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
-    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
-      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height2 ixn_l < height2 ixn_max_2
-          ∨ (height2 ixn_l = height2 ixn_max_2 ∧ s_l = true ∧ s_max_2 = false)
-          ∨ (height2 ixn_l = height2 ixn_max_2 ∧ s_l = s_max_2 ∧ tot_view.le v_l v_max_2)
-          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
-        )
-      )
-    )
-  )
+  require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
   require ixn_max_1 ≠ ixn_propose
   require ¬ (ancestor ixn_max_1 ixn_propose ∨ ancestor ixn_propose ixn_max_1)
   if (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) then
@@ -277,86 +281,22 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
-  require ∃ (s1 : nodeset), (
-    ctx.supermajority s1 c1 ∧ (
-      ∀ (n : node), (
-        ctx.member n s1 → (prepared_node n v p1 p2 ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
-          sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl
-          ∧ locked n p1 ixnl sl vl
-          ∧ tot_view.le vl v
-          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
-          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
-          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
-          ∧ interactions ixnl p1 p2
-        )
-      ))
-    )
-  )
-  require ∃ (s2 : nodeset), (
-    ctx.supermajority s2 c2 ∧ (
-      ∀ (n : node), (
-        ctx.member n s2 → (prepared_node n v p1 p2 ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : Bool) (t1 t2 : nodeset), (
-          sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl
-          ∧ locked n p1 ixnl sl vl
-          ∧ tot_view.le vl v
-          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
-          ∧ ( sl = true → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
-          ∧ ( sl = false → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
-          ∧ interactions ixnl p1 p2
-        )
-      ))
-    )
-  )
+  require valid_lock_quorum_1 v p1 p2 c1 c2
+  require valid_lock_quorum_2 v p1 p2 c1 c2
   let ixn_max_1 : interaction ← fresh
   let s_max_1 : Bool ← fresh
   let v_max_1 : view ← fresh
-  require ∃ (n_max_1 : node), (
-    ctx.member n_max_1 c1
-    ∧ interactions ixn_max_1 p1 p2
-    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
-    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
-      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height1 ixn_l < height1 ixn_max_1
-          ∨ (height1 ixn_l = height1 ixn_max_1 ∧ s_l = true ∧ s_max_1 = false)
-          ∨ (height1 ixn_l = height1 ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
-          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
-        )
-      )
-    )
-  )
+  require is_highest_lock_1 v p1 p2 c1 ixn_max_1 s_max_1 v_max_1
   let ixn_max_2 : interaction ← fresh
   let s_max_2 : Bool ← fresh
   let v_max_2 : view ← fresh
-  require ∃ (n_max_2 : node), (
-    ctx.member n_max_2 c2
-    ∧ interactions ixn_max_2 p1 p2
-    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
-    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : Bool) (v_l : view), (
-      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height2 ixn_l < height2 ixn_max_2
-          ∨ (height2 ixn_l = height2 ixn_max_2 ∧ s_l = true ∧ s_max_2 = false)
-          ∨ (height2 ixn_l = height2 ixn_max_2 ∧ s_l = s_max_2 ∧ tot_view.le v_l v_max_2)
-          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
-        )
-      )
-    )
-  )
+  require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
   -- valid proposal pattern: repropose or extend (otherwise should be nil)
-  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2)
-        ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2)
-  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
-  require (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2) →
-    (ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
-    ∧ height1 ixn = height1 ixn_max_1 + 1
-    ∧ height2 ixn = height2 ixn_max_1 + 1)
+  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2 ∧ ixn_max_1 = ixn)
+        ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2
+           ∧ ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
+           ∧ height1 ixn = height1 ixn_max_1 + 1
+           ∧ height2 ixn = height2 ixn_max_1 + 1)
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 S := (S = prevote)
 }
