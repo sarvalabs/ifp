@@ -321,8 +321,8 @@ action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset
   proposed_nil op v p1 p2 := True
 }
 
--- Nodes respond to a proposal with a prevote (independently validates the proposal)
-action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+-- Node validates and prevotes for a reproposed interaction
+action respond_propose_repropose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -334,7 +334,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
-  -- Independent validation: node verifies quorum locks and proposal consistency
+  -- Independent validation: quorum locks and highest locks match reproposal
   require valid_lock_quorum_1 v p1 p2 c1 c2
   require valid_lock_quorum_2 v p1 p2 c1 c2
   let ixn_max_1 : interaction ← fresh
@@ -345,12 +345,38 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   let s_max_2 : Bool ← fresh
   let v_max_2 : view ← fresh
   require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
-  -- Valid proposal pattern: repropose or extend
-  require (s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2 ∧ ixn_max_1 = ixn)
-        ∨ (s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2
-           ∧ ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
-           ∧ height1 ixn = height1 ixn_max_1 + 1
-           ∧ height2 ixn = height2 ixn_max_1 + 1)
+  require s_max_1 = true ∧ s_max_2 = true ∧ ixn_max_1 = ixn_max_2 ∧ ixn_max_1 = ixn
+  prevoted_node n v p1 p2 ixn := True
+  cur_stage n v p1 p2 S := (S = prevote)
+}
+
+-- Node validates and prevotes for an extended interaction
+action respond_propose_extend (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) = {
+  require v ≠ tot_view.zero
+  require (p1 = p1_fixed ∧ p2 = p2_fixed)
+  require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
+  require cur_view n v
+  require cur_stage n v p1 p2 propose
+  require interactions ixn p1 p2
+  require ∃ (op : node), operator op v p1 p2 ∧ proposed op v p1 p2 ixn
+  require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
+  require ixn ≠ genesis
+  require ctx.member n c1 ∨ ctx.member n c2
+  -- Independent validation: quorum locks and highest locks match extension
+  require valid_lock_quorum_1 v p1 p2 c1 c2
+  require valid_lock_quorum_2 v p1 p2 c1 c2
+  let ixn_max_1 : interaction ← fresh
+  let s_max_1 : Bool ← fresh
+  let v_max_1 : view ← fresh
+  require is_highest_lock_1 v p1 p2 c1 ixn_max_1 s_max_1 v_max_1
+  let ixn_max_2 : interaction ← fresh
+  let s_max_2 : Bool ← fresh
+  let v_max_2 : view ← fresh
+  require is_highest_lock_2 v p1 p2 c2 ixn_max_2 s_max_2 v_max_2
+  require s_max_1 = false ∧ s_max_2 = false ∧ ixn_max_1 = ixn_max_2
+  require ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
+  require height1 ixn = height1 ixn_max_1 + 1 ∧ height2 ixn = height2 ixn_max_1 + 1
   prevoted_node n v p1 p2 ixn := True
   cur_stage n v p1 p2 S := (S = prevote)
 }
@@ -745,7 +771,7 @@ set_option veil.smt.translator "SmtTranslator.leanSmt"
 -- set_option veil.smt.reconstructProofs true
 -- set_option veil.vc_gen "transition"
 set_option veil.smt.seed 43
-set_option veil.smt.timeout 25
+-- set_option veil.smt.timeout 25
 -- set_option veil.smt.solver "z3"
 
 #time #check_invariants
