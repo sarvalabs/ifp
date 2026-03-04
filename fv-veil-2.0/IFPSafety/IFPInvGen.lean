@@ -64,6 +64,9 @@ relation proposed : node → view → participant → participant → interactio
 relation proposed_nil : node → view → participant → participant → Bool
 relation prevoted_operator : node → view → participant → participant → interaction → Bool
 relation precommitted_operator : node → view → participant → participant → interaction → Bool
+-- Highest lock computed by operator during propose (for each participant's context)
+relation highest_lock_in_propose_1 : node → view → participant → participant → interaction → stage → view → Bool
+relation highest_lock_in_propose_2 : node → view → participant → participant → interaction → stage → view → Bool
 
 -- Non-operator relations
 relation prepared_node : node → view → participant → participant → Bool
@@ -115,6 +118,8 @@ after_init {
   prepared_node N V P Q := false;
   prevoted_node N V P Q I := false;
   precommitted_node N V P Q I := false;
+  highest_lock_in_propose_1 N V P Q I S VL := false;
+  highest_lock_in_propose_2 N V P Q I S VL := false;
 }
 
 -- `Actions`
@@ -265,6 +270,9 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   )
   require ixn_max_1 ≠ ixn_propose
   require ¬ (ancestor ixn_max_1 ixn_propose ∨ ancestor ixn_propose ixn_max_1)
+  -- Record computed highest locks for respond_propose to read
+  highest_lock_in_propose_1 op v p1 p2 ixn_max_1 s_max_1 v_max_1 := true
+  highest_lock_in_propose_2 op v p1 p2 ixn_max_2 s_max_2 v_max_2 := true
   if (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2) then
     proposed op v p1 p2 ixn_max_1 := true;
   if (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2) then
@@ -276,7 +284,10 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
     proposed_nil op v p1 p2 := true;
 }
 
-action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) {
+action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset)
+    (ixn : interaction) (ixn_max_1 ixn_max_2 : interaction)
+    (s_max_1 s_max_2 : stage) (v_max_1 v_max_2 : view) {
+  -- Structural checks
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -288,6 +299,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
+  -- Quorum verification c1 (QC validity check)
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
       ∀ (n : node), (
@@ -304,6 +316,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
       ))
     )
   )
+  -- Quorum verification c2 (QC validity check)
   require ∃ (s2 : nodeset), (
     ctx.supermajority s2 c2 ∧ (
       ∀ (n : node), (
@@ -320,53 +333,44 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
       ))
     )
   )
-  let ixn_max_1 : interaction ← pick
-  let s_max_1 : stage ← pick
-  let v_max_1 : view ← pick
-  require ∃ (n_max_1 : node), (
-    ctx.member n_max_1 c1
+  -- Read operator's highest lock claims (replaces `let ← pick`)
+  require ∃ (op : node), operator op v p1 p2
+    ∧ highest_lock_in_propose_1 op v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ highest_lock_in_propose_2 op v p1 p2 ixn_max_2 s_max_2 v_max_2
+  -- Verify claim 1: backed by real data (∃ only, not nested with ∀)
+  require ∃ (n_max_1 : node), ctx.member n_max_1 c1
     ∧ interactions ixn_max_1 p1 p2
     ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
-    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height ixn_l < height ixn_max_1
-          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = prevote ∧ s_max_1 = precommit)
-          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
-          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
-        )
-      )
-    )
-  )
-  let ixn_max_2 : interaction ← pick
-  let s_max_2 : stage ← pick
-  let v_max_2 : view ← pick
-  require ∃ (n_max_2 : node), (
-    ctx.member n_max_2 c2
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1
+  -- Verify claim 1: maximal (separate ∀, not nested inside ∃)
+  require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+    (ctx.member n_l c1 ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) →
+    (interactions ixn_l p1 p2 ∧
+      (height ixn_l < height ixn_max_1
+       ∨ (height ixn_l = height ixn_max_1 ∧ s_l = prevote ∧ s_max_1 = precommit)
+       ∨ (height ixn_l = height ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
+       ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)))
+  -- Verify claim 2: backed by real data
+  require ∃ (n_max_2 : node), ctx.member n_max_2 c2
     ∧ interactions ixn_max_2 p1 p2
     ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
-    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
-        interactions ixn_l p1 p2 ∧
-        (
-          height ixn_l < height ixn_max_2
-          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = prevote ∧ s_max_2 = precommit)
-          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = s_max_2 ∧ tot_view.le v_l v_max_2)
-          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
-        )
-      )
-    )
-  )
-  -- valid proposal pattern: repropose or extend (otherwise should be nil)
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2
+  -- Verify claim 2: maximal
+  require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+    (ctx.member n_l c2 ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) →
+    (interactions ixn_l p1 p2 ∧
+      (height ixn_l < height ixn_max_2
+       ∨ (height ixn_l = height ixn_max_2 ∧ s_l = prevote ∧ s_max_2 = precommit)
+       ∨ (height ixn_l = height ixn_max_2 ∧ s_l = s_max_2 ∧ tot_view.le v_l v_max_2)
+       ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)))
+  -- Proposal validation: repropose or extend
   require (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2)
         ∨ (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2)
   require (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
   require (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2) →
     (ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
     ∧ height ixn = height ixn_max_1 + 1)
+  -- State updates
   prevoted_node n v p1 p2 ixn := true
   cur_stage n v p1 p2 S := decide $ (S = prevote)
 }
@@ -688,6 +692,40 @@ invariant [prevote_only_by_operator]
 
 invariant [precommit_only_by_operator]
   (¬ ctx.is_byz OP ∧ precommitted_operator OP V P Q I) → operator OP V P Q
+
+-- ####################################################################
+-- # Supporting Invariants for highest_lock_in_propose
+-- ####################################################################
+
+-- Only one highest lock record per operator per view per context
+invariant [highest_lock_in_propose_1_unique]
+  (ctx.is_byz OP ∧ highest_lock_in_propose_1 OP V p1_fixed p2_fixed IX1 S1 VL1
+  ∧ highest_lock_in_propose_1 OP V p1_fixed p2_fixed IX2 S2 VL2) → (IX1 = IX2 ∧ S1 = S2 ∧ VL1 = VL2)
+
+invariant [highest_lock_in_propose_2_unique]
+  (ctx.is_byz OP ∧ highest_lock_in_propose_2 OP V p1_fixed p2_fixed IX1 S1 VL1
+  ∧ highest_lock_in_propose_2 OP V p1_fixed p2_fixed IX2 S2 VL2) → (IX1 = IX2 ∧ S1 = S2 ∧ VL1 = VL2)
+
+-- -- Highest lock in propose implies a proposal or nil exists
+-- invariant [highest_lock_in_propose_implies_proposed_or_nil]
+--   (¬ ctx.is_byz OP ∧ highest_lock_in_propose_1 OP V p1_fixed p2_fixed IX S VL) →
+--   ((∃ (I : interaction), proposed OP V p1_fixed p2_fixed I) ∨ proposed_nil OP V p1_fixed p2_fixed)
+
+-- -- Recorded highest lock is backed by real sent_lock + locked (p1)
+-- invariant [highest_lock_in_propose_1_backed]
+--   (¬ ctx.is_byz OP ∧ highest_lock_in_propose_1 OP V p1_fixed p2_fixed IX S VL) →
+--   (∃ (n_max : node) (c1 : nodeset), ctx.member n_max c1 ∧ participant_context p1_fixed c1
+--     ∧ interactions IX p1_fixed p2_fixed
+--     ∧ sent_lock_in_prepare_1 n_max V p1_fixed p2_fixed IX S VL
+--     ∧ locked n_max p1_fixed IX S VL)
+
+-- -- Recorded highest lock is backed by real sent_lock + locked (p2)
+-- invariant [highest_lock_in_propose_2_backed]
+--   (¬ ctx.is_byz OP ∧ highest_lock_in_propose_2 OP V p1_fixed p2_fixed IX S VL) →
+--   (∃ (n_max : node) (c2 : nodeset), ctx.member n_max c2 ∧ participant_context p2_fixed c2
+--     ∧ interactions IX p1_fixed p2_fixed
+--     ∧ sent_lock_in_prepare_2 n_max V p1_fixed p2_fixed IX S VL
+--     ∧ locked n_max p2_fixed IX S VL)
 
 -- ####################################################################
 -- # Main Safety Property
