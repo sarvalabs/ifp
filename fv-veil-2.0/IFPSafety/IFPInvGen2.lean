@@ -117,7 +117,7 @@ after_init {
   precommitted_node N V P Q I := false;
 }
 
--- `Actions`
+-- -- `Actions`
 
 -- action set_view (v_cur v_next : view) {
 --   require ∀ (n : node), cur_view n v_cur
@@ -531,13 +531,7 @@ invariant [precommit_next_view_discovery]
      (∃ (m : node), (¬ ctx.is_byz m ∧ prepared_node m v2 p1_fixed p2_fixed)) ∧
      ixn_contexts i c1 c2 ∧
      i ≠ genesis ∧
-     -- il ≠ genesis ∧
      tot_view.zero ≠ v ∧
-     -- tot_view.lt v v2 ∧ -- Enforce v < v2 (next should imply this)
-     -- ¬ tot_view.lt v2 v ∧ -- No cycles
-     -- ¬ tot_view.lt v2 tot_view.zero ∧ -- v2 cannot be less than zero
-     -- ¬ ∃ (v_mid : view), (tot_view.lt v v_mid ∧ tot_view.lt v_mid v2) ∧ -- Rule out views between v and v2 (enforce consecutive)
-     -- ¬ tot_view.lt v tot_view.zero ∧ -- Ensure v is not before zero (zero is minimum)
      (∀ (n : node), (¬ ctx.is_byz n →
       ((ctx.member n c1 → locked n p1_fixed i precommit v ) ∧
        (ctx.member n c2 → locked n p2_fixed i precommit v) ∧
@@ -607,6 +601,13 @@ invariant [stage_neg_3]
 -- If not prepared, must be at prepare stage (contrapositive: past prepare → prepared)
 invariant [stage_init_prepare]
   (¬ prepared_node N V p1_fixed p2_fixed ∧ ¬ ctx.is_byz N) → cur_stage N V p1_fixed p2_fixed prepare
+
+-- At prepare stage: node hasn't prepared and hasn't sent any locks
+invariant [stage_neg_4]
+  (cur_stage N V p1_fixed p2_fixed prepare ∧ ¬ ctx.is_byz N) →
+    ¬ (prepared_node N V p1_fixed p2_fixed ∨
+       sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨
+       sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL)
 
 -- Genesis never enters the pipeline: never proposed, prevoted, or precommitted
 invariant [genesis_not_in_pipeline]
@@ -689,14 +690,30 @@ invariant [prevote_only_by_operator]
 invariant [precommit_only_by_operator]
   (¬ ctx.is_byz OP ∧ precommitted_operator OP V P Q I) → operator OP V P Q
 
+-- If a node is prepared and its current highest lock satisfies IsHighestLock,
+-- then the corresponding sent_lock_in_prepare entry exists.
+-- This connects prepared_node with sent_lock_in_prepare (both set atomically by respond_prepare).
+invariant [prepared_node_has_lock_sent_1]
+  (¬ ctx.is_byz N ∧ prepared_node N V p1_fixed p2_fixed ∧ V ≠ tot_view.zero ∧
+   locked N p1_fixed IL SL VL ∧
+   (∃ (c1 : nodeset), ctx.member N c1 ∧ participant_context p1_fixed c1) ∧
+   tot_view.lt VL V ∧
+   (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p1_fixed i2 s2 vl2) ∧
+   (SL = prevote → ¬ locked N p1_fixed IL precommit VL))
+  → sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL
+
+invariant [prepared_node_has_lock_sent_2]
+  (¬ ctx.is_byz N ∧ prepared_node N V p1_fixed p2_fixed ∧ V ≠ tot_view.zero ∧
+   locked N p2_fixed IL SL VL ∧
+   (∃ (c2 : nodeset), ctx.member N c2 ∧ participant_context p2_fixed c2) ∧
+   tot_view.lt VL V ∧
+   (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p2_fixed i2 s2 vl2) ∧
+   (SL = prevote → ¬ locked N p2_fixed IL precommit VL))
+  → sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL
+
 -- ####################################################################
 -- # Main Safety Property
 -- ####################################################################
-
--- If two nodes decide two ixns, then one is an ancestor of the other
--- (commented out: working on supporting invariants first)
--- safety [main_safety]
---   (¬ ctx.ctx.is_byz N1 ∧ ¬ ctx.ctx.is_byz N2 ∧ decided N1 V1 P1 P2 I1 ∧ decided N2 V2 P1 P2 I2) → (ancestor I1 I2 ∨ ancestor I2 I1)
 
 -- Placeholder safety
 safety [main_safety]
@@ -705,91 +722,30 @@ safety [main_safety]
 #gen_spec
 
 set_option veil.printCounterexamples true
--- set_option veil.smt.model.minimize true
--- set_option veil.smt.translator "SmtTranslator.leanSmt"
--- -- set_option veil.smt.reconstructProofs true
--- -- set_option veil.vc_gen "transition"
--- set_option veil.smt.seed 44
--- set_option veil.smt.timeout 10
--- set_option veil.smt.solver "z3"
 
+-- ####################################################################
+-- # Manual Proof: respond_prepare × precommit_next_view_discovery
+-- ####################################################################
+-- The default automation fails because `generalize` on `locked` breaks the
+-- `Decidable` instances inside the `decide` expressions in `sent_lock_in_prepare_1/2`.
+-- `veil_human` handles this via `__veil_neutralize_decidable_inst`.
+--
+-- Proof sketch:
+-- Case A (quantified node ≠ n or view ≠ v): if-then-else falls to else branch,
+--   use pre-state invariant directly.
+-- Case B (quantified node = n and view = v): decide(...) must evaluate to true.
+--   1. locked n p1_fixed i precommit v_inv: from invariant precondition (node in c1)
+--   2. n ∈ c1 with participant_context p1_fixed c1: from ixn_contexts
+--   3. v_inv < v: from next_def (next v_inv v → lt v_inv v)
+--   4. No locks between v_inv and v: next_def gives ∀ z, lt v_inv z → le v z,
+--      combined with stage_neg_2 (prepare stage → no locks at v) and
+--      locked_only_if_prepared + prepared_only_at_cur_or_past_view (no locks at v' > v)
+--   5. precommit ≠ prevote: vacuously satisfies the prevote→¬precommit condition
 
-  -- @[invProof]
-  -- theorem respond_prevote_tr_unique_lock_interaction_per_view :
-  --     ∀ (st st' : @State view participant node interaction nodeset stage ctx.ctx.is_byz),
-  --       (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-  --               node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-  --               stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).assumptions
-  --           st →
-  --         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-  --                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-  --                 stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).inv
-  --             st →
-  --           (@IFPProtocol.respond_prevote.tr view view_dec view_ne participant participant_dec
-  --                 participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-  --                 nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx)
-  --               st st' →
-  --             (@IFPProtocol.unique_lock_interaction_per_view view view_dec view_ne participant
-  --                 participant_dec participant_ne node node_dec node_ne interaction interaction_dec
-  --                 interaction_ne nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz
-  --                 tot_view ctx)
-  --               st' :=
-  --   by
-  --   ((unhygienic intros);
-  --     solve_clause[IFPProtocol.respond_prevote.tr]IFPProtocol.unique_lock_interaction_per_view)
+-- @[invProof]
+-- theorem respond_prepare_precommit_next_view_discovery : by
+-- --   sorry
 
 #time #check_invariants
-
-
-  -- Root cause: leanSmt loses the WP substitution for cur_stage.
-  -- The SMT query sees pre-state cur_stage instead of ite(N=n∧V=v, S=commit, cur_stage...).
-  -- leanAuto encodes function updates correctly; cvc5 can then close the goal.
-  -- set_option veil.smt.translator "SmtTranslator.leanAuto" in
-  -- @[invProof]
-  -- theorem respond_precommit_stage_neg_1 :
-  --     ∀ (st : @State view participant node interaction nodeset stage ctx.ctx.is_byz),
-  --       ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset)
-  --         (ixn : interaction),
-  --         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-  --                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
-  --                 stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).assumptions
-  --             st →
-  --           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
-  --                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec
-  --                   nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).inv
-  --               st →
-  --             (@IFPProtocol.respond_precommit.ext view view_dec view_ne participant participant_dec
-  --                 participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-  --                 nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx n v p1
-  --                 p2 c1 c2 ixn)
-  --               st fun _ (st' : @State view participant node interaction nodeset stage ctx.ctx.is_byz) =>
-  --               @IFPProtocol.stage_neg_1 view view_dec view_ne participant participant_dec
-  --                 participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
-  --                 nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx st' :=
-  --   by solve_wp_clause IFPProtocol.respond_precommit.ext IFPProtocol.stage_neg_1
-
-
-
---   @[invProof]
---   theorem respond_propose_tr_stage_2 :
---       ∀ (st st' : @State view participant node interaction nodeset stage ctx.ctx.is_byz),
---         (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                 node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                 stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).assumptions
---             st →
---           (@System view view_dec view_ne participant participant_dec participant_ne node node_dec
---                   node_ne interaction interaction_dec interaction_ne nodeset nodeset_dec nodeset_ne
---                   stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx).inv
---               st →
---             (@IFPProtocol.respond_propose.tr view view_dec view_ne participant participant_dec
---                   participant_ne node node_dec node_ne interaction interaction_dec interaction_ne
---                   nodeset nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx)
---                 st st' →
---               (@IFPProtocol.stage_2 view view_dec view_ne participant participant_dec participant_ne
---                   node node_dec node_ne interaction interaction_dec interaction_ne nodeset
---                   nodeset_dec nodeset_ne stage stage_dec stage_ne ctx.ctx.is_byz tot_view ctx)
---                 st' :=
---     by ((unhygienic intros); solve_clause[IFPProtocol.respond_propose.tr]IFPProtocol.stage_2)
-
 
 end IFPProtocol
