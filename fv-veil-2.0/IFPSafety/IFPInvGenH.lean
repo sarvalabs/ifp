@@ -139,82 +139,80 @@ after_init {
 -- # Actions
 -- ####################################################################
 
-action set_view (v_cur v_next : view) {
-  require ∀ (n : node), cur_view n v_cur
-  require tot_view.next v_cur v_next
-  cur_view N V := decide $ (V = v_next)
-  -- No ghost updates: no locks change during view transition
-}
+-- action set_view (v_cur v_next : view) {
+--   require ∀ (n : node), cur_view n v_cur
+--   require tot_view.next v_cur v_next
+--   cur_view N V := decide $ (V = v_next)
+--   -- No ghost updates: no locks change during view transition
+-- }
 
-action pick_operator (op : node) (v : view) (p1 p2 : participant) {
-  require v ≠ tot_view.zero
-  require (p1 = p1_fixed ∧ p2 = p2_fixed)
-  require p1 ≠ p2
-  require cur_view op v
-  require ∃ (c1 : nodeset), participant_context p1 c1 ∧ ctx.member op c1
-  require ∀ (n : node), ¬ operator n v p1 p2
-  operator op v p1 p2 := true
-  -- No ghost updates: no locks change
-}
+-- action pick_operator (op : node) (v : view) (p1 p2 : participant) {
+--   require v ≠ tot_view.zero
+--   require (p1 = p1_fixed ∧ p2 = p2_fixed)
+--   require p1 ≠ p2
+--   require cur_view op v
+--   require ∃ (c1 : nodeset), participant_context p1 c1 ∧ ctx.member op c1
+--   require ∀ (n : node), ¬ operator n v p1 p2
+--   operator op v p1 p2 := true
+--   -- No ghost updates: no locks change
+-- }
 
-action operator_prepare (op : node) (v : view) (p1 p2 : participant) {
-  require v ≠ tot_view.zero
-  require (p1 = p1_fixed ∧ p2 = p2_fixed)
-  require p1 ≠ p2
-  require cur_view op v
-  require cur_stage op v p1 p2 prepare
-  require operator op v p1 p2
-  require ∃ (c1 c2 : nodeset), ((ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
-  require ¬ prepared_operator op v p1 p2
-  require ∃ (i : interaction), interactions i p1 p2
-  prepared_operator op v p1 p2 := true
-  -- No ghost updates: no locks change
-}
+-- action operator_prepare (op : node) (v : view) (p1 p2 : participant) {
+--   require v ≠ tot_view.zero
+--   require (p1 = p1_fixed ∧ p2 = p2_fixed)
+--   require p1 ≠ p2
+--   require cur_view op v
+--   require cur_stage op v p1 p2 prepare
+--   require operator op v p1 p2
+--   require ∃ (c1 c2 : nodeset), ((ctx.member op c1 ∨ ctx.member op c2) ∧ participant_context p1 c1 ∧ participant_context p2 c2)
+--   require ¬ prepared_operator op v p1 p2
+--   require ∃ (i : interaction), interactions i p1 p2
+--   prepared_operator op v p1 p2 := true
+--   -- No ghost updates: no locks change
+-- }
 
-action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
+-- action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
+--   require v ≠ tot_view.zero
+--   require (p1 = p1_fixed ∧ p2 = p2_fixed)
+--   require p1 ≠ p2
+--   require participant_context p1 c1 ∧ participant_context p2 c2
+--   require cur_view n v
+--   require cur_stage n v p1 p2 prepare
+--   require ∀ (p q : participant), ¬ (prepared_node n v p p2 ∨ prepared_node n v p1 q)
+--   require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
+--   require ctx.member n c1 ∨ ctx.member n c2
+--   prepared_node n v p1 p2 := true
+--   sent_lock_in_prepare_1 n v p1 p2 IL SL VL := decide $
+--     (locked n p1 IL SL VL ∧
+--      ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
+--      tot_view.lt VL v ∧
+--      (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
+--      (SL = prevote → ¬ locked n p1 IL precommit VL)
+--      )
+--   sent_lock_in_prepare_2 n v p1 p2 IL SL VL := decide $
+--     (locked n p2 IL SL VL ∧
+--      ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
+--      tot_view.lt VL v ∧
+--      (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
+--      (SL = prevote → ¬ locked n p2 IL precommit VL)
+--      )
+--   cur_stage n v p1 p2 S := decide $ (S = propose)
+--   -- No ghost updates: no locks change (sent_lock_in_prepare reads locks but doesn't create new ones)
+-- }
+
+-- Repropose: both highest locks are prevote locks for the same interaction
+action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
   require participant_context p1 c1 ∧ participant_context p2 c2
-  require cur_view n v
-  require cur_stage n v p1 p2 prepare
-  require ∀ (p q : participant), ¬ (prepared_node n v p p2 ∨ prepared_node n v p1 q)
-  require ∃ (op : node), (operator op v p1 p2 ∧ prepared_operator op v p1 p2)
-  require ctx.member n c1 ∨ ctx.member n c2
-  prepared_node n v p1 p2 := true
-  sent_lock_in_prepare_1 n v p1 p2 IL SL VL := decide $
-    (locked n p1 IL SL VL ∧
-     ∃ (c1 : nodeset), (ctx.member n c1 ∧ participant_context p1 c1) ∧
-     tot_view.lt VL v ∧
-     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p1 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p1 IL precommit VL)
-     )
-  sent_lock_in_prepare_2 n v p1 p2 IL SL VL := decide $
-    (locked n p2 IL SL VL ∧
-     ∃ (c2 : nodeset), (ctx.member n c2 ∧ participant_context p2 c2) ∧
-     tot_view.lt VL v ∧
-     (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n p2 i2 s2 vl2) ∧
-     (SL = prevote → ¬ locked n p2 IL precommit VL)
-     )
-  cur_stage n v p1 p2 S := decide $ (S = propose)
-  -- No ghost updates: no locks change (sent_lock_in_prepare reads locks but doesn't create new ones)
-}
-
-action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) {
-  require v ≠ tot_view.zero
-  require (p1 = p1_fixed ∧ p2 = p2_fixed)
-  require p1 ≠ p2
-  require participant_context p1 c1 ∧ participant_context p2 c2
-  require ∀ (j : interaction), ¬ parent j ixn_propose
-  require ∀ (j : interaction), ¬ parent ixn_propose j
-  require height ixn_propose = 0
   require cur_view op v
   require operator op v p1 p2
   require ctx.member op c1 ∨ ctx.member op c2
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 propose
-  require ixn_propose ≠ genesis;
   require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
       ∀ (n : node), (
@@ -287,18 +285,195 @@ action operator_propose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
       )
     )
   )
+  require s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2
+  proposed op v p1 p2 ixn_max_1 := true;
+}
+
+-- Extend: both highest locks are precommit locks for the same interaction
+action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) {
+  require v ≠ tot_view.zero
+  require (p1 = p1_fixed ∧ p2 = p2_fixed)
+  require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
+  require ∀ (j : interaction), ¬ (parent j ixn_propose ∨ parent ixn_propose j)
+  require ∀ (j : interaction), (ixn_propose ≠ j → ¬ (ancestor j ixn_propose ∨ ancestor ixn_propose j))
+  require height ixn_propose = 0
+  require cur_view op v
+  require operator op v p1 p2
+  require ctx.member op c1 ∨ ctx.member op c2
+  require prepared_operator op v p1 p2
+  require cur_stage op v p1 p2 propose
+  require ixn_propose ≠ genesis
+  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
+  require ∃ (s1 : nodeset), (
+    ctx.supermajority s1 c1 ∧ (
+      ∀ (n : node), (
+        ctx.member n s1 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  require ∃ (s2 : nodeset), (
+    ctx.supermajority s2 c2 ∧ (
+      ∀ (n : node), (
+        ctx.member n s2 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  let ixn_max_1 : interaction ← pick
+  let s_max_1 : stage ← pick
+  let v_max_1 : view ← pick
+  require ∃ (n_max_1 : node), (
+    ctx.member n_max_1 c1
+    ∧ interactions ixn_max_1 p1 p2
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_1
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = prevote ∧ s_max_1 = precommit)
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
+          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
+        )
+      )
+    )
+  )
+  let ixn_max_2 : interaction ← pick
+  let s_max_2 : stage ← pick
+  let v_max_2 : view ← pick
+  require ∃ (n_max_2 : node), (
+    ctx.member n_max_2 c2
+    ∧ interactions ixn_max_2 p1 p2
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_2
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = prevote ∧ s_max_2 = precommit)
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_2)
+          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
+        )
+      )
+    )
+  )
+  require s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2
   require ixn_max_1 ≠ ixn_propose
   require ¬ (ancestor ixn_max_1 ixn_propose ∨ ancestor ixn_propose ixn_max_1)
-  if (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2) then
-    proposed op v p1 p2 ixn_max_1 := true;
-  if (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2) then
-    parent ixn_max_1 ixn_propose := decide $ (ixn_max_1 ≠ ixn_propose);
-    ancestor A ixn_propose := decide $ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose;
-    proposed op v p1 p2 ixn_propose := true;
-    height ixn_propose := height ixn_max_1 + 1;
-  if (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 ≠ ixn_max_2) then
-    proposed_nil op v p1 p2 := true;
-  -- No ghost updates: no locks change. ancestor extends but no new locks exist on ixn_propose.
+  parent ixn_max_1 ixn_propose := decide $ (ixn_max_1 ≠ ixn_propose);
+  ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose);
+  proposed op v p1 p2 ixn_propose := true;
+  height ixn_propose := height ixn_max_1 + 1;
+}
+
+-- Nil proposal: both highest locks are prevote locks for different interactions
+action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
+  require v ≠ tot_view.zero
+  require (p1 = p1_fixed ∧ p2 = p2_fixed)
+  require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
+  require cur_view op v
+  require operator op v p1 p2
+  require ctx.member op c1 ∨ ctx.member op c2
+  require prepared_operator op v p1 p2
+  require cur_stage op v p1 p2 propose
+  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ¬ proposed_nil op v p1 p2
+  require ∃ (s1 : nodeset), (
+    ctx.supermajority s1 c1 ∧ (
+      ∀ (n : node), (
+        ctx.member n s1 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  require ∃ (s2 : nodeset), (
+    ctx.supermajority s2 c2 ∧ (
+      ∀ (n : node), (
+        ctx.member n s2 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  let ixn_max_1 : interaction ← pick
+  let s_max_1 : stage ← pick
+  let v_max_1 : view ← pick
+  require ∃ (n_max_1 : node), (
+    ctx.member n_max_1 c1
+    ∧ interactions ixn_max_1 p1 p2
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_1
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = prevote ∧ s_max_1 = precommit)
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
+          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
+        )
+      )
+    )
+  )
+  let ixn_max_2 : interaction ← pick
+  let s_max_2 : stage ← pick
+  let v_max_2 : view ← pick
+  require ∃ (n_max_2 : node), (
+    ctx.member n_max_2 c2
+    ∧ interactions ixn_max_2 p1 p2
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_2
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = prevote ∧ s_max_2 = precommit)
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_2)
+          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
+        )
+      )
+    )
+  )
+  require s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 ≠ ixn_max_2
+  proposed_nil op v p1 p2 := true;
 }
 
 action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) {
@@ -665,6 +840,9 @@ invariant [proposed_only_by_operator]
 invariant [genesis_lock_only_at_zero]
   (locked N P genesis S V) → (V = tot_view.zero ∧ S = precommit)
 
+invariant [lock_stage_valid]
+  (locked N P I S V) → (P = p1_fixed ∨ P = p2_fixed) → (S = prevote ∨ S = precommit)
+
 -- Non-genesis locks require preparation at the same view
 invariant [locked_only_if_prepared]
   (¬ ctx.is_byz N ∧ (locked N p1_fixed I S V ∨ locked N p2_fixed I S V) ∧ V ≠ tot_view.zero ∧ I ≠ genesis) → prepared_node N V p1_fixed p2_fixed
@@ -785,6 +963,7 @@ invariant [prepared_node_has_lock_sent_2]
 safety [main_safety]
   true
 
+set_option maxHeartbeats 100000000
 #gen_spec
 
 set_option veil.printCounterexamples true
