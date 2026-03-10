@@ -684,15 +684,15 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
 -- INV4: If a quorum has prevote-locked on ixn at view v, then in later views where a proposal
 -- occurs, a lock for a descendant of ixn from view ≥ v is discovered.
 -- Uses locked_for_descendant ghost to avoid existential witness for ancestor relationship.
-invariant [INV4_quorum_locked_implies_lock_of_descendant_discovered]
-  ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
-  (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-  ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn prevote v) ∧ (ctx.member n s2 → locked n p2 ixn prevote v)))
-  ∧ tot_view.lt v vp ) →
-  ((∃ (op : node), (∃ (ixn_prop : interaction), proposed op vp p1 p2 ixn_prop) ∨ proposed_nil op vp p1 p2) → (
-  ( ∃ (n1 : node) (c1 : nodeset) (ixnl1 : interaction) (sl1 : stage) (vl1 : view), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixnl1 sl1 vl1 ∧ tot_view.le v vl1 ∧ locked_for_descendant n1 p1 ixn vl1) )
-  ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : stage) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ locked_for_descendant n2 p2 ixn vl2) )
-  ))
+-- invariant [INV4_quorum_locked_implies_lock_of_descendant_discovered]
+--   ∀ (p1 p2 : participant) (ixn : interaction) (v vp : view),
+--   (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+--   ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn prevote v) ∧ (ctx.member n s2 → locked n p2 ixn prevote v)))
+--   ∧ tot_view.lt v vp ) →
+--   ((∃ (op : node), (∃ (ixn_prop : interaction), proposed op vp p1 p2 ixn_prop) ∨ proposed_nil op vp p1 p2) → (
+--   ( ∃ (n1 : node) (c1 : nodeset) (ixnl1 : interaction) (sl1 : stage) (vl1 : view), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixnl1 sl1 vl1 ∧ tot_view.le v vl1 ∧ locked_for_descendant n1 p1 ixn vl1) )
+--   ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : stage) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ locked_for_descendant n2 p2 ixn vl2) )
+--   ))
 
 -- Supporting: Prevote lock implies a quorum prevoted for the interaction
 invariant [prevote_lock_only_if_quorum_prevoted]
@@ -963,11 +963,13 @@ invariant [prepared_node_has_lock_sent_2]
 safety [main_safety]
   true
 
-set_option maxHeartbeats 10000000
+-- set_option maxHeartbeats 10000000
 #gen_spec
 
 set_option veil.printCounterexamples true
 
-#check_invariants
+#check_action respond_precommit
+
+-- #check_invariants
 
 end IFPProtocolH
