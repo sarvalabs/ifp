@@ -963,7 +963,7 @@ invariant [prepared_node_has_lock_sent_2]
 safety [main_safety]
   true
 
-set_option maxHeartbeats 100000000
+set_option maxHeartbeats 10000000
 #gen_spec
 
 set_option veil.printCounterexamples true
