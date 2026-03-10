@@ -967,6 +967,7 @@ safety [main_safety]
 #gen_spec
 
 set_option veil.printCounterexamples true
+set_option veil.smt.timeout 10
 
 #check_action respond_precommit
 
