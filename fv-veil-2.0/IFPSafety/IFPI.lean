@@ -790,6 +790,26 @@ invariant [precommit_next_view_discovery]
   )
 
 -- ####################################################################
+-- # Freshness Invariants (no state on unparented interactions)
+-- ####################################################################
+-- These ensure that a "fresh" interaction (no parent, ≠ genesis) has no
+-- pre-existing locks, proposals, or decisions. Required so that when
+-- propose_extend expands the ancestor relation for ixn_propose, the
+-- _fwd ghost invariants hold vacuously (the antecedent is false).
+
+-- A locked interaction must have a parent (unless it's genesis)
+invariant [no_lock_without_parent]
+  (locked N P I S V ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
+
+-- A proposed interaction must have a parent (unless it's genesis)
+invariant [no_proposal_without_parent]
+  (proposed OP V p1_fixed p2_fixed I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
+
+-- A decided interaction must have a parent (unless it's genesis)
+invariant [no_decide_without_parent]
+  (decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
+
+-- ####################################################################
 -- # Ghost Consistency Invariants (locked)
 -- ####################################################################
 
