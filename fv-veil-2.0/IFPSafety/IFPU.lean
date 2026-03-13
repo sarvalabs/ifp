@@ -474,7 +474,6 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
 }
 
 
-set_option veil.smt.timeout 200
 
 -- ####################################################################
 -- # Core Invariants
@@ -660,6 +659,31 @@ invariant [decided_implies_proposed]
   (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
     ∃ (op : node), proposed op V p1_fixed p2_fixed I
 
+-- If J is decided and has parent I, then I was decided at an earlier view
+invariant [committed_implies_parent_committed]
+  (decided M V p1_fixed p2_fixed J ∧ parent I J ∧ J ≠ genesis) →
+    ∃ (u : view) (n : node), tot_view.lt u V ∧ decided n u p1_fixed p2_fixed I
+
+-- Any non-genesis decision implies genesis was decided earlier
+invariant [genesis_decided_first]
+  (decided N V p1_fixed p2_fixed J ∧ J ≠ genesis) →
+    ∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u p1_fixed p2_fixed genesis
+
+-- A decided non-genesis interaction requires the deciding node to hold a precommit lock
+invariant [decision_requires_precommit_lock]
+  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
+    (∃ (c1 c2 : nodeset), participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
+      (ctx.member N c1 → locked N p1_fixed I precommit V) ∧
+      (ctx.member N c2 → locked N p2_fixed I precommit V))
+
+-- Decisions only at past or current view
+invariant [decisions_not_from_higher_views]
+  (cur_view N V ∧ decided N U p1_fixed p2_fixed I) → tot_view.le U V
+
+-- Genesis was decided at view zero
+invariant [genesis_view_zero]
+  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ tot_view.zero = V) → I = genesis
+
 -- ####################################################################
 -- # Ancestor Structural Invariants
 -- ####################################################################
@@ -700,6 +724,26 @@ invariant [ancestor_def_fwd]
 
 invariant [ancestor_def_bwd]
   (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J) → ancestor I J
+
+-- Each interaction has at most one parent
+invariant [unique_parent]
+  parent J I ∧ parent K I → J = K
+
+-- No interaction is its own parent
+invariant [parent_irreflexive]
+  ¬ parent I I
+
+-- Genesis has no parent
+invariant [genesis_has_no_parent]
+  ¬ parent I genesis
+
+-- Height 0 among decided interactions ↔ genesis
+invariant [genesis_height_zero]
+  (height I = 0 ∧ (∃ (v : view) (n : node), decided n v p1_fixed p2_fixed I)) ↔ I = genesis
+
+-- Parent edges only exist because of propose_extend
+invariant [parent_only_if_proposed]
+  parent I J ∧ J ≠ genesis → ∃ (n : node) (v : view), proposed n v p1_fixed p2_fixed J
 
 
 -- ####################################################################
@@ -904,6 +948,101 @@ invariant [prepared_node_has_lock_sent_2]
    (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p2_fixed i2 s2 vl2) ∧
    (SL = prevote → ¬ locked N p2_fixed IL precommit VL))
   → sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL
+
+-- ####################################################################
+-- # Operator/Quorum Invariants
+-- ####################################################################
+
+-- Operator prevote implies a quorum prevoted
+invariant [prevote_operator_only_if_quorum_prevoted]
+  ¬ ctx.is_byz N → (prevoted_operator N V p1_fixed p2_fixed I →
+    (∃ (c1 c2 s1 s2 : nodeset), participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
+      interactions I p1_fixed p2_fixed ∧
+      ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+      ∀ (NC : node), (ctx.member NC s1 ∨ ctx.member NC s2) → prevoted_node NC V p1_fixed p2_fixed I))
+
+-- Precommit operator implies a quorum precommitted
+invariant [precommit_operator_only_if_quorum_precommit]
+  ¬ ctx.is_byz OP → (precommitted_operator OP V p1_fixed p2_fixed I →
+    (∃ (c1 c2 s1 s2 : nodeset), participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
+      interactions I p1_fixed p2_fixed ∧
+      ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+      ∀ (n : node), (ctx.member n s1 ∨ ctx.member n s2) → precommitted_node n V p1_fixed p2_fixed I))
+
+-- Decision implies a quorum precommitted
+invariant [decide_only_if_quorum_precommit]
+  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
+    (∃ (c1 c2 s1 s2 : nodeset), participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
+      interactions I p1_fixed p2_fixed ∧
+      ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
+      ∀ (n : node), (ctx.member n s1 ∨ ctx.member n s2) → precommitted_node n V p1_fixed p2_fixed I)
+
+-- Operator must be from a participant context
+invariant [operator_from_context]
+  ¬ ctx.is_byz OP → (operator OP V P Q → ∃ (c : nodeset), participant_context P c ∧ ctx.member OP c)
+
+-- ####################################################################
+-- # Uniqueness Invariants
+-- ####################################################################
+
+-- At most one sent lock per node per view per context (c1)
+invariant [unique_lock_sent_1]
+  (¬ ctx.is_byz N ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL1 SL1 VL1 ∧ sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL2 SL2 VL2) →
+    (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
+
+-- At most one sent lock per node per view per context (c2)
+invariant [unique_lock_sent_2]
+  (¬ ctx.is_byz N ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL1 SL1 VL1 ∧ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL2 SL2 VL2) →
+    (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
+
+-- A node can only precommit one interaction per view
+invariant [unique_precommit_nodes]
+  (¬ ctx.is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I ∧ precommitted_node N V p1_fixed p2_fixed J) → I = J
+
+-- An operator can only prevote one interaction per view
+invariant [unique_prevote_operator]
+  (¬ ctx.is_byz OP ∧ prevoted_operator OP V p1_fixed p2_fixed I ∧ prevoted_operator OP V p1_fixed p2_fixed J) → I = J
+
+-- An operator can only precommit one interaction per view
+invariant [unique_precommit_operator]
+  (¬ ctx.is_byz OP ∧ precommitted_operator OP V p1_fixed p2_fixed I ∧ precommitted_operator OP V p1_fixed p2_fixed J) → I = J
+
+-- ####################################################################
+-- # Additional Supporting Invariants
+-- ####################################################################
+
+-- Sent lock implies prepared
+invariant [sent_lock_only_if_prepare]
+  (¬ ctx.is_byz N ∧ (sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL)) →
+    prepared_node N V p1_fixed p2_fixed
+
+-- Propose stage implies a sent lock exists
+invariant [stage_1]
+  (cur_stage N V p1_fixed p2_fixed propose ∧ ¬ ctx.is_byz N) →
+    (∃ (il : interaction) (sl : stage) (vl : view), (sent_lock_in_prepare_1 N V p1_fixed p2_fixed il sl vl ∨ sent_lock_in_prepare_2 N V p1_fixed p2_fixed il sl vl))
+
+-- Precommit stage implies a prevote lock exists
+invariant [stage_3]
+  (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ ctx.is_byz N) →
+    (∃ (i : interaction), (prevoted_operator N V p1_fixed p2_fixed i ∨ precommitted_node N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i prevote V ∨ locked N p2_fixed i prevote V))
+
+-- Commit stage implies a precommit lock exists
+invariant [stage_4]
+  (cur_stage N V p1_fixed p2_fixed commit ∧ ¬ ctx.is_byz N) →
+    (∃ (i : interaction), (precommitted_operator N V p1_fixed p2_fixed i ∨ decided N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i precommit V ∨ locked N p2_fixed i precommit V))
+
+-- Prepared operator not at view zero
+invariant [prepared_operator_not_at_zero]
+  (prepared_operator OP V p1_fixed p2_fixed ∧ ¬ ctx.is_byz OP) → V ≠ tot_view.zero
+
+-- Proposal implies operator prepared
+invariant [propose_only_if_operator_prepare]
+  (¬ ctx.is_byz N ∧ proposed N V p1_fixed p2_fixed I) → prepared_operator N V p1_fixed p2_fixed
+
+-- Proposal requires a locked parent (for extend proposals)
+invariant [propose_only_if_parent_locked]
+  (¬ ctx.is_byz OP ∧ proposed OP V p1_fixed p2_fixed J ∧ parent I J) →
+    (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ (locked n p1_fixed I s u ∨ locked n p2_fixed I s u))
 
 -- ####################################################################
 -- # Main Safety Property
