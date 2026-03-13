@@ -1,11 +1,13 @@
--- IFPInvGenH: IFP model with HotStuff-style ghost relations
--- Ghost relations `locked_at_view` and `locked_for_descendant` are regular
--- state relations maintained in actions, NOT computed abbreviations.
--- This avoids quantifier alternation in SMT queries for INV-4.
+-- IFPI: IFP model based on IFPH with two additional ghost relations:
+-- 1. proposed_for_descendant: "at view V, the proposed interaction is a descendant of A"
+-- 2. decided_for_descendant: "node N decided a descendant of A at view V"
+-- These bridge the two remaining gaps in the safety proof chain:
+--   Gap 1: proposal extends locked descendants (via proposed_for_descendant)
+--   Gap 2: decision inherits proposal ancestry (via decided_for_descendant)
 
 import Veil
 
-veil module IFPProtocolH
+veil module IFPProtocolI
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
@@ -92,6 +94,14 @@ relation locked_at_view : node → participant → view → Bool
 -- Analogous to HotStuff's votedb(N, B, H).
 relation locked_for_descendant : node → participant → interaction → view → Bool
 
+-- "At view V, the proposed interaction is a descendant of A"
+-- i.e., ∃ op I, proposed op V p1_fixed p2_fixed I ∧ ancestor A I
+relation proposed_for_descendant : view → interaction → Bool
+
+-- "Node N decided a descendant of A at view V"
+-- i.e., ∃ I, decided N V p1_fixed p2_fixed I ∧ ancestor A I
+relation decided_for_descendant : node → interaction → view → Bool
+
 
 #gen_state
 
@@ -128,11 +138,14 @@ after_init {
   prepared_node N V P Q := false;
   prevoted_node N V P Q I := false;
   precommitted_node N V P Q I := false;
-  -- Ghost init: matches initial locked state
+  -- Ghost init (locked): matches initial locked state
   -- Initially: locked N P genesis precommit tot_view.zero for P ∈ {p1_fixed, p2_fixed}
   -- Initially: ancestor A genesis iff A = genesis
   locked_at_view N P V := decide $ (V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
   locked_for_descendant N P A V := decide $ (A = genesis ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
+  -- Ghost init (proposed/decided)
+  proposed_for_descendant V A := false;
+  decided_for_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
 }
 
 -- ####################################################################
@@ -287,6 +300,8 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
   )
   require s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2
   proposed op v p1 p2 ixn_max_1 := true;
+  -- GHOST: proposed interaction is a descendant of A iff A is an ancestor of ixn_max_1
+  proposed_for_descendant v A := decide $ (proposed_for_descendant v A ∨ ancestor A ixn_max_1);
 }
 
 -- Extend: both highest locks are precommit locks for the same interaction
@@ -385,6 +400,9 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose);
   proposed op v p1 p2 ixn_propose := true;
   height ixn_propose := height ixn_max_1 + 1;
+  -- GHOST: parallel-safe version — expand ancestor post-state for ixn_propose
+  proposed_for_descendant v A := decide $ (proposed_for_descendant v A
+    ∨ ancestor A ixn_propose ∨ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose);
 }
 
 -- Nil proposal: both highest locks are prevote locks for different interactions
@@ -654,6 +672,8 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
     locked_at_view n p2 v := true;
     locked_for_descendant n p2 A v := decide $ (locked_for_descendant n p2 A v ∨ ancestor A ixn);
   decided n v p1 p2 ixn := true
+  -- GHOST: node decided a descendant of A at view v
+  decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
   cur_stage n v p1 p2 S := decide $ (S = commit)
 }
 
@@ -770,7 +790,7 @@ invariant [precommit_next_view_discovery]
   )
 
 -- ####################################################################
--- # Ghost Consistency Invariants
+-- # Ghost Consistency Invariants (locked)
 -- ####################################################################
 
 -- locked_at_view forward: any lock implies the view-level ghost
@@ -793,6 +813,28 @@ invariant [locked_for_descendant_bwd]
     ∃ (I : interaction) (S : stage), locked N P I S V ∧ ancestor A I
 
 -- ####################################################################
+-- # Ghost Consistency Invariants (proposed/decided)
+-- ####################################################################
+
+-- proposed_for_descendant forward: proposed + ancestry → ghost
+invariant [proposed_for_descendant_fwd]
+  (proposed OP V p1_fixed p2_fixed I ∧ ancestor A I) → proposed_for_descendant V A
+
+-- proposed_for_descendant backward: ghost → ∃ proposed descendant
+invariant [proposed_for_descendant_bwd]
+  proposed_for_descendant V A →
+    ∃ (OP : node) (I : interaction), proposed OP V p1_fixed p2_fixed I ∧ ancestor A I
+
+-- decided_for_descendant forward: decided + ancestry → ghost
+invariant [decided_for_descendant_fwd]
+  (decided N V p1_fixed p2_fixed I ∧ ancestor A I) → decided_for_descendant N A V
+
+-- decided_for_descendant backward (honest only): ghost → ∃ decided descendant
+invariant [decided_for_descendant_bwd]
+  (¬ ctx.is_byz N ∧ decided_for_descendant N A V) →
+    ∃ (I : interaction), decided N V p1_fixed p2_fixed I ∧ ancestor A I
+
+-- ####################################################################
 -- # Lock Descendant Monotonicity (core ghost invariant)
 -- ####################################################################
 
@@ -805,6 +847,56 @@ invariant [locked_for_descendant_bwd]
 invariant [lock_descendant_monotone]
   (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ locked N P I S U ∧
    (P = p1_fixed ∨ P = p2_fixed) ∧ tot_view.le V U) → ancestor A I
+
+-- ####################################################################
+-- # Decision–Proposal Linking Invariant
+-- ####################################################################
+
+-- Any decided interaction was proposed at that view
+invariant [decided_implies_proposed]
+  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
+    ∃ (op : node), proposed op V p1_fixed p2_fixed I
+
+-- ####################################################################
+-- # Ancestor Structural Invariants
+-- ####################################################################
+-- These give SMT direct access to key properties of ancestor without
+-- needing to discover witnesses via ancestor_def_fwd/bwd unfolding.
+
+-- Reflexivity
+invariant [ancestor_refl]
+  ∀ (I : interaction), ancestor I I
+
+-- Parent implies ancestor
+invariant [ancestor_from_parent]
+  parent I J → ancestor I J
+
+-- Transitivity (avoids SMT needing to find intermediate witness k)
+invariant [ancestor_trans]
+  (ancestor I J ∧ ancestor J K) → ancestor I K
+
+-- Anti-symmetry (no cycles; follows from height monotonicity)
+invariant [ancestor_antisymm]
+  (ancestor I J ∧ ancestor J I) → I = J
+
+-- Strict ancestor means strictly lower height
+invariant [ancestor_height_strict]
+  (ancestor I J ∧ I ≠ J) → height I < height J
+
+-- Contrapositive: equal height + different → no ancestry in either direction
+invariant [no_ancestor_equal_height]
+  (height I = height J ∧ I ≠ J) → (¬ ancestor I J ∧ ¬ ancestor J I)
+
+-- Parent increases height by exactly 1
+invariant [parent_height]
+  parent I J → height J = height I + 1
+
+-- Ancestor is at most the transitive closure of parent
+invariant [ancestor_def_fwd]
+  ancestor I J → (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
+
+invariant [ancestor_def_bwd]
+  (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J) → ancestor I J
 
 
 -- ####################################################################
@@ -903,13 +995,6 @@ invariant [precommitted_node_implies_lock]
         (ctx.member n c1 → ∃ (u : view), tot_view.le u v ∧ (locked n p1_fixed ixn prevote u ∨ locked n p1_fixed ixn precommit u)) ∧
         (ctx.member n c2 → ∃ (u : view), tot_view.le u v ∧ (locked n p2_fixed ixn prevote u ∨ locked n p2_fixed ixn precommit u))))
 
--- Ancestor is at most the transitive closure of parent
-invariant [ancestor_def_fwd]
-  ancestor I J → (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
-
-invariant [ancestor_def_bwd]
-  (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J) → ancestor I J
-
 -- Decision requires a precommit operator
 invariant [decide_only_if_precommit_operator]
   (¬ ctx.is_byz N ∧ decided OP V P Q I ∧ I ≠ genesis) → (∃ (op : node), (operator op V P Q ∧ precommitted_operator op V P Q I))
@@ -964,17 +1049,20 @@ invariant [prepared_node_has_lock_sent_2]
 -- # Main Safety Property
 -- ####################################################################
 
--- Placeholder safety
 safety [main_safety]
-  true
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 p1_fixed p2_fixed i1 ∧
+     decided n2 v2 p1_fixed p2_fixed i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
 
 -- set_option maxHeartbeats 10000000
 #gen_spec
 
 set_option veil.printCounterexamples true
 
-#check_action propose_extend
+#check_action respond_prepare
 
 -- #check_invariants
 
-end IFPProtocolH
+end IFPProtocolI

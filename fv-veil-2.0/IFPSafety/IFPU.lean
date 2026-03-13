@@ -1055,11 +1055,12 @@ safety [main_safety]
      decided n2 v2 p1_fixed p2_fixed i2) →
     (ancestor i1 i2 ∨ ancestor i2 i1)
 
-set_option synthInstance.maxSize 20000
+-- set_option synthInstance.maxSize 20000
 #gen_spec
 
 
 set_option veil.printCounterexamples true
+set_option veil.smt.timeout 100
 
 #check_action respond_prepare
 
