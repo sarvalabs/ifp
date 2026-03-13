@@ -455,6 +455,8 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
 }
 
 
+set_option veil.smt.timeout 200
+
 -- ####################################################################
 -- # Core Invariants
 -- ####################################################################
@@ -668,7 +670,7 @@ invariant [unique_highest_lock_1]
 -- At most one highest_lock_2 per operator per view
 invariant [unique_highest_lock_2]
   (highest_lock_2 OP V p1_fixed p2_fixed I1 S1 V1 ∧ highest_lock_2 OP V p1_fixed p2_fixed I2 S2 V2)
-  → (I1 = I2 ∧ S1 = S2 ∧ V1 = V)
+  → (I1 = I2 ∧ S1 = S2 ∧ V1 = V2)
 
 -- highest_lock_1 is actually highest: dominates all other sent locks from c1
 invariant [highest_lock_1_dominates]
@@ -845,11 +847,13 @@ invariant [prepared_node_has_lock_sent_2]
 safety [main_safety]
   true
 
+set_option synthInstance.maxSize 20000
 #gen_spec
+
 
 set_option veil.printCounterexamples true
 
-#check_action collect_and_extract
+#check_action respond_prepare
 
 -- #check_invariants
 
