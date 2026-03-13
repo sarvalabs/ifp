@@ -730,6 +730,14 @@ invariant [precommit_node_lock_consistency]
 invariant [unique_lock_interaction_per_view]
   (¬ ctx.is_byz N ∧ locked N P I1 S1 V ∧ locked N P I2 S2 V ∧ (P = p1_fixed ∨ P = p2_fixed)) → I1 = I2
 
+-- Cross-node lock uniqueness: all honest nodes locked at the same view for the same participant
+-- hold locks on the same interaction. Follows from INV-2 + precommit_lock_implies_prevoted.
+invariant [cross_node_unique_lock]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   locked N1 P I1 S1 V ∧ locked N2 P I2 S2 V ∧
+   I1 ≠ genesis ∧ I2 ≠ genesis ∧ (P = p1_fixed ∨ P = p2_fixed))
+  → I1 = I2
+
 -- Supporting: Precommit lock implies the node prevoted for the interaction
 invariant [precommit_lock_implies_prevoted]
   (¬ ctx.is_byz N ∧ (locked N p1_fixed I precommit V ∨ locked N p2_fixed I precommit V) ∧ I ≠ genesis) → prevoted_node N V p1_fixed p2_fixed I
@@ -858,11 +866,25 @@ invariant [decided_for_descendant_bwd]
 -- # Lock Descendant Monotonicity (core ghost invariant)
 -- ####################################################################
 
+-- Proposed interaction extends prior locks: if an honest context member had
+-- locked_for_descendant at view V, and a proposal exists at view VP > V,
+-- and the node was prepared for VP, then the proposed interaction is a descendant of A.
+-- Core protocol argument: proposals must extend/repropose based on highest locks,
+-- and cross_node_unique_lock ensures the max lock from any node is on the same
+-- interaction as N's lock at the same view.
+-- May need @[invProof] for propose_extend/propose_repropose transitions.
+invariant [proposed_extends_locked_descendant]
+  (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ (P = p1_fixed ∨ P = p2_fixed) ∧
+   (∃ (C : nodeset), participant_context P C ∧ ctx.member N C) ∧
+   proposed OP VP p1_fixed p2_fixed IXN ∧ IXN ≠ genesis ∧
+   tot_view.lt V VP ∧ prepared_node N VP p1_fixed p2_fixed)
+  → ancestor A IXN
+
 -- If node N has locked_for_descendant for (A, V) and holds any lock at view U ≥ V,
 -- that lock is also for a descendant of A.
 -- This is the key invariant enabling INV-4: once locked on a descendant of A,
 -- all subsequent locks remain descendants of A.
--- Proof depends on: proposal logic extending locked interactions,
+-- Proof depends on: proposed_extends_locked_descendant, lock_at_most_cur_view,
 -- unique_lock_interaction_per_view, INV1/INV2 (unique prevotes → unique locks).
 invariant [lock_descendant_monotone]
   (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ locked N P I S U ∧
@@ -934,6 +956,12 @@ invariant [node_has_cur_view]
 -- Nodes can only be prepared for views they have reached
 invariant [prepared_only_at_cur_or_past_view]
   (prepared_node N V p1_fixed p2_fixed ∧ ¬ ctx.is_byz N ∧ cur_view N V2) → tot_view.le V V2
+
+-- Non-genesis locks are at views ≤ current view (collapses locked_only_if_prepared + prepared_only_at_cur_or_past_view)
+invariant [lock_at_most_cur_view]
+  (¬ ctx.is_byz N ∧ locked N P I S V ∧ I ≠ genesis ∧
+   (P = p1_fixed ∨ P = p2_fixed) ∧ cur_view N VCUR)
+  → tot_view.le V VCUR
 
 -- Sent lock entries can only exist for views the node has reached
 invariant [sent_lock_only_at_past_view]
@@ -1014,6 +1042,18 @@ invariant [precommitted_node_implies_lock]
         participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
         (ctx.member n c1 → ∃ (u : view), tot_view.le u v ∧ (locked n p1_fixed ixn prevote u ∨ locked n p1_fixed ixn precommit u)) ∧
         (ctx.member n c2 → ∃ (u : view), tot_view.le u v ∧ (locked n p2_fixed ixn prevote u ∨ locked n p2_fixed ixn precommit u))))
+
+-- Combined: precommitted node implies prevoted AND locked (flattened, no existential over contexts).
+-- Collapses precommit_nodes_only_if_prevoted_for_same_ixn + precommitted_node_implies_lock
+-- into a single inference step for INV3.
+invariant [precommit_quorum_prevoted_and_locked]
+  (¬ ctx.is_byz NC ∧ precommitted_node NC V p1_fixed p2_fixed IXN ∧ IXN ≠ genesis ∧
+   participant_context p1_fixed C1 ∧ participant_context p2_fixed C2) →
+  (prevoted_node NC V p1_fixed p2_fixed IXN ∧
+   (ctx.member NC C1 → ∃ (U : view), tot_view.le U V ∧
+     (locked NC p1_fixed IXN prevote U ∨ locked NC p1_fixed IXN precommit U)) ∧
+   (ctx.member NC C2 → ∃ (U : view), tot_view.le U V ∧
+     (locked NC p2_fixed IXN prevote U ∨ locked NC p2_fixed IXN precommit U)))
 
 -- Decision requires a precommit operator
 invariant [decide_only_if_precommit_operator]
