@@ -818,6 +818,22 @@ invariant [no_decide_without_parent]
   (decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
 
 -- ####################################################################
+-- # Genesis Ancestry Invariants
+-- ####################################################################
+-- All proposed/locked non-genesis interactions must descend from genesis.
+-- These block spurious models where interaction chains are disconnected
+-- from genesis, which would violate proposed_extends_locked_descendant
+-- and precommit_next_view_discovery.
+
+-- All proposed non-genesis interactions have genesis as ancestor
+invariant [proposed_descends_from_genesis]
+  (proposed OP V p1_fixed p2_fixed I ∧ I ≠ genesis) → ancestor genesis I
+
+-- All non-genesis locked interactions have genesis as ancestor
+invariant [locked_descends_from_genesis]
+  (locked N P I S V ∧ I ≠ genesis ∧ (P = p1_fixed ∨ P = p2_fixed)) → ancestor genesis I
+
+-- ####################################################################
 -- # Ghost Consistency Invariants (locked)
 -- ####################################################################
 
@@ -1092,7 +1108,7 @@ invariant [prepared_node_has_lock_sent_1]
    locked N p1_fixed IL SL VL ∧
    (∃ (c1 : nodeset), ctx.member N c1 ∧ participant_context p1_fixed c1) ∧
    tot_view.lt VL V ∧
-   (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p1_fixed i2 s2 vl2) ∧
+   (∀ (vl2 : view), (tot_view.lt VL vl2 ∧ tot_view.lt vl2 V) → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p1_fixed i2 s2 vl2) ∧
    (SL = prevote → ¬ locked N p1_fixed IL precommit VL))
   → sent_lock_in_prepare_1 N V p1_fixed p2_fixed IL SL VL
 
@@ -1101,7 +1117,7 @@ invariant [prepared_node_has_lock_sent_2]
    locked N p2_fixed IL SL VL ∧
    (∃ (c2 : nodeset), ctx.member N c2 ∧ participant_context p2_fixed c2) ∧
    tot_view.lt VL V ∧
-   (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p2_fixed i2 s2 vl2) ∧
+   (∀ (vl2 : view), (tot_view.lt VL vl2 ∧ tot_view.lt vl2 V) → ¬ ∃ (i2 : interaction) (s2 : stage), locked N p2_fixed i2 s2 vl2) ∧
    (SL = prevote → ¬ locked N p2_fixed IL precommit VL))
   → sent_lock_in_prepare_2 N V p1_fixed p2_fixed IL SL VL
 
