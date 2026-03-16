@@ -12,14 +12,34 @@ veil module IFPProtocolJ
 class IFPByzQuorum (node : Type) (nset : Type) where
   is_byz : node → Prop
   member (n : node) (s : nset) : Prop
-  supermajority (s : nset) (c : nset) : Prop   -- s is a supermajority of context c  -- 2f + 1 nodes
+  supermajority (s : nset) (c : nset) : Prop        -- s is a supermajority of context c  -- 2f + 1 nodes
+  greater_than_third (s : nset) (c : nset) : Prop   -- s is > 1/3 of context c            -- f + 1 nodes
 
   supermajority_s_belongs_to_c :
     ∀ (s c : nset), supermajority s c → ∀ (n : node), (member n s → member n c)
 
+  greater_than_third_s_belongs_to_c :
+    ∀ (s c : nset), greater_than_third s c → ∀ (n : node), (member n s → member n c)
+
   supermajorities_intersect_in_honest :
     ∀ (s1 s2 c : nset),
       (supermajority s1 c ∧ supermajority s2 c) → (∃ (n : node), member n s1 ∧ member n s2 ∧ ¬ is_byz n)
+
+  greater_than_third_one_honest :
+    ∀ (s c : nset), greater_than_third s c → (∃ (n : node), member n s ∧ ¬ is_byz n)
+
+  supermajority_greater_than_third :
+    ∀ (s c : nset), supermajority s c → greater_than_third s c
+
+  supermajority_intersect_greater_than_third :
+    ∀ (s1 s2 c : nset),
+      (supermajority s1 c ∧ greater_than_third s2 c) → (∃ (n : node), member n s1 ∧ member n s2)
+
+  supermajority_honest_subset_gt_third :
+    ∀ (s c : nset),
+      supermajority s c →
+        (∃ (s' : nset), greater_than_third s' c ∧
+          (∀ (n : node), (member n s' → (member n s ∧ ¬ is_byz n))))
 
 
 -- `type declarations`
@@ -722,13 +742,26 @@ invariant [INV2_unique_prevote_lock_in_view]
     ¬ (ctx.is_byz n1 ∨ ctx.is_byz n2) → (( (locked n1 p1_fixed i1 prevote v ∧ locked n2 p1_fixed i2 prevote v) ∨ (locked n1 p2_fixed i1 prevote v ∧ locked n2 p2_fixed i2 prevote v) ) → i1 = i2)
 
 -- INV3: If an honest node has decided, then a quorum has prevote-locked
+-- INV3: If an honest node has decided, then a greater_than_third set of honest
+-- nodes from each context has prevote-locked. Uses greater_than_third instead of
+-- supermajority because Byzantine quorum members may have precommitted_node without
+-- prevoted_node (respond_prevote doesn't require the acting node to have prevoted).
+-- Honest members of the precommit supermajority (≥ f+1) form a greater_than_third set.
+-- For INV4: supermajority_intersect_greater_than_third gives an intersection node,
+-- which is honest since all members of the greater_than_third set are honest.
 invariant [INV3_decided_only_if_quorum_prevote_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
     ¬ ctx.is_byz n → ( (decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
-      (∃ (c1 c2 s1 s2 : nodeset), (participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧ interactions ixn p1_fixed p2_fixed ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+      (∃ (c1 c2 s1 s2 : nodeset), (participant_context p1_fixed c1 ∧ participant_context p2_fixed c2
+        ∧ interactions ixn p1_fixed p2_fixed
+        ∧ ctx.greater_than_third s1 c1 ∧ ctx.greater_than_third s2 c2
         ∧ ∀ (nc : node), (
-          (ctx.member nc s1 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u))) ∧
-          (ctx.member nc s2 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u))) )) ) )
+          (ctx.member nc s1 → (¬ ctx.is_byz nc ∧ ∃ (u : view),
+            (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn
+            ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u)))) ∧
+          (ctx.member nc s2 → (¬ ctx.is_byz nc ∧ ∃ (u : view),
+            (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn
+            ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u)))) )) ) )
 
 -- INV4: If a quorum has prevote-locked on ixn at view v, then in later views where a proposal
 -- occurs, a lock for a descendant of ixn from view ≥ v is discovered.
