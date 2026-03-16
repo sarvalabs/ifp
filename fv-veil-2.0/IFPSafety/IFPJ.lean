@@ -10,8 +10,8 @@ veil module IFPProtocolJ
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
-  is_byz : node → Prop
-  member (n : node) (s : nset) : Prop
+  is_byz : node → Bool
+  member (n : node) (s : nset) : Bool
   supermajority (s : nset) (c : nset) : Prop        -- s is a supermajority of context c  -- 2f + 1 nodes
   greater_than_third (s : nset) (c : nset) : Prop   -- s is > 1/3 of context c            -- f + 1 nodes
 
@@ -1259,7 +1259,7 @@ safety [main_safety]
 
 set_option veil.printCounterexamples true
 
-#check_action respond_prepare
+#check_action respond_precommit
 
 -- #check_invariants
 
