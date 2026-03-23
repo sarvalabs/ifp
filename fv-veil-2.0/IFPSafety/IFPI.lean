@@ -63,7 +63,8 @@ relation locked : node → participant → interaction → stage → view → Bo
 -- Operator relations
 relation operator: node → view → participant → participant → Bool
 relation prepared_operator : node → view → participant → participant → Bool
-relation proposed : node → view → participant → participant → interaction → Bool
+relation proposed_repropose : node → view → participant → participant → interaction → Bool
+relation proposed_extend : node → view → participant → participant → interaction → Bool
 relation proposed_nil : node → view → participant → participant → Bool
 relation prevoted_operator : node → view → participant → participant → interaction → Bool
 relation precommitted_operator : node → view → participant → participant → interaction → Bool
@@ -95,7 +96,7 @@ relation locked_at_view : node → participant → view → Bool
 relation locked_for_descendant : node → participant → interaction → view → Bool
 
 -- "At view V, the proposed interaction is a descendant of A"
--- i.e., ∃ op I, proposed op V p1_fixed p2_fixed I ∧ ancestor A I
+-- i.e., ∃ op I, (proposed_repropose op V p1_fixed p2_fixed I ∨ proposed_extend op V p1_fixed p2_fixed I) ∧ ancestor A I
 relation proposed_for_descendant : view → interaction → Bool
 
 -- "Node N decided a descendant of A at view V"
@@ -131,7 +132,8 @@ after_init {
   prepared_operator N V P Q := false;
   sent_lock_in_prepare_1 N U P Q L S V := false;
   sent_lock_in_prepare_2 N U P Q L S V := false;
-  proposed N V P Q I := false;
+  proposed_repropose N V P Q I := false;
+  proposed_extend N V P Q I := false;
   proposed_nil N V P Q := false;
   prevoted_operator N V P Q I := false;
   precommitted_operator N V P Q I := false;
@@ -224,7 +226,8 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
   require ctx.member op c1 ∨ ctx.member op c2
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 propose
-  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_repropose op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_extend op v p1 p2 ix
   require ¬ proposed_nil op v p1 p2
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
@@ -299,7 +302,7 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
     )
   )
   require s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2
-  proposed op v p1 p2 ixn_max_1 := true;
+  proposed_repropose op v p1 p2 ixn_max_1 := true;
   -- GHOST: proposed interaction is a descendant of A iff A is an ancestor of ixn_max_1
   proposed_for_descendant v A := decide $ (proposed_for_descendant v A ∨ ancestor A ixn_max_1);
 }
@@ -319,7 +322,8 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 propose
   require ixn_propose ≠ genesis
-  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_repropose op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_extend op v p1 p2 ix
   require ¬ proposed_nil op v p1 p2
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
@@ -398,7 +402,7 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ¬ (ancestor ixn_max_1 ixn_propose ∨ ancestor ixn_propose ixn_max_1)
   parent ixn_max_1 ixn_propose := decide $ (ixn_max_1 ≠ ixn_propose);
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ixn_max_1 ∨ A = ixn_max_1 ∨ A = ixn_propose);
-  proposed op v p1 p2 ixn_propose := true;
+  proposed_extend op v p1 p2 ixn_propose := true;
   height ixn_propose := height ixn_max_1 + 1;
   -- GHOST: parallel-safe version — expand ancestor post-state for ixn_propose
   proposed_for_descendant v A := decide $ (proposed_for_descendant v A
@@ -416,7 +420,8 @@ action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset
   require ctx.member op c1 ∨ ctx.member op c2
   require prepared_operator op v p1 p2
   require cur_stage op v p1 p2 propose
-  require ∀ (ix : interaction), ¬ proposed op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_repropose op v p1 p2 ix
+  require ∀ (ix : interaction), ¬ proposed_extend op v p1 p2 ix
   require ¬ proposed_nil op v p1 p2
   require ∃ (s1 : nodeset), (
     ctx.supermajority s1 c1 ∧ (
@@ -502,7 +507,7 @@ action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require cur_view n v
   require cur_stage n v p1 p2 propose
   require interactions ixn p1 p2
-  require ∃ (op : node), operator op v p1 p2 ∧ proposed op v p1 p2 ixn
+  require ∃ (op : node), operator op v p1 p2 ∧ (proposed_repropose op v p1 p2 ixn ∨ proposed_extend op v p1 p2 ixn)
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
   require ctx.member n c1 ∨ ctx.member n c2
@@ -709,7 +714,7 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
 --   (∃ (c1 c2 s1 s2 : nodeset), (interactions ixn p1 p2 ∧ participant_context p1 c1 ∧ participant_context p2 c2 ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
 --   ∧ ∀ (n : node), ((ctx.member n s1 → locked n p1 ixn prevote v) ∧ (ctx.member n s2 → locked n p2 ixn prevote v)))
 --   ∧ tot_view.lt v vp ) →
---   ((∃ (op : node), (∃ (ixn_prop : interaction), proposed op vp p1 p2 ixn_prop) ∨ proposed_nil op vp p1 p2) → (
+--   ((∃ (op : node), (∃ (ixn_prop : interaction), proposed_repropose op vp p1 p2 ixn_prop ∨ proposed_extend op vp p1 p2 ixn_prop) ∨ proposed_nil op vp p1 p2) → (
 --   ( ∃ (n1 : node) (c1 : nodeset) (ixnl1 : interaction) (sl1 : stage) (vl1 : view), (ctx.member n1 c1 ∧ participant_context p1 c1 ∧ sent_lock_in_prepare_1 n1 vp p1 p2 ixnl1 sl1 vl1 ∧ tot_view.le v vl1 ∧ locked_for_descendant n1 p1 ixn vl1) )
 --   ∧ ( ∃ (n2 : node) (c2 : nodeset) (ixnl2 : interaction) (sl2 : stage) (vl2 : view), (ctx.member n2 c2 ∧ participant_context p2 c2 ∧ sent_lock_in_prepare_2 n2 vp p1 p2 ixnl2 sl2 vl2 ∧ tot_view.le v vl2 ∧ locked_for_descendant n2 p2 ixn vl2) )
 --   ))
@@ -811,7 +816,7 @@ invariant [no_lock_without_parent]
 
 -- A proposed interaction must have a parent (unless it's genesis)
 invariant [no_proposal_without_parent]
-  (proposed OP V p1_fixed p2_fixed I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
+  ((proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
 
 -- A decided interaction must have a parent (unless it's genesis)
 invariant [no_decide_without_parent]
@@ -827,7 +832,7 @@ invariant [no_decide_without_parent]
 
 -- All proposed non-genesis interactions have genesis as ancestor
 invariant [proposed_descends_from_genesis]
-  (proposed OP V p1_fixed p2_fixed I ∧ I ≠ genesis) → ancestor genesis I
+  ((proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ I ≠ genesis) → ancestor genesis I
 
 -- All non-genesis locked interactions have genesis as ancestor
 invariant [locked_descends_from_genesis]
@@ -862,12 +867,12 @@ invariant [locked_for_descendant_bwd]
 
 -- proposed_for_descendant forward: proposed + ancestry → ghost
 invariant [proposed_for_descendant_fwd]
-  (proposed OP V p1_fixed p2_fixed I ∧ ancestor A I) → proposed_for_descendant V A
+  ((proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ ancestor A I) → proposed_for_descendant V A
 
 -- proposed_for_descendant backward: ghost → ∃ proposed descendant
 invariant [proposed_for_descendant_bwd]
   proposed_for_descendant V A →
-    ∃ (OP : node) (I : interaction), proposed OP V p1_fixed p2_fixed I ∧ ancestor A I
+    ∃ (OP : node) (I : interaction), (proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ ancestor A I
 
 -- decided_for_descendant forward: decided + ancestry → ghost
 invariant [decided_for_descendant_fwd]
@@ -892,7 +897,7 @@ invariant [decided_for_descendant_bwd]
 -- invariant [proposed_extends_locked_descendant]
 --   (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ (P = p1_fixed ∨ P = p2_fixed) ∧
 --    (∃ (C : nodeset), participant_context P C ∧ ctx.member N C) ∧
---    proposed OP VP p1_fixed p2_fixed IXN ∧ IXN ≠ genesis ∧
+--    (proposed_repropose OP VP p1_fixed p2_fixed IXN ∨ proposed_extend OP VP p1_fixed p2_fixed IXN) ∧ IXN ≠ genesis ∧
 --    tot_view.lt V VP ∧ prepared_node N VP p1_fixed p2_fixed)
 --   → ancestor A IXN
 
@@ -913,7 +918,7 @@ invariant [lock_descendant_monotone]
 -- Any decided interaction was proposed at that view
 invariant [decided_implies_proposed]
   (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
-    ∃ (op : node), proposed op V p1_fixed p2_fixed I
+    ∃ (op : node), proposed_repropose op V p1_fixed p2_fixed I ∨ proposed_extend op V p1_fixed p2_fixed I
 
 -- ####################################################################
 -- # Ancestor Structural Invariants
@@ -995,7 +1000,7 @@ invariant [unique_operator]
 
 -- Only the operator can have proposed
 invariant [proposed_only_by_operator]
-  (proposed N V p1_fixed p2_fixed I ∧ ¬ ctx.is_byz N) → operator N V p1_fixed p2_fixed
+  ((proposed_repropose N V p1_fixed p2_fixed I ∨ proposed_extend N V p1_fixed p2_fixed I) ∧ ¬ ctx.is_byz N) → operator N V p1_fixed p2_fixed
 
 -- Genesis locks are only at view zero with precommit stage
 invariant [genesis_lock_only_at_zero]
@@ -1032,7 +1037,7 @@ invariant [stage_neg_4]
 
 -- Genesis never enters the pipeline
 invariant [genesis_not_in_pipeline]
-  ¬ ( ¬ ctx.is_byz N ∧ (proposed N V p1_fixed p2_fixed genesis ∨ prevoted_node N V p1_fixed p2_fixed genesis
+  ¬ ( ¬ ctx.is_byz N ∧ (proposed_repropose N V p1_fixed p2_fixed genesis ∨ proposed_extend N V p1_fixed p2_fixed genesis ∨ prevoted_node N V p1_fixed p2_fixed genesis
   ∨ prevoted_operator N V p1_fixed p2_fixed genesis ∨ precommitted_node N V p1_fixed p2_fixed genesis
   ∨ precommitted_operator N V p1_fixed p2_fixed genesis))
 
@@ -1078,21 +1083,21 @@ invariant [decide_only_if_precommit_operator]
 -- At prevote stage, node prevoted for the proposed interaction
 invariant [stage_2]
   (cur_stage N V p1_fixed p2_fixed prevote ∧ ¬ ctx.is_byz N)
-  → (∃ (i : interaction), ((∃ (op : node), proposed op V p1_fixed p2_fixed i) ∧ prevoted_node N V p1_fixed p2_fixed i) ∨ (∃ (op : node), proposed_nil op V p1_fixed p2_fixed))
+  → (∃ (i : interaction), ((∃ (op : node), proposed_repropose op V p1_fixed p2_fixed i ∨ proposed_extend op V p1_fixed p2_fixed i) ∧ prevoted_node N V p1_fixed p2_fixed i) ∨ (∃ (op : node), proposed_nil op V p1_fixed p2_fixed))
 
 -- Only one proposal per view
 invariant [unique_proposal]
-  ¬ (ctx.is_byz N1 ∨ ctx.is_byz N2) → ( (proposed N1 V p1_fixed p2_fixed I1 ∧ proposed N2 V p1_fixed p2_fixed I2) → (I1 = I2 ∧ N1 = N2) )
+  ¬ (ctx.is_byz N1 ∨ ctx.is_byz N2) → ( ((proposed_repropose N1 V p1_fixed p2_fixed I1 ∨ proposed_extend N1 V p1_fixed p2_fixed I1) ∧ (proposed_repropose N2 V p1_fixed p2_fixed I2 ∨ proposed_extend N2 V p1_fixed p2_fixed I2)) → (I1 = I2 ∧ N1 = N2) )
 
 invariant [unique_proposed_interaction]
-  (proposed N V p1_fixed p2_fixed I1 ∧ proposed N V p1_fixed p2_fixed I2) → I1 = I2
+  ((proposed_repropose N V p1_fixed p2_fixed I1 ∨ proposed_extend N V p1_fixed p2_fixed I1) ∧ (proposed_repropose N V p1_fixed p2_fixed I2 ∨ proposed_extend N V p1_fixed p2_fixed I2)) → I1 = I2
 
 -- Honest node prevoted → a proposal exists
 invariant [prevote_implies_proposed]
-  (prevoted_node N V p1_fixed p2_fixed I ∧ ¬ ctx.is_byz N) → (∃ (op : node), (operator op V p1_fixed p2_fixed ∧ proposed op V p1_fixed p2_fixed I ))
+  (prevoted_node N V p1_fixed p2_fixed I ∧ ¬ ctx.is_byz N) → (∃ (op : node), (operator op V p1_fixed p2_fixed ∧ (proposed_repropose op V p1_fixed p2_fixed I ∨ proposed_extend op V p1_fixed p2_fixed I)))
 
 invariant [precommit_only_if_propose]
-  (¬ ctx.is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → (∃ (op : node), operator op V p1_fixed p2_fixed ∧ proposed op V p1_fixed p2_fixed I)
+  (¬ ctx.is_byz N ∧ precommitted_node N V p1_fixed p2_fixed I) → (∃ (op : node), operator op V p1_fixed p2_fixed ∧ (proposed_repropose op V p1_fixed p2_fixed I ∨ proposed_extend op V p1_fixed p2_fixed I))
 
 invariant [prepare_response_only_on_prepare]
   ¬ ctx.is_byz N → (prepared_node N V P Q → ∃ (op : node), operator op V P Q ∧ prepared_operator op V P Q)
@@ -1180,7 +1185,7 @@ invariant [genesis_height_zero]
 
 -- Parent edges only exist because of propose_extend
 invariant [parent_only_if_proposed]
-  parent I J ∧ J ≠ genesis → ∃ (n : node) (v : view), proposed n v p1_fixed p2_fixed J
+  parent I J ∧ J ≠ genesis → ∃ (n : node) (v : view), proposed_extend n v p1_fixed p2_fixed J
 
 -- ####################################################################
 -- # Operator/Quorum Invariants
@@ -1262,11 +1267,11 @@ invariant [prepared_operator_not_at_zero]
 
 -- Proposal implies operator prepared
 invariant [propose_only_if_operator_prepare]
-  (¬ ctx.is_byz N ∧ proposed N V p1_fixed p2_fixed I) → prepared_operator N V p1_fixed p2_fixed
+  (¬ ctx.is_byz N ∧ (proposed_repropose N V p1_fixed p2_fixed I ∨ proposed_extend N V p1_fixed p2_fixed I)) → prepared_operator N V p1_fixed p2_fixed
 
 -- Proposal requires a locked parent (for extend proposals)
 invariant [propose_only_if_parent_locked]
-  (¬ ctx.is_byz OP ∧ proposed OP V p1_fixed p2_fixed J ∧ parent I J) →
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V p1_fixed p2_fixed J ∧ parent I J) →
     (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ (locked n p1_fixed I s u ∨ locked n p2_fixed I s u))
 
 -- ####################################################################
@@ -1286,45 +1291,45 @@ set_option veil.smt.timeout 300
 
 set_option veil.printCounterexamples true
 
-#model_check interpreted
-{ view := Fin 2,
-  participant := Fin 2,
-  node := Fin 2,
-  interaction := Fin 2,
-  nodeset := Fin 1,
-  stage := Fin 5 }
-{ tot_view := {
-    le := fun x y => x.val ≤ y.val,
-    lt := fun x y => x.val < y.val,
-    le_refl := by intro x; omega,
-    le_trans := by intro x y z h1 h2; omega,
-    le_antisymm := by intro x y h1 h2; ext; omega,
-    le_total := by intro x y; omega,
-    le_lt := by intro x y; simp only; constructor <;> intro h <;> (try ext) <;> omega,
-    next := fun x y => x.val + 1 = y.val,
-    next_def := by intro x y; simp only; sorry,
-    zero := 0,
-    zero_lt := by intro x; omega },
-  ctx := {
-    is_byz := fun _ => False,
-    member := fun _ _ => True,
-    supermajority := fun _ _ => True,
-    supermajority_s_belongs_to_c := by intros; trivial,
-    supermajorities_intersect_in_honest := by
-      intro s1 s2 c ⟨_, _⟩; exact ⟨0, trivial, trivial, id⟩ },
-  p1_fixed := 0,
-  p2_fixed := 1,
-  prepare := 0,
-  propose := 1,
-  prevote := 2,
-  precommit := 3,
-  commit := 4,
-  interactions := fun _ p q => p == (0 : Fin 2) && q == (1 : Fin 2),
-  participant_context := fun _ _ => true } (maxDepth := 3)
+-- #model_check interpreted
+-- { view := Fin 2,
+--   participant := Fin 2,
+--   node := Fin 2,
+--   interaction := Fin 2,
+--   nodeset := Fin 1,
+--   stage := Fin 5 }
+-- { tot_view := {
+--     le := fun x y => x.val ≤ y.val,
+--     lt := fun x y => x.val < y.val,
+--     le_refl := by intro x; omega,
+--     le_trans := by intro x y z h1 h2; omega,
+--     le_antisymm := by intro x y h1 h2; ext; omega,
+--     le_total := by intro x y; omega,
+--     le_lt := by intro x y; simp only; constructor <;> intro h <;> (try ext) <;> omega,
+--     next := fun x y => x.val + 1 = y.val,
+--     next_def := by intro x y; simp only; sorry,
+--     zero := 0,
+--     zero_lt := by intro x; omega },
+--   ctx := {
+--     is_byz := fun _ => False,
+--     member := fun _ _ => True,
+--     supermajority := fun _ _ => True,
+--     supermajority_s_belongs_to_c := by intros; trivial,
+--     supermajorities_intersect_in_honest := by
+--       intro s1 s2 c ⟨_, _⟩; exact ⟨0, trivial, trivial, id⟩ },
+--   p1_fixed := 0,
+--   p2_fixed := 1,
+--   prepare := 0,
+--   propose := 1,
+--   prevote := 2,
+--   precommit := 3,
+--   commit := 4,
+--   interactions := fun _ p q => p == (0 : Fin 2) && q == (1 : Fin 2),
+--   participant_context := fun _ _ => true } (maxDepth := 3)
 
 -- #check_action respond_prevote
 
--- #check_invariants
+#check_invariants
 
 
 -- theorem respond_propose_INV3_decided_only_if_quorum_prevote_locked (ρ : Type) (σ : Type) (view : Type)
