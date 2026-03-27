@@ -1,13 +1,12 @@
--- IFPI: IFP model based on IFPH with two additional ghost relations:
--- 1. proposed_for_descendant: "at view V, the proposed interaction is a descendant of A"
--- 2. decided_for_descendant: "node N decided a descendant of A at view V"
--- These bridge the two remaining gaps in the safety proof chain:
---   Gap 1: proposal extends locked descendants (via proposed_for_descendant)
---   Gap 2: decision inherits proposal ancestry (via decided_for_descendant)
+-- IFPL: IFP model based on IFPI with additional height-based invariants:
+-- 1. Height-based uniqueness: unique_decided_at_height, unique_locked_at_height
+-- 2. View-height monotonicity: lock_height_monotone, decision_height_monotone
+-- These give SMT direct shortcuts for height-equality and height-comparison
+-- reasoning without chaining through ancestor properties.
 
 import Veil
 
-veil module IFPProtocolI
+veil module IFPProtocolL
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
@@ -1285,6 +1284,52 @@ safety [main_safety]
      decided n2 v2 p1_fixed p2_fixed i2) →
     (ancestor i1 i2 ∨ ancestor i2 i1)
 
+-- ####################################################################
+-- # Height-Based Uniqueness Invariants
+-- ####################################################################
+
+-- Decided interactions at the same height are identical
+-- (corollary of main_safety + no_ancestor_equal_height)
+invariant [unique_decided_at_height]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   decided N1 V1 p1_fixed p2_fixed I1 ∧
+   decided N2 V2 p1_fixed p2_fixed I2 ∧
+   height I1 = height I2)
+  → I1 = I2
+
+-- Honest non-genesis locks at the same height for the same participant
+-- are on the same interaction (cross-node)
+-- (corollary of cross_node_unique_lock + lock_descendant_monotone + ancestor_height_strict)
+invariant [unique_locked_at_height]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   locked N1 P I1 S1 V1 ∧ locked N2 P I2 S2 V2 ∧
+   I1 ≠ genesis ∧ I2 ≠ genesis ∧
+   (P = p1_fixed ∨ P = p2_fixed) ∧
+   height I1 = height I2)
+  → I1 = I2
+
+-- ####################################################################
+-- # View-Height Monotonicity Invariants
+-- ####################################################################
+
+-- Single-node lock height monotonicity: locks at later views have >= height
+-- (corollary of lock_descendant_monotone + ancestor_height_strict)
+invariant [lock_height_monotone]
+  (¬ ctx.is_byz N ∧
+   locked N P I1 S1 V1 ∧ locked N P I2 S2 V2 ∧
+   (P = p1_fixed ∨ P = p2_fixed) ∧
+   tot_view.le V1 V2)
+  → height I1 ≤ height I2
+
+-- Cross-node decision height monotonicity: decisions at later views have >= height
+-- (corollary of main_safety + committed_implies_parent_committed + ancestor_height_strict)
+invariant [decision_height_monotone]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   decided N1 V1 p1_fixed p2_fixed I1 ∧
+   decided N2 V2 p1_fixed p2_fixed I2 ∧
+   tot_view.lt V1 V2)
+  → height I1 ≤ height I2
+
 -- set_option maxHeartbeats 10000000
 set_option veil.smt.timeout 13000
 #gen_spec
@@ -1331,496 +1376,4 @@ set_option veil.printCounterexamples true
 
 -- #check_invariants
 
-
--- theorem respond_propose_INV3_decided_only_if_quorum_prevote_locked (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_propose_dec_0 :
---       delta% @IFPProtocolI._veil_dec_type_525422 view participant interaction χ node nodeset stage χ_rep]
---     [respond_propose_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_525520 node view participant χ interaction nodeset stage χ_rep]
---     [respond_propose_dec_2 : delta% @IFPProtocolI._veil_dec_type_525594 node nodeset ctx]
---     [respond_propose_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_525829 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_526072 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_5 :
---       delta% @IFPProtocolI._veil_dec_type_526261 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_6 :
---       delta% @IFPProtocolI._veil_dec_type_526460 view participant nodeset χ node interaction stage ctx χ_rep tot_view] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_propose.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_propose_dec_0 respond_propose_dec_1 respond_propose_dec_2 respond_propose_dec_3 respond_propose_dec_4
---           respond_propose_dec_5 respond_propose_dec_6 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@INV3_decided_only_if_quorum_prevote_locked ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_propose_decide_only_if_precommit_operator (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_propose_dec_0 :
---       delta% @IFPProtocolI._veil_dec_type_525422 view participant interaction χ node nodeset stage χ_rep]
---     [respond_propose_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_525520 node view participant χ interaction nodeset stage χ_rep]
---     [respond_propose_dec_2 : delta% @IFPProtocolI._veil_dec_type_525594 node nodeset ctx]
---     [respond_propose_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_525829 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_526072 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_5 :
---       delta% @IFPProtocolI._veil_dec_type_526261 view participant nodeset χ node interaction stage ctx χ_rep tot_view]
---     [respond_propose_dec_6 :
---       delta% @IFPProtocolI._veil_dec_type_526460 view participant nodeset χ node interaction stage ctx χ_rep tot_view] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_propose.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_propose_dec_0 respond_propose_dec_1 respond_propose_dec_2 respond_propose_dec_3 respond_propose_dec_4
---           respond_propose_dec_5 respond_propose_dec_6 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@decide_only_if_precommit_operator ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_prevote_INV3_decided_only_if_quorum_prevote_locked (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_prevote_dec_0 : delta% @IFPProtocolI._veil_dec_type_918619 node nodeset ctx]
---     [respond_prevote_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_918731 view participant interaction χ node nodeset stage χ_rep]
---     [respond_prevote_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_918840 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_prevote_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_918945 node view participant nodeset interaction stage ctx tot_view]
---     [respond_prevote_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_919061 node view participant nodeset interaction χ stage ctx tot_view χ_rep] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_prevote_dec_0 respond_prevote_dec_1 respond_prevote_dec_2 respond_prevote_dec_3 respond_prevote_dec_4
---           n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@INV3_decided_only_if_quorum_prevote_locked ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_prevote_precommit_next_view_discovery (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_prevote_dec_0 : delta% @IFPProtocolI._veil_dec_type_918619 node nodeset ctx]
---     [respond_prevote_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_918731 view participant interaction χ node nodeset stage χ_rep]
---     [respond_prevote_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_918840 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_prevote_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_918945 node view participant nodeset interaction stage ctx tot_view]
---     [respond_prevote_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_919061 node view participant nodeset interaction χ stage ctx tot_view χ_rep] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_prevote_dec_0 respond_prevote_dec_1 respond_prevote_dec_2 respond_prevote_dec_3 respond_prevote_dec_4
---           n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@precommit_next_view_discovery ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_prevote_prepared_node_has_lock_sent_1 (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_prevote_dec_0 : delta% @IFPProtocolI._veil_dec_type_918619 node nodeset ctx]
---     [respond_prevote_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_918731 view participant interaction χ node nodeset stage χ_rep]
---     [respond_prevote_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_918840 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_prevote_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_918945 node view participant nodeset interaction stage ctx tot_view]
---     [respond_prevote_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_919061 node view participant nodeset interaction χ stage ctx tot_view χ_rep] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_prevote_dec_0 respond_prevote_dec_1 respond_prevote_dec_2 respond_prevote_dec_3 respond_prevote_dec_4
---           n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@prepared_node_has_lock_sent_1 ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_prevote_prepared_node_has_lock_sent_2 (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_prevote_dec_0 : delta% @IFPProtocolI._veil_dec_type_918619 node nodeset ctx]
---     [respond_prevote_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_918731 view participant interaction χ node nodeset stage χ_rep]
---     [respond_prevote_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_918840 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_prevote_dec_3 :
---       delta% @IFPProtocolI._veil_dec_type_918945 node view participant nodeset interaction stage ctx tot_view]
---     [respond_prevote_dec_4 :
---       delta% @IFPProtocolI._veil_dec_type_919061 node view participant nodeset interaction χ stage ctx tot_view χ_rep] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_prevote_dec_0 respond_prevote_dec_1 respond_prevote_dec_2 respond_prevote_dec_3 respond_prevote_dec_4
---           n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@prepared_node_has_lock_sent_2 ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_precommit_cross_node_unique_lock (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_precommit_dec_0 : delta% @IFPProtocolI._veil_dec_type_1200924 node nodeset ctx]
---     [respond_precommit_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_1201036 view participant interaction χ node nodeset stage χ_rep]
---     [respond_precommit_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_1201145 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_precommit_dec_3 : delta% @IFPProtocolI._veil_dec_type_1201248 node nodeset ctx]
---     [respond_precommit_dec_4 : delta% @IFPProtocolI._veil_dec_type_1201314 node nodeset ctx] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_precommit.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_precommit_dec_0 respond_precommit_dec_1 respond_precommit_dec_2 respond_precommit_dec_3
---           respond_precommit_dec_4 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@cross_node_unique_lock ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_precommit_precommit_next_view_discovery (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_precommit_dec_0 : delta% @IFPProtocolI._veil_dec_type_1200924 node nodeset ctx]
---     [respond_precommit_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_1201036 view participant interaction χ node nodeset stage χ_rep]
---     [respond_precommit_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_1201145 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_precommit_dec_3 : delta% @IFPProtocolI._veil_dec_type_1201248 node nodeset ctx]
---     [respond_precommit_dec_4 : delta% @IFPProtocolI._veil_dec_type_1201314 node nodeset ctx] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_precommit.ext ρ σ view view_dec_eq view_inhabited particxipant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_precommit_dec_0 respond_precommit_dec_1 respond_precommit_dec_2 respond_precommit_dec_3
---           respond_precommit_dec_4 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@precommit_next_view_discovery ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_precommit_no_lock_without_parent (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_precommit_dec_0 : delta% @IFPProtocolI._veil_dec_type_1200924 node nodeset ctx]
---     [respond_precommit_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_1201036 view participant interaction χ node nodeset stage χ_rep]
---     [respond_precommit_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_1201145 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_precommit_dec_3 : delta% @IFPProtocolI._veil_dec_type_1201248 node nodeset ctx]
---     [respond_precommit_dec_4 : delta% @IFPProtocolI._veil_dec_type_1201314 node nodeset ctx] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_precommit.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_precommit_dec_0 respond_precommit_dec_1 respond_precommit_dec_2 respond_precommit_dec_3
---           respond_precommit_dec_4 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@no_lock_without_parent ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
--- theorem respond_precommit_locked_for_descendant_bwd (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (participant : Type)
---     [participant_dec_eq : DecidableEq.{1} participant] [participant_inhabited : Inhabited.{1} participant] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view participant node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view participant node interaction nodeset stage __veil_f) (χ __veil_f)
---           (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ]
---     [ρ_sub : IsSubReaderOf (@Theory view participant node interaction nodeset stage) ρ]
---     [respond_precommit_dec_0 : delta% @IFPProtocolI._veil_dec_type_1200924 node nodeset ctx]
---     [respond_precommit_dec_1 :
---       delta% @IFPProtocolI._veil_dec_type_1201036 view participant interaction χ node nodeset stage χ_rep]
---     [respond_precommit_dec_2 :
---       delta% @IFPProtocolI._veil_dec_type_1201145 view participant nodeset interaction χ node ctx stage χ_rep]
---     [respond_precommit_dec_3 : delta% @IFPProtocolI._veil_dec_type_1201248 node nodeset ctx]
---     [respond_precommit_dec_4 : delta% @IFPProtocolI._veil_dec_type_1201314 node nodeset ctx] :
---     ∀ (n : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@respond_precommit.ext ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited
---           node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub
---           respond_precommit_dec_0 respond_precommit_dec_1 respond_precommit_dec_2 respond_precommit_dec_3
---           respond_precommit_dec_4 n v p1 p2 c1 c2 ixn)
---         (@Assumptions ρ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited participant participant_dec_eq participant_inhabited node
---           node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq
---           nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@locked_for_descendant_bwd ρ σ view view_dec_eq view_inhabited participant participant_dec_eq
---           participant_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq interaction_inhabited
---           nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful
---           σ_sub ρ_sub) :=
---   by
---   veil_human
---   sorry
-
-
-end IFPProtocolI
+end IFPProtocolL
