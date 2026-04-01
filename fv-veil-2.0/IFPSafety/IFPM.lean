@@ -425,21 +425,101 @@ action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset
 -- # Respond/Vote Actions
 -- ####################################################################
 
--- respond_propose: Simplified to match Go's enterPrevote (no lock re-verification)
--- Go reference: kbft.go enterPrevote (lines 356-376) — just votes on proposal hash
-action respond_propose (n : node) (v : view) (p1 p2 : participant) (ixn : interaction) {
+-- respond_propose: Node re-verifies proposal against lock structure before prevoting
+action respond_propose (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
+  require participant_context p1 c1 ∧ participant_context p2 c2
   require cur_view n v
   require cur_stage n v p1 p2 propose
   require interactions ixn p1 p2
   require ∃ (op : node), operator op v p1 p2 ∧ (proposed_repropose op v p1 p2 ixn ∨ proposed_extend op v p1 p2 ixn)
   require ∀ (i : interaction), ¬ prevoted_node n v p1 p2 i
   require ixn ≠ genesis
-  require ∃ (c : nodeset), (participant_context p1 c ∨ participant_context p2 c) ∧ ctx.member n c
+  require ctx.member n c1 ∨ ctx.member n c2
+  require ∃ (s1 : nodeset), (
+    ctx.supermajority s1 c1 ∧ (
+      ∀ (n : node), (
+        ctx.member n s1 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_1 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  require ∃ (s2 : nodeset), (
+    ctx.supermajority s2 c2 ∧ (
+      ∀ (n : node), (
+        ctx.member n s2 → (prepared_node n v p1 p2 ∧
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t1 t2 : nodeset), (
+          sent_lock_in_prepare_2 n v p1 p2 ixnl sl vl
+          ∧ locked n p1 ixnl sl vl
+          ∧ tot_view.le vl v
+          ∧ ctx.supermajority t1 c1 ∧ ctx.supermajority t2 c2
+          ∧ ( sl = prevote → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → prevoted_node nt vl p1 p2 ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), ((ctx.member nt t1 ∨ ctx.member nt t2) → precommitted_node nt vl p1 p2 ixnl)) )
+          ∧ interactions ixnl p1 p2
+        )
+      ))
+    )
+  )
+  let ixn_max_1 : interaction ← pick
+  let s_max_1 : stage ← pick
+  let v_max_1 : view ← pick
+  require ∃ (n_max_1 : node), (
+    ctx.member n_max_1 c1
+    ∧ interactions ixn_max_1 p1 p2
+    ∧ sent_lock_in_prepare_1 n_max_1 v p1 p2 ixn_max_1 s_max_1 v_max_1
+    ∧ locked n_max_1 p1 ixn_max_1 s_max_1 v_max_1 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c1  ∧ sent_lock_in_prepare_1 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_1
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = prevote ∧ s_max_1 = precommit)
+          ∨ (height ixn_l = height ixn_max_1 ∧ s_l = s_max_1 ∧ tot_view.le v_l v_max_1)
+          ∨ (ixn_l = ixn_max_1 ∧ s_l = s_max_1 ∧ v_l = v_max_1)
+        )
+      )
+    )
+  )
+  let ixn_max_2 : interaction ← pick
+  let s_max_2 : stage ← pick
+  let v_max_2 : view ← pick
+  require ∃ (n_max_2 : node), (
+    ctx.member n_max_2 c2
+    ∧ interactions ixn_max_2 p1 p2
+    ∧ sent_lock_in_prepare_2 n_max_2 v p1 p2 ixn_max_2 s_max_2 v_max_2
+    ∧ locked n_max_2 p2 ixn_max_2 s_max_2 v_max_2 ∧
+    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+      (ctx.member n_l c2  ∧ sent_lock_in_prepare_2 n_l v p1 p2 ixn_l s_l v_l) → (
+        interactions ixn_l p1 p2 ∧
+        (
+          height ixn_l < height ixn_max_2
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = prevote ∧ s_max_2 = precommit)
+          ∨ (height ixn_l = height ixn_max_2 ∧ s_l = s_max_2 ∧ tot_view.le v_l v_max_2)
+          ∨ (ixn_l = ixn_max_2 ∧ s_l = s_max_2 ∧ v_l = v_max_2)
+        )
+      )
+    )
+  )
+  -- valid proposal pattern: repropose or extend (otherwise should be nil)
+  require (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2)
+        ∨ (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2)
+  require (s_max_1 = prevote ∧ s_max_2 = prevote ∧ ixn_max_1 = ixn_max_2) → ixn_max_1 = ixn
+  require (s_max_1 = precommit ∧ s_max_2 = precommit ∧ ixn_max_1 = ixn_max_2) →
+    (ixn ≠ ixn_max_1 ∧ parent ixn_max_1 ixn
+    ∧ height ixn = height ixn_max_1 + 1)
   prevoted_node n v p1 p2 ixn := true
   cur_stage n v p1 p2 S := decide $ (S = prevote)
+  -- No ghost updates: no locks change
 }
 
 action operator_prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) {
@@ -458,8 +538,6 @@ action operator_prevote (op : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   prevoted_operator op v p1 p2 ixn := true
 }
 
--- respond_prevote: Removed precommit lock guard (matching Go implementation)
--- Go reference: kbft.go enterPreCommit — UpdateSafetyInfo without lock guard
 action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
@@ -473,13 +551,12 @@ action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   require ∃ (s1 s2 : nodeset), ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2 ∧
     ∀ (nc : node), (ctx.member nc s1 ∨ ctx.member nc s2) → prevoted_node nc v p1 p2 ixn
   precommitted_node n v p1 p2 ixn := true
-  -- Prevote lock: NO precommit guard (matches Go implementation)
-  if ( ctx.member n c1 ) then
+  if ( ctx.member n c1 ∧ ¬ ∃ (u : view), (tot_view.le u v ∧ locked n p1 ixn precommit u) ) then
     locked n p1 ixn prevote v := true;
     -- GHOST: new prevote lock at view v for p1
     locked_at_view n p1 v := true;
     locked_for_descendant n p1 A v := decide $ (locked_for_descendant n p1 A v ∨ ancestor A ixn);
-  if ( ctx.member n c2 ) then
+  if ( ctx.member n c2 ∧ ¬ ∃ (u : view), (tot_view.le u v ∧ locked n p2 ixn precommit u) ) then
     locked n p2 ixn prevote v := true;
     -- GHOST: new prevote lock at view v for p2
     locked_at_view n p2 v := true;
@@ -524,9 +601,10 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
     locked_at_view n p2 v := true;
     locked_for_descendant n p2 A v := decide $ (locked_for_descendant n p2 A v ∨ ancestor A ixn);
   decided n v p1 p2 ixn := true
-  -- Update committed state (NEW in IFPM)
-  committed_height n := height ixn;
-  committed_ixn n := ixn;
+  -- Update committed state only if this is a newer decision (NEW in IFPM)
+  if (height ixn ≥ committed_height n) then
+    committed_height n := height ixn;
+    committed_ixn n := ixn;
   -- GHOST: node decided a descendant of A at view v
   decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
   cur_stage n v p1 p2 S := decide $ (S = commit)
