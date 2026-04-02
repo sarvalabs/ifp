@@ -85,20 +85,11 @@ function height : interaction → Nat
 relation committed_ixn : node → interaction → Bool
 
 -- ####################################################################
--- # Ghost Relations (HotStuff-style, maintained in actions)
+-- # Ghost Relations
 -- ####################################################################
 
 -- "Node N has some lock for participant P at exactly view V"
 relation locked_at_view : node → participant → view → Bool
-
--- "Node N has a lock for participant P on some descendant of A at exactly view V"
-relation locked_for_descendant : node → participant → interaction → view → Bool
-
--- "At view V, the proposed interaction is a descendant of A"
-relation proposed_for_descendant : view → interaction → Bool
-
--- "Node N decided a descendant of A at view V"
-relation decided_for_descendant : node → interaction → view → Bool
 
 
 #gen_state
@@ -141,10 +132,6 @@ after_init {
   committed_ixn N I := decide $ (I = genesis);
   -- Ghost init (locked): matches initial locked state
   locked_at_view N P V := decide $ (V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
-  locked_for_descendant N P A V := decide $ (A = genesis ∧ V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
-  -- Ghost init (proposed/decided)
-  proposed_for_descendant V A := false;
-  decided_for_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
 }
 
 -- ####################################################################
@@ -279,8 +266,6 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
   require height ixn_max_1 = height ci + 1
   require s_max_1 = prevote
   proposed_repropose op v p1 p2 ixn_max_1 := true;
-  -- GHOST: proposed interaction is a descendant of A iff A is an ancestor of ixn_max_1
-  proposed_for_descendant v A := decide $ (proposed_for_descendant v A ∨ ancestor A ixn_max_1);
 }
 
 -- Extend: all locks at or below committed_height → fresh proposal
@@ -354,9 +339,6 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
   proposed_extend op v p1 p2 ixn_propose := true;
   height ixn_propose := height ci + 1;
-  -- GHOST: expand ancestor post-state for ixn_propose
-  proposed_for_descendant v A := decide $ (proposed_for_descendant v A
-    ∨ ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
 }
 
 -- Nil: highest lock too far ahead, or precommit at committed_height + 1
@@ -555,14 +537,10 @@ action respond_prevote (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
   precommitted_node n v p1 p2 ixn := true
   if ( ctx.member n c1 ∧ ¬ ∃ (u : view), (tot_view.le u v ∧ locked n p1 ixn precommit u) ) then
     locked n p1 ixn prevote v := true;
-    -- GHOST: new prevote lock at view v for p1
     locked_at_view n p1 v := true;
-    locked_for_descendant n p1 A v := decide $ (locked_for_descendant n p1 A v ∨ ancestor A ixn);
   if ( ctx.member n c2 ∧ ¬ ∃ (u : view), (tot_view.le u v ∧ locked n p2 ixn precommit u) ) then
     locked n p2 ixn prevote v := true;
-    -- GHOST: new prevote lock at view v for p2
     locked_at_view n p2 v := true;
-    locked_for_descendant n p2 A v := decide $ (locked_for_descendant n p2 A v ∨ ancestor A ixn);
   cur_stage n v p1 p2 S := decide $ (S = precommit)
 }
 
@@ -597,17 +575,13 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
   if (ctx.member n c1) then
     locked n p1 ixn precommit v := true;
     locked_at_view n p1 v := true;
-    locked_for_descendant n p1 A v := decide $ (locked_for_descendant n p1 A v ∨ ancestor A ixn);
   if (ctx.member n c2) then
     locked n p2 ixn precommit v := true;
     locked_at_view n p2 v := true;
-    locked_for_descendant n p2 A v := decide $ (locked_for_descendant n p2 A v ∨ ancestor A ixn);
   decided n v p1 p2 ixn := true
   -- Update committed interaction only if this is a newer decision (NEW in IFPM)
   if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn ≥ height ci_old) then
     committed_ixn n I := decide $ (I = ixn);
-  -- GHOST: node decided a descendant of A at view v
-  decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
   cur_stage n v p1 p2 S := decide $ (S = commit)
 }
 
@@ -750,40 +724,6 @@ invariant [locked_at_view_fwd]
 invariant [locked_at_view_bwd]
   (¬ ctx.is_byz N ∧ locked_at_view N P V ∧ (P = p1_fixed ∨ P = p2_fixed)) →
     ∃ (I : interaction) (S : stage), locked N P I S V
-
-invariant [locked_for_descendant_fwd]
-  (locked N P I S V ∧ ancestor A I ∧ (P = p1_fixed ∨ P = p2_fixed)) →
-    locked_for_descendant N P A V
-
-invariant [locked_for_descendant_bwd]
-  (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ (P = p1_fixed ∨ P = p2_fixed)) →
-    ∃ (I : interaction) (S : stage), locked N P I S V ∧ ancestor A I
-
--- ####################################################################
--- # Ghost Consistency Invariants (proposed/decided)
--- ####################################################################
-
-invariant [proposed_for_descendant_fwd]
-  ((proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ ancestor A I) → proposed_for_descendant V A
-
-invariant [proposed_for_descendant_bwd]
-  proposed_for_descendant V A →
-    ∃ (OP : node) (I : interaction), (proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ ancestor A I
-
-invariant [decided_for_descendant_fwd]
-  (decided N V p1_fixed p2_fixed I ∧ ancestor A I) → decided_for_descendant N A V
-
-invariant [decided_for_descendant_bwd]
-  (¬ ctx.is_byz N ∧ decided_for_descendant N A V) →
-    ∃ (I : interaction), decided N V p1_fixed p2_fixed I ∧ ancestor A I
-
--- ####################################################################
--- # Lock Descendant Monotonicity (core ghost invariant)
--- ####################################################################
-
-invariant [lock_descendant_monotone]
-  (¬ ctx.is_byz N ∧ locked_for_descendant N P A V ∧ locked N P I S U ∧
-   (P = p1_fixed ∨ P = p2_fixed) ∧ tot_view.le V U) → ancestor A I
 
 -- ####################################################################
 -- # Decision–Proposal Linking Invariant
