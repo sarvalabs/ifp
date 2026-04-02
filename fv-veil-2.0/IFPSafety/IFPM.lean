@@ -80,8 +80,8 @@ relation parent : interaction → interaction → Bool
 relation ancestor : interaction → interaction → Bool
 function height : interaction → Nat
 
--- Committed state (NEW in IFPM: tracks node's latest decided state)
-relation committed_height : node → Nat → Bool
+-- Committed state (NEW in IFPM: tracks node's latest decided interaction)
+-- committed_height is derived as height(committed_ixn) — no separate relation needed
 relation committed_ixn : node → interaction → Bool
 
 -- ####################################################################
@@ -138,7 +138,6 @@ after_init {
   prevoted_node N V P Q I := false;
   precommitted_node N V P Q I := false;
   -- Committed state init: genesis at height 0
-  committed_height N H := decide $ (H = 0);
   committed_ixn N I := decide $ (I = genesis);
   -- Ghost init (locked): matches initial locked state
   locked_at_view N P V := decide $ (V = tot_view.zero ∧ (P = p1_fixed ∨ P = p2_fixed));
@@ -220,7 +219,7 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
 --   heightDiff > 1 → nil (sync)
 
 -- Repropose: highest lock is at committed_height + 1 with prevote stage
-action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ch : Nat) {
+action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ci : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -276,8 +275,8 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
     )
   )
   -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
-  require committed_height op ch
-  require height ixn_max_1 = ch + 1
+  require committed_ixn op ci
+  require height ixn_max_1 = height ci + 1
   require s_max_1 = prevote
   proposed_repropose op v p1 p2 ixn_max_1 := true;
   -- GHOST: proposed interaction is a descendant of A iff A is an ancestor of ixn_max_1
@@ -286,7 +285,7 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
 
 -- Extend: all locks at or below committed_height → fresh proposal
 -- Go reference: len(lockedTS) == 0 → createProposalTesseract (fresh)
-action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) (ch : Nat) (ci : interaction) {
+action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) (ci : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -346,16 +345,15 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
     )
   )
   -- Height-based decision: heightDiff == 0 → extend (all caught up)
-  require committed_height op ch
   require committed_ixn op ci
-  require height ixn_max_1 ≤ ch
+  require height ixn_max_1 ≤ height ci
   -- Parent is operator's committed interaction
   require ci ≠ ixn_propose
   require ¬ (ancestor ci ixn_propose ∨ ancestor ixn_propose ci)
   parent ci ixn_propose := decide $ (ci ≠ ixn_propose);
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
   proposed_extend op v p1 p2 ixn_propose := true;
-  height ixn_propose := ch + 1;
+  height ixn_propose := height ci + 1;
   -- GHOST: expand ancestor post-state for ixn_propose
   proposed_for_descendant v A := decide $ (proposed_for_descendant v A
     ∨ ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
@@ -363,7 +361,7 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
 
 -- Nil: highest lock too far ahead, or precommit at committed_height + 1
 -- Go reference: heightDiff > 1 or (heightDiff == 1 && PRECOMMIT) → nil/sync
-action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ch : Nat) {
+action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ci : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -419,9 +417,9 @@ action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset
     )
   )
   -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
-  require committed_height op ch
-  require (height ixn_max_1 > ch + 1)
-        ∨ (height ixn_max_1 = ch + 1 ∧ s_max_1 = precommit)
+  require committed_ixn op ci
+  require (height ixn_max_1 > height ci + 1)
+        ∨ (height ixn_max_1 = height ci + 1 ∧ s_max_1 = precommit)
   proposed_nil op v p1 p2 := true;
 }
 
@@ -605,9 +603,8 @@ action respond_precommit (n : node) (v : view) (p1 p2 : participant) (c1 c2 : no
     locked_at_view n p2 v := true;
     locked_for_descendant n p2 A v := decide $ (locked_for_descendant n p2 A v ∨ ancestor A ixn);
   decided n v p1 p2 ixn := true
-  -- Update committed state only if this is a newer decision (NEW in IFPM)
-  if (∃ (ch_old : Nat), committed_height n ch_old ∧ height ixn ≥ ch_old) then
-    committed_height n H := decide $ (H = height ixn);
+  -- Update committed interaction only if this is a newer decision (NEW in IFPM)
+  if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn ≥ height ci_old) then
     committed_ixn n I := decide $ (I = ixn);
   -- GHOST: node decided a descendant of A at view v
   decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
@@ -1152,34 +1149,22 @@ invariant [decision_height_monotone]
 -- # Committed State Invariants (NEW in IFPM)
 -- ####################################################################
 
--- Every node has exactly one committed_height
-invariant [unique_committed_height]
-  (committed_height N H1 ∧ committed_height N H2) → H1 = H2
-
--- Every node always has some committed_height
-invariant [node_has_committed_height]
-  ∀ (n : node), ∃ (h : Nat), committed_height n h
-
--- Every node has exactly one committed_ixn
+-- Every node has exactly one committed_ixn (functional uniqueness)
 invariant [unique_committed_ixn]
   (committed_ixn N I1 ∧ committed_ixn N I2) → I1 = I2
 
--- Every node always has some committed_ixn
+-- Every node always has some committed_ixn (totality)
 invariant [node_has_committed_ixn]
   ∀ (n : node), ∃ (i : interaction), committed_ixn n i
-
--- committed_height equals the height of committed_ixn
-invariant [committed_height_matches]
-  (committed_height N H ∧ committed_ixn N I) → H = height I
 
 -- An honest node's committed_ixn has been decided
 invariant [committed_ixn_decided]
   (¬ ctx.is_byz N ∧ committed_ixn N I) →
     ∃ (V : view), decided N V p1_fixed p2_fixed I
 
--- committed_height is the max decided height (all decisions are at or below committed_height)
-invariant [committed_height_upper_bound]
-  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ committed_height N H) → height I ≤ H
+-- committed_ixn height is the max decided height
+invariant [committed_ixn_height_upper_bound]
+  (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ committed_ixn N CI) → height I ≤ height CI
 
 -- committed_ixn has a parent (unless it's genesis)
 invariant [committed_ixn_is_genesis_or_has_parent]
