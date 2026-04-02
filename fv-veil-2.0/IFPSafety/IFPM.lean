@@ -1021,7 +1021,10 @@ invariant [stage_1]
 
 invariant [stage_3]
   (cur_stage N V p1_fixed p2_fixed precommit ∧ ¬ ctx.is_byz N) →
-    (∃ (i : interaction), (prevoted_operator N V p1_fixed p2_fixed i ∨ precommitted_node N V p1_fixed p2_fixed i) ∧ (locked N p1_fixed i prevote V ∨ locked N p2_fixed i prevote V))
+    (∃ (i : interaction), (prevoted_operator N V p1_fixed p2_fixed i ∨ precommitted_node N V p1_fixed p2_fixed i) ∧
+     (locked N p1_fixed i prevote V ∨ locked N p2_fixed i prevote V ∨
+      (∃ (u : view), tot_view.le u V ∧ locked N p1_fixed i precommit u) ∨
+      (∃ (u : view), tot_view.le u V ∧ locked N p2_fixed i precommit u)))
 
 invariant [stage_4]
   (cur_stage N V p1_fixed p2_fixed commit ∧ ¬ ctx.is_byz N) →
@@ -1115,6 +1118,8 @@ invariant [committed_ixn_descends_from_genesis]
   (¬ ctx.is_byz N ∧ committed_ixn N I) → ancestor genesis I
 
 
+set_option maxHeartbeats 10000000
+set_option synthInstance.maxSize 8192
 set_option veil.smt.timeout 13000
 #gen_spec
 
