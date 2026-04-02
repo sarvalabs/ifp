@@ -220,7 +220,7 @@ action respond_prepare (n : node) (v : view) (p1 p2 : participant) (c1 c2 : node
 --   heightDiff > 1 → nil (sync)
 
 -- Repropose: highest lock is at committed_height + 1 with prevote stage
-action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
+action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ch : Nat) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -276,7 +276,6 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
     )
   )
   -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
-  let ch : Nat ← pick
   require committed_height op ch
   require height ixn_max_1 = ch + 1
   require s_max_1 = prevote
@@ -287,7 +286,7 @@ action propose_repropose (op : node) (v : view) (p1 p2 : participant) (c1 c2 : n
 
 -- Extend: all locks at or below committed_height → fresh proposal
 -- Go reference: len(lockedTS) == 0 → createProposalTesseract (fresh)
-action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) {
+action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ixn_propose : interaction) (ch : Nat) (ci : interaction) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -347,8 +346,6 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
     )
   )
   -- Height-based decision: heightDiff == 0 → extend (all caught up)
-  let ch : Nat ← pick
-  let ci : interaction ← pick
   require committed_height op ch
   require committed_ixn op ci
   require height ixn_max_1 ≤ ch
@@ -366,7 +363,7 @@ action propose_extend (op : node) (v : view) (p1 p2 : participant) (c1 c2 : node
 
 -- Nil: highest lock too far ahead, or precommit at committed_height + 1
 -- Go reference: heightDiff > 1 or (heightDiff == 1 && PRECOMMIT) → nil/sync
-action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) {
+action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset) (ch : Nat) {
   require v ≠ tot_view.zero
   require (p1 = p1_fixed ∧ p2 = p2_fixed)
   require p1 ≠ p2
@@ -422,7 +419,6 @@ action propose_nil (op : node) (v : view) (p1 p2 : participant) (c1 c2 : nodeset
     )
   )
   -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
-  let ch : Nat ← pick
   require committed_height op ch
   require (height ixn_max_1 > ch + 1)
         ∨ (height ixn_max_1 = ch + 1 ∧ s_max_1 = precommit)
