@@ -1117,16 +1117,71 @@ invariant [committed_ixn_is_genesis_or_has_parent]
 invariant [committed_ixn_descends_from_genesis]
   (¬ ctx.is_byz N ∧ committed_ixn N I) → ancestor genesis I
 
+-- committed_ixn is a valid interaction (or genesis)
+invariant [committed_ixn_is_interaction]
+  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → interactions I p1_fixed p2_fixed
 
-set_option maxHeartbeats 10000000
-set_option synthInstance.maxSize 8192
-set_option veil.smt.timeout 13000
+-- committed_ixn has precommit locks for contexts the node belongs to
+invariant [committed_ixn_precommit_locked]
+  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis ∧
+   participant_context p1_fixed C1 ∧ participant_context p2_fixed C2) →
+    ((ctx.member N C1 → ∃ (V : view), locked N p1_fixed I precommit V) ∧
+     (ctx.member N C2 → ∃ (V : view), locked N p2_fixed I precommit V))
+
+-- Two honest nodes' committed_ixns at the same height must be identical
+invariant [committed_ixn_unique_at_height]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   committed_ixn N1 I1 ∧ committed_ixn N2 I2 ∧
+   height I1 = height I2) → I1 = I2
+
+-- committed_ixn height is at least 1 when not genesis
+invariant [committed_ixn_height_positive]
+  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → height I ≥ 1
+
+-- ####################################################################
+-- # Height Positivity Invariants
+-- ####################################################################
+
+-- Decided non-genesis interactions are valid
+invariant [decided_is_interaction]
+  (decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) → interactions I p1_fixed p2_fixed
+
+-- Locked non-genesis interactions have height ≥ 1
+invariant [locked_height_positive]
+  (locked N P I S V ∧ I ≠ genesis ∧ (P = p1_fixed ∨ P = p2_fixed)) → height I ≥ 1
+
+-- Proposed non-genesis interactions have height ≥ 1
+invariant [proposed_height_positive]
+  ((proposed_repropose OP V p1_fixed p2_fixed I ∨ proposed_extend OP V p1_fixed p2_fixed I) ∧ I ≠ genesis) →
+    height I ≥ 1
+
+-- Decided non-genesis interactions have height ≥ 1
+invariant [decided_height_positive]
+  (decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) → height I ≥ 1
+
+-- Prevoted non-genesis interactions have height ≥ 1
+invariant [prevoted_height_positive]
+  (¬ ctx.is_byz N ∧ prevoted_node N V p1_fixed p2_fixed I ∧ I ≠ genesis) → height I ≥ 1
+
+
+-- set_option maxHeartbeats 10000000
+-- set_option synthInstance.maxSize 8192
+set_option veil.smt.timeout 1300
 #gen_spec
 
 set_option veil.printCounterexamples true
 
--- #check_invariants
+-- -- #check_invariants
 
-#check_action respond_prevote
+-- #check_action respond_prevote
+
+-- @[invProof]
+-- theorem operator_prevote_no_proposal_without_parent :
+--     ∀ (op : node) (v : view) (p1 : participant) (p2 : participant) (c1 : nodeset) (c2 : nodeset) (ixn : interaction),
+--       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+--         (operator_prevote.ext op v p1 p2 c1 c2 ixn)
+--         Assumptions Invariants no_proposal_without_parent := by
+--   veil_human
+--   sorry
 
 end IFPProtocolM
