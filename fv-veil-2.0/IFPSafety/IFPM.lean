@@ -601,11 +601,22 @@ invariant [INV2_unique_prevote_lock_in_view]
     ¬ (ctx.is_byz n1 ∨ ctx.is_byz n2) → (( (locked n1 p1_fixed i1 prevote v ∧ locked n2 p1_fixed i2 prevote v) ∨ (locked n1 p2_fixed i1 prevote v ∧ locked n2 p2_fixed i2 prevote v) ) → i1 = i2)
 
 -- INV3: If an honest node has decided, then a quorum has prevote-locked
+-- (Original: quantifies over all quorum members including Byzantine — too strong)
+-- invariant [INV3_decided_only_if_quorum_prevote_locked]
+--   ∀ (v : view) (ixn : interaction) (n : node),
+--     ¬ ctx.is_byz n → ( (decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
+--       (∃ (c1 c2 s1 s2 : nodeset), (participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧ interactions ixn p1_fixed p2_fixed ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
+--         ∧ ∀ (nc : node), (
+--           (ctx.member nc s1 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u))) ∧
+--           (ctx.member nc s2 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u))) )) ) )
+
+-- INV3 (weakened): Only honest quorum members required to have locks.
+-- Sufficient for safety: quorum intersection yields an honest node with locks.
 invariant [INV3_decided_only_if_quorum_prevote_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
     ¬ ctx.is_byz n → ( (decided n v p1_fixed p2_fixed ixn ∧ ixn ≠ genesis) →
       (∃ (c1 c2 s1 s2 : nodeset), (participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧ interactions ixn p1_fixed p2_fixed ∧ ctx.supermajority s1 c1 ∧ ctx.supermajority s2 c2
-        ∧ ∀ (nc : node), (
+        ∧ ∀ (nc : node), ¬ ctx.is_byz nc → (
           (ctx.member nc s1 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p1_fixed ixn prevote u ∨ locked nc p1_fixed ixn precommit u))) ∧
           (ctx.member nc s2 → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v p1_fixed p2_fixed ixn ∧ (locked nc p2_fixed ixn prevote u ∨ locked nc p2_fixed ixn precommit u))) )) ) )
 
@@ -939,6 +950,9 @@ invariant [decisions_not_from_higher_views]
 invariant [genesis_view_zero]
   (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ tot_view.zero = V) → I = genesis
 
+invariant [genesis_decided_at_zero]
+  ∀ (n : node), decided n tot_view.zero p1_fixed p2_fixed genesis
+
 invariant [decide_only_if_quorum_precommit]
   (¬ ctx.is_byz N ∧ decided N V p1_fixed p2_fixed I ∧ I ≠ genesis) →
     (∃ (c1 c2 s1 s2 : nodeset), participant_context p1_fixed c1 ∧ participant_context p2_fixed c2 ∧
@@ -1073,6 +1087,14 @@ invariant [unique_locked_at_height]
 -- ####################################################################
 -- # View-Height Monotonicity Invariants
 -- ####################################################################
+
+-- Bridge: if a node prevoted for I at V, all its locks at strictly earlier views
+-- have height ≤ height(I). Follows from proposal logic (proposals extend/repropose
+-- the highest lock, so proposed height ≥ all earlier lock heights).
+invariant [prevoted_height_ge_locks]
+  (¬ ctx.is_byz N ∧ prevoted_node N V p1_fixed p2_fixed I ∧ I ≠ genesis ∧
+   locked N P J S U ∧ (P = p1_fixed ∨ P = p2_fixed) ∧ tot_view.lt U V)
+  → height J ≤ height I
 
 invariant [lock_height_monotone]
   (¬ ctx.is_byz N ∧
