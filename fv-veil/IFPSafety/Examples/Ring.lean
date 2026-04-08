@@ -331,7 +331,7 @@ prove_inv_safe by {
 /- We support proof reconstruction from SMT proofs (powered by `lean-smt`). This
 is not yet fully reliable, but it suffices for this simple example. Note that
 `prove_inv_inductive` shows no warning about `sorry` with the option enabled. -/
-set_option veil.smt.reconstructProofs true
+-- set_option veil.smt.reconstructProofs true
 
 prove_inv_inductive by {
   constructor
