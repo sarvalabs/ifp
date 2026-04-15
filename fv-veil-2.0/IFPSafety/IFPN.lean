@@ -387,6 +387,16 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = commit)
 }
 
+-- ####################################################################
+-- # Main Safety Property
+-- ####################################################################
+
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
 
 -- ####################################################################
 -- # Core Invariants
@@ -785,16 +795,6 @@ invariant [propose_only_if_parent_locked]
   (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J) →
     (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ locked n I s u)
 
--- ####################################################################
--- # Main Safety Property
--- ####################################################################
-
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
 
 -- ####################################################################
 -- # Height-Based Uniqueness Invariants
@@ -889,11 +889,11 @@ invariant [prevoted_height_positive]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) → height I ≥ 1
 
 
-set_option veil.smt.timeout 13000
+set_option veil.smt.timeout 1300
 #gen_spec
 
 set_option veil.printCounterexamples true
 
-#check_action respond_precommit
+#check_action respond_prevote
 
 end IFPProtocolN
