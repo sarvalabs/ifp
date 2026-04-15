@@ -710,6 +710,9 @@ invariant [genesis_view_zero]
 invariant [genesis_decided_at_zero]
   ∀ (n : node), decided n tot_view.zero genesis
 
+invariant [genesis_decided_only_at_zero]
+  (¬ ctx.is_byz N ∧ decided N V genesis) → V = tot_view.zero
+
 invariant [decide_only_if_quorum_precommit]
   (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) →
     (∃ (s : nodeset), ctx.supermajority s ∧
@@ -733,6 +736,14 @@ invariant [genesis_height_zero]
 
 invariant [parent_only_if_proposed]
   parent I J ∧ J ≠ genesis → ∃ (n : node) (v : view), proposed_extend n v J
+
+invariant [proposed_extend_parent_decided]
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J ∧ J ≠ genesis) →
+    ∃ (U : view), decided OP U I
+
+invariant [proposed_repropose_parent_decided]
+  (proposed_repropose OP V J ∧ parent I J ∧ J ≠ genesis) →
+    ∃ (N : node) (U : view), decided N U I
 
 -- ####################################################################
 -- # Operator/Quorum Invariants
@@ -822,6 +833,16 @@ invariant [prevoted_height_ge_locks]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧
    locked N J S U ∧ tot_view.lt U V)
   → height J ≤ height I
+
+invariant [prevote_descends_from_earlier_precommit_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧
+   locked N J precommit U ∧ tot_view.lt U V ∧ J ≠ I)
+  → ancestor J I
+
+invariant [lock_descends_from_earlier_precommit]
+  (¬ ctx.is_byz N ∧ locked N I S V ∧ I ≠ genesis ∧
+   locked N J precommit U ∧ tot_view.lt U V ∧ J ≠ I)
+  → ancestor J I
 
 invariant [lock_height_monotone]
   (¬ ctx.is_byz N ∧
