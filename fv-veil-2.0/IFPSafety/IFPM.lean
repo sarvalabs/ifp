@@ -1188,14 +1188,14 @@ invariant [prevoted_height_positive]
 
 -- set_option maxHeartbeats 10000000
 -- set_option synthInstance.maxSize 8192
-set_option veil.smt.timeout 1300
+set_option veil.smt.timeout 13000
 #gen_spec
 
 set_option veil.printCounterexamples true
 
 -- -- #check_invariants
 
--- #check_action respond_prevote
+#check_action respond_precommit
 
 -- @[invProof]
 -- theorem operator_prevote_no_proposal_without_parent :
