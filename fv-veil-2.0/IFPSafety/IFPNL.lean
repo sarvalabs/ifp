@@ -1,20 +1,24 @@
--- IFPN: IFP model with height-based proposal logic matching the Go implementation.
--- Simplified to single-context (no participants).
--- Key changes from IFPM (participant-based model):
+-- IFPNL: IFPL simplified to single-context (no participants).
+-- Mirrors the IFPM → IFPN transformation applied to IFPL:
 -- 1. Removed participant type and dual contexts
 -- 2. Single quorum instead of dual quorum checks
 -- 3. Single lock dimension (no per-participant locks)
 -- 4. Merged sent_lock_in_prepare_1/2 into single sent_lock_in_prepare
+-- 5. Dropped propose_nil (trigger vanishes with single highest lock)
+-- Retains IFPL's ghost relations (locked_at_view, locked_for_descendant,
+-- proposed_for_descendant, decided_for_descendant), height-based uniqueness
+-- (unique_decided_at_height, unique_locked_at_height), and view-height
+-- monotonicity (lock_height_monotone, decision_height_monotone).
 
 import Veil
 
-veil module IFPProtocolN
+veil module IFPProtocolNL
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
   is_byz : node → Prop
   member (n : node) (s : nset) : Prop
-  supermajority (s : nset) : Prop
+  supermajority (s : nset) : Prop   -- 2f + 1 nodes
 
   supermajorities_intersect_in_honest :
     ∀ (s1 s2 : nset),
@@ -41,6 +45,7 @@ immutable individual commit : stage
 
 individual genesis : interaction
 
+
 -- `mutable relations and functions`
 relation cur_view: node → view → Bool
 relation cur_stage : node → view → stage → Bool
@@ -53,7 +58,6 @@ relation operator: node → view → Bool
 relation prepared_operator : node → view → Bool
 relation proposed_repropose : node → view → interaction → Bool
 relation proposed_extend : node → view → interaction → Bool
-relation proposed_nil : node → view → Bool
 relation prevoted_operator : node → view → interaction → Bool
 relation precommitted_operator : node → view → interaction → Bool
 
@@ -67,14 +71,29 @@ relation parent : interaction → interaction → Bool
 relation ancestor : interaction → interaction → Bool
 function height : interaction → Nat
 
--- Committed state
-relation committed_ixn : node → interaction → Bool
-
 -- ####################################################################
--- # Ghost Relations
+-- # Ghost Relations (HotStuff-style, maintained in actions)
 -- ####################################################################
 
+-- "Node N has some lock at exactly view V"
+-- Eliminates ∃ I S, locked N I S V from invariant quantification.
+-- Analogous to HotStuff's votedh(N, H).
 relation locked_at_view : node → view → Bool
+
+-- "Node N has a lock on some descendant of A at exactly view V"
+-- i.e., ∃ I S, locked N I S V ∧ ancestor A I
+-- Eliminates the need for the SMT solver to find interaction witnesses
+-- and prove ancestry relationships.
+-- Analogous to HotStuff's votedb(N, B, H).
+relation locked_for_descendant : node → interaction → view → Bool
+
+-- "At view V, the proposed interaction is a descendant of A"
+-- i.e., ∃ op I, (proposed_repropose op V I ∨ proposed_extend op V I) ∧ ancestor A I
+relation proposed_for_descendant : view → interaction → Bool
+
+-- "Node N decided a descendant of A at view V"
+-- i.e., ∃ I, decided N V I ∧ ancestor A I
+relation decided_for_descendant : node → interaction → view → Bool
 
 
 #gen_state
@@ -99,14 +118,19 @@ after_init {
   sent_lock_in_prepare N U L S V := false;
   proposed_repropose N V I := false;
   proposed_extend N V I := false;
-  proposed_nil N V := false;
   prevoted_operator N V I := false;
   precommitted_operator N V I := false;
   prepared_node N V := false;
   prevoted_node N V I := false;
   precommitted_node N V I := false;
-  committed_ixn N I := decide $ (I = genesis);
+  -- Ghost init (locked): matches initial locked state
+  -- Initially: locked N genesis precommit tot_view.zero
+  -- Initially: ancestor A genesis iff A = genesis
   locked_at_view N V := decide $ (V = tot_view.zero);
+  locked_for_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
+  -- Ghost init (proposed/decided)
+  proposed_for_descendant V A := false;
+  decided_for_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
 }
 
 -- ####################################################################
@@ -117,6 +141,7 @@ action set_view (v_cur v_next : view) {
   require ∀ (n : node), cur_view n v_cur
   require tot_view.next v_cur v_next
   cur_view N V := decide $ (V = v_next)
+  -- No ghost updates: no locks change during view transition
 }
 
 action pick_operator (op : node) (v : view) {
@@ -124,6 +149,7 @@ action pick_operator (op : node) (v : view) {
   require cur_view op v
   require ∀ (n : node), ¬ operator n v
   operator op v := true
+  -- No ghost updates: no locks change
 }
 
 action operator_prepare (op : node) (v : view) {
@@ -133,6 +159,7 @@ action operator_prepare (op : node) (v : view) {
   require operator op v
   require ¬ prepared_operator op v
   prepared_operator op v := true
+  -- No ghost updates: no locks change
 }
 
 action respond_prepare (n : node) (v : view) {
@@ -148,14 +175,11 @@ action respond_prepare (n : node) (v : view) {
      (∀ (vl2 : view), tot_view.lt VL vl2 → ¬ ∃ (i2 : interaction) (s2 : stage), locked n i2 s2 vl2) ∧
      (SL = prevote → ¬ locked n IL precommit VL))
   cur_stage n v S := decide $ (S = propose)
+  -- No ghost updates: no locks change (sent_lock_in_prepare reads locks but doesn't create new ones)
 }
 
--- ####################################################################
--- # Proposal Actions (Height-Based, matching Go implementation)
--- ####################################################################
-
--- Repropose: highest lock is at committed_height + 1 with prevote stage
-action propose_repropose (op : node) (v : view) (ci : interaction) {
+-- Repropose: highest lock is a prevote lock
+action propose_repropose (op : node) (v : view) {
   require v ≠ tot_view.zero
   require cur_view op v
   require operator op v
@@ -163,21 +187,21 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
   require cur_stage op v propose
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
   require ∃ (s : nodeset), (
     ctx.supermajority s ∧ (
       ∀ (n : node), (
         ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset), (
           sent_lock_in_prepare n v ixnl sl vl
           ∧ locked n ixnl sl vl
           ∧ tot_view.le vl v
+          ∧ ctx.supermajority t
+          ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) )
         )
       ))
     )
   )
-  -- Highest lock (by view only)
   let ixn_max : interaction ← pick
   let s_max : stage ← pick
   let v_max : view ← pick
@@ -185,18 +209,22 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
     sent_lock_in_prepare n_max v ixn_max s_max v_max
     ∧ locked n_max ixn_max s_max v_max ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
+      sent_lock_in_prepare n_l v ixn_l s_l v_l → (
+        height ixn_l < height ixn_max
+        ∨ (height ixn_l = height ixn_max ∧ s_l = prevote ∧ s_max = precommit)
+        ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
+        ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
+      )
     )
   )
-  -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
-  require committed_ixn op ci
-  require height ixn_max = height ci + 1
   require s_max = prevote
   proposed_repropose op v ixn_max := true;
+  -- GHOST: proposed interaction is a descendant of A iff A is an ancestor of ixn_max
+  proposed_for_descendant v A := decide $ (proposed_for_descendant v A ∨ ancestor A ixn_max);
 }
 
--- Extend: all locks at or below committed_height → fresh proposal
-action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : interaction) {
+-- Extend: highest lock is a precommit lock
+action propose_extend (op : node) (v : view) (ixn_propose : interaction) {
   require v ≠ tot_view.zero
   require ∀ (j : interaction), ¬ (parent j ixn_propose ∨ parent ixn_propose j)
   require ∀ (j : interaction), (ixn_propose ≠ j → ¬ (ancestor j ixn_propose ∨ ancestor ixn_propose j))
@@ -208,21 +236,21 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   require ixn_propose ≠ genesis
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
   require ∃ (s : nodeset), (
     ctx.supermajority s ∧ (
       ∀ (n : node), (
         ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
+        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset), (
           sent_lock_in_prepare n v ixnl sl vl
           ∧ locked n ixnl sl vl
           ∧ tot_view.le vl v
+          ∧ ctx.supermajority t
+          ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
+          ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) )
         )
       ))
     )
   )
-  -- Highest lock (by view only)
   let ixn_max : interaction ← pick
   let s_max : stage ← pick
   let v_max : view ← pick
@@ -230,64 +258,25 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
     sent_lock_in_prepare n_max v ixn_max s_max v_max
     ∧ locked n_max ixn_max s_max v_max ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
+      sent_lock_in_prepare n_l v ixn_l s_l v_l → (
+        height ixn_l < height ixn_max
+        ∨ (height ixn_l = height ixn_max ∧ s_l = prevote ∧ s_max = precommit)
+        ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
+        ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
+      )
     )
   )
-  -- Height-based decision: heightDiff == 0 → extend
-  require committed_ixn op ci
-  require height ixn_max ≤ height ci
-  require ci ≠ ixn_propose
-  require ¬ (ancestor ci ixn_propose ∨ ancestor ixn_propose ci)
-  parent ci ixn_propose := decide $ (ci ≠ ixn_propose);
-  ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
+  require s_max = precommit
+  require ixn_max ≠ ixn_propose
+  require ¬ (ancestor ixn_max ixn_propose ∨ ancestor ixn_propose ixn_max)
+  parent ixn_max ixn_propose := decide $ (ixn_max ≠ ixn_propose);
+  ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ixn_max ∨ A = ixn_max ∨ A = ixn_propose);
   proposed_extend op v ixn_propose := true;
-  height ixn_propose := height ci + 1;
+  height ixn_propose := height ixn_max + 1;
+  -- GHOST: parallel-safe version — expand ancestor post-state for ixn_propose
+  proposed_for_descendant v A := decide $ (proposed_for_descendant v A
+    ∨ ancestor A ixn_propose ∨ ancestor A ixn_max ∨ A = ixn_max ∨ A = ixn_propose);
 }
-
--- Nil: highest lock too far ahead, or precommit at committed_height + 1
-action propose_nil (op : node) (v : view) (ci : interaction) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require operator op v
-  require prepared_operator op v
-  require cur_stage op v propose
-  require ∀ (ix : interaction), ¬ proposed_repropose op v ix
-  require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
-  require ∃ (s : nodeset), (
-    ctx.supermajority s ∧ (
-      ∀ (n : node), (
-        ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
-          sent_lock_in_prepare n v ixnl sl vl
-          ∧ locked n ixnl sl vl
-          ∧ tot_view.le vl v
-        )
-      ))
-    )
-  )
-  -- Highest lock (by view only)
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
-  let v_max : view ← pick
-  require ∃ (n_max : node), (
-    sent_lock_in_prepare n_max v ixn_max s_max v_max
-    ∧ locked n_max ixn_max s_max v_max ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
-    )
-  )
-  -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
-  require committed_ixn op ci
-  require (height ixn_max > height ci + 1)
-        ∨ (height ixn_max = height ci + 1 ∧ s_max = precommit)
-  proposed_nil op v := true;
-}
-
--- ####################################################################
--- # Respond/Vote Actions
--- ####################################################################
 
 action respond_propose (n : node) (v : view) (ixn : interaction) {
   require v ≠ tot_view.zero
@@ -334,6 +323,7 @@ action respond_propose (n : node) (v : view) (ixn : interaction) {
     ∧ height ixn = height ixn_max + 1)
   prevoted_node n v ixn := true
   cur_stage n v S := decide $ (S = prevote)
+  -- No ghost updates: no locks change
 }
 
 action operator_prevote (op : node) (v : view) (ixn : interaction) {
@@ -345,6 +335,7 @@ action operator_prevote (op : node) (v : view) (ixn : interaction) {
   require ∃ (s : nodeset), ctx.supermajority s ∧
     (∀ (n: node), ctx.member n s → prevoted_node n v ixn)
   prevoted_operator op v ixn := true
+  -- No ghost updates: no locks change
 }
 
 action respond_prevote (n : node) (v : view) (ixn : interaction) {
@@ -357,7 +348,9 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) {
   precommitted_node n v ixn := true
   if ( ¬ ∃ (u : view), (tot_view.le u v ∧ locked n ixn precommit u) ) then
     locked n ixn prevote v := true;
+    -- GHOST: new prevote lock at view v
     locked_at_view n v := true;
+    locked_for_descendant n A v := decide $ (locked_for_descendant n A v ∨ ancestor A ixn);
   cur_stage n v S := decide $ (S = precommit)
 }
 
@@ -369,6 +362,7 @@ action operator_precommit (op : node) (v : view) (ixn : interaction) {
   require ∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   precommitted_operator op v ixn := true
+  -- No ghost updates: no locks change
 }
 
 action respond_precommit (n : node) (v : view) (ixn : interaction) {
@@ -379,24 +373,15 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   require ∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   locked n ixn precommit v := true;
+  -- GHOST: new precommit lock at view v
   locked_at_view n v := true;
+  locked_for_descendant n A v := decide $ (locked_for_descendant n A v ∨ ancestor A ixn);
   decided n v ixn := true
-  -- Update committed interaction only if this is a newer decision
-  if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn ≥ height ci_old) then
-    committed_ixn n I := decide $ (I = ixn);
+  -- GHOST: node decided a descendant of A at view v
+  decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
   cur_stage n v S := decide $ (S = commit)
 }
 
--- ####################################################################
--- # Main Safety Property
--- ####################################################################
-
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
 
 -- ####################################################################
 -- # Core Invariants
@@ -417,8 +402,7 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
   ∀ (v : view) (ixn : interaction) (n : node),
     ¬ ctx.is_byz n → ( (decided n v ixn ∧ ixn ≠ genesis) →
       (∃ (s : nodeset), (ctx.supermajority s
-        ∧ ∀ (nc : node), ¬ ctx.is_byz nc → (
-          ctx.member nc s → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v ixn ∧ (locked nc ixn prevote u ∨ locked nc ixn precommit u))) )) )
+        ∧ ∀ (nc : node), ctx.member nc s → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v ixn ∧ (locked nc ixn prevote u ∨ locked nc ixn precommit u)))) )
 
 -- Supporting: Prevote lock implies a quorum prevoted for the interaction
 invariant [prevote_lock_only_if_quorum_prevoted]
@@ -436,7 +420,8 @@ invariant [precommit_node_lock_consistency]
 invariant [unique_lock_interaction_per_view]
   (¬ ctx.is_byz N ∧ locked N I1 S1 V ∧ locked N I2 S2 V) → I1 = I2
 
--- Cross-node lock uniqueness
+-- Cross-node lock uniqueness: all honest nodes locked at the same view
+-- hold locks on the same interaction. Follows from INV-2 + precommit_lock_implies_prevoted.
 invariant [cross_node_unique_lock]
   (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
    locked N1 I1 S1 V ∧ locked N2 I2 S2 V ∧
@@ -485,25 +470,38 @@ invariant [precommit_next_view_discovery]
   )
 
 -- ####################################################################
--- # Freshness Invariants
+-- # Freshness Invariants (no state on unparented interactions)
 -- ####################################################################
+-- These ensure that a "fresh" interaction (no parent, ≠ genesis) has no
+-- pre-existing locks, proposals, or decisions. Required so that when
+-- propose_extend expands the ancestor relation for ixn_propose, the
+-- _fwd ghost invariants hold vacuously (the antecedent is false).
 
+-- A locked interaction must have a parent (unless it's genesis)
 invariant [no_lock_without_parent]
   (locked N I S V ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
 
+-- A proposed interaction must have a parent (unless it's genesis)
 invariant [no_proposal_without_parent]
   ((proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
 
+-- A decided interaction must have a parent (unless it's genesis)
 invariant [no_decide_without_parent]
   (decided N V I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
 
 -- ####################################################################
 -- # Genesis Ancestry Invariants
 -- ####################################################################
+-- All proposed/locked non-genesis interactions must descend from genesis.
+-- These block spurious models where interaction chains are disconnected
+-- from genesis, which would violate proposed_extends_locked_descendant
+-- and precommit_next_view_discovery.
 
+-- All proposed non-genesis interactions have genesis as ancestor
 invariant [proposed_descends_from_genesis]
   ((proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ancestor genesis I
 
+-- All non-genesis locked interactions have genesis as ancestor
 invariant [locked_descends_from_genesis]
   (locked N I S V ∧ I ≠ genesis) → ancestor genesis I
 
@@ -511,17 +509,63 @@ invariant [locked_descends_from_genesis]
 -- # Ghost Consistency Invariants (locked)
 -- ####################################################################
 
+-- locked_at_view forward: any lock implies the view-level ghost
 invariant [locked_at_view_fwd]
   locked N I S V → locked_at_view N V
 
+-- locked_at_view backward (honest only): ghost implies a real lock exists
 invariant [locked_at_view_bwd]
   (¬ ctx.is_byz N ∧ locked_at_view N V) →
     ∃ (I : interaction) (S : stage), locked N I S V
+
+-- locked_for_descendant forward: real lock + ancestry implies ghost
+invariant [locked_for_descendant_fwd]
+  (locked N I S V ∧ ancestor A I) → locked_for_descendant N A V
+
+-- locked_for_descendant backward (honest only): ghost implies a real lock on a descendant
+invariant [locked_for_descendant_bwd]
+  (¬ ctx.is_byz N ∧ locked_for_descendant N A V) →
+    ∃ (I : interaction) (S : stage), locked N I S V ∧ ancestor A I
+
+-- ####################################################################
+-- # Ghost Consistency Invariants (proposed/decided)
+-- ####################################################################
+
+-- proposed_for_descendant forward: proposed + ancestry → ghost
+invariant [proposed_for_descendant_fwd]
+  ((proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ ancestor A I) → proposed_for_descendant V A
+
+-- proposed_for_descendant backward: ghost → ∃ proposed descendant
+invariant [proposed_for_descendant_bwd]
+  proposed_for_descendant V A →
+    ∃ (OP : node) (I : interaction), (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ ancestor A I
+
+-- decided_for_descendant forward: decided + ancestry → ghost
+invariant [decided_for_descendant_fwd]
+  (decided N V I ∧ ancestor A I) → decided_for_descendant N A V
+
+-- decided_for_descendant backward (honest only): ghost → ∃ decided descendant
+invariant [decided_for_descendant_bwd]
+  (¬ ctx.is_byz N ∧ decided_for_descendant N A V) →
+    ∃ (I : interaction), decided N V I ∧ ancestor A I
+
+-- ####################################################################
+-- # Lock Descendant Monotonicity (core ghost invariant)
+-- ####################################################################
+
+-- If node N has locked_for_descendant for (A, V) and holds any lock at view U ≥ V,
+-- that lock is also for a descendant of A.
+-- This is the key invariant enabling INV-4: once locked on a descendant of A,
+-- all subsequent locks remain descendants of A.
+invariant [lock_descendant_monotone]
+  (¬ ctx.is_byz N ∧ locked_for_descendant N A V ∧ locked N I S U ∧
+   tot_view.le V U) → ancestor A I
 
 -- ####################################################################
 -- # Decision–Proposal Linking Invariant
 -- ####################################################################
 
+-- Any decided interaction was proposed at that view
 invariant [decided_implies_proposed]
   (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) →
     ∃ (op : node), proposed_repropose op V I ∨ proposed_extend op V I
@@ -529,28 +573,38 @@ invariant [decided_implies_proposed]
 -- ####################################################################
 -- # Ancestor Structural Invariants
 -- ####################################################################
+-- These give SMT direct access to key properties of ancestor without
+-- needing to discover witnesses via ancestor_def_fwd/bwd unfolding.
 
+-- Reflexivity
 invariant [ancestor_refl]
   ∀ (I : interaction), ancestor I I
 
+-- Parent implies ancestor
 invariant [ancestor_from_parent]
   parent I J → ancestor I J
 
+-- Transitivity (avoids SMT needing to find intermediate witness k)
 invariant [ancestor_trans]
   (ancestor I J ∧ ancestor J K) → ancestor I K
 
+-- Anti-symmetry (no cycles; follows from height monotonicity)
 invariant [ancestor_antisymm]
   (ancestor I J ∧ ancestor J I) → I = J
 
+-- Strict ancestor means strictly lower height
 invariant [ancestor_height_strict]
   (ancestor I J ∧ I ≠ J) → height I < height J
 
+-- Contrapositive: equal height + different → no ancestry in either direction
 invariant [no_ancestor_equal_height]
   (height I = height J ∧ I ≠ J) → (¬ ancestor I J ∧ ¬ ancestor J I)
 
+-- Parent increases height by exactly 1
 invariant [parent_height]
   parent I J → height J = height I + 1
 
+-- Ancestor is at most the transitive closure of parent
 invariant [ancestor_def_fwd]
   ancestor I J → (I = J ∨ parent I J ∨ ∃ (k : interaction), parent I k ∧ ancestor k J)
 
@@ -562,37 +616,47 @@ invariant [ancestor_def_bwd]
 -- # Supporting Invariants (structural)
 -- ####################################################################
 
+-- Each node has exactly one current view
 invariant [unique_cur_view]
   cur_view N U ∧ cur_view N V → U = V
 
+-- Every node always has some current view
 invariant [node_has_cur_view]
   ∀ (n : node), ∃ (v : view), cur_view n v
 
+-- Nodes can only be prepared for views they have reached
 invariant [prepared_only_at_cur_or_past_view]
   (prepared_node N V ∧ ¬ ctx.is_byz N ∧ cur_view N V2) → tot_view.le V V2
 
+-- Non-genesis locks are at views ≤ current view (collapses locked_only_if_prepared + prepared_only_at_cur_or_past_view)
 invariant [lock_at_most_cur_view]
   (¬ ctx.is_byz N ∧ locked N I S V ∧ I ≠ genesis ∧ cur_view N VCUR)
   → tot_view.le V VCUR
 
+-- Sent lock entries can only exist for views the node has reached
 invariant [sent_lock_only_at_past_view]
   (¬ ctx.is_byz N ∧ sent_lock_in_prepare N V IL SL VL ∧ cur_view N VCUR) → tot_view.le V VCUR
 
+-- One stage per node per view
 invariant [unique_stage]
   (¬ ctx.is_byz N ∧ cur_stage N V S1 ∧ cur_stage N V S2) → S1 = S2
 
+-- At most one operator per view
 invariant [unique_operator]
   (operator N1 V ∧ operator N2 V) → N1 = N2
 
+-- Only the operator can have proposed
 invariant [proposed_only_by_operator]
   ((proposed_repropose N V I ∨ proposed_extend N V I) ∧ ¬ ctx.is_byz N) → operator N V
 
+-- Genesis locks are only at view zero with precommit stage
 invariant [genesis_lock_only_at_zero]
   locked N genesis S V → (V = tot_view.zero ∧ S = precommit)
 
 invariant [lock_stage_valid]
   locked N I S V → (S = prevote ∨ S = precommit)
 
+-- Non-genesis locks require preparation at the same view
 invariant [locked_only_if_prepared]
   (¬ ctx.is_byz N ∧ locked N I S V ∧ V ≠ tot_view.zero ∧ I ≠ genesis) → prepared_node N V
 
@@ -616,6 +680,7 @@ invariant [stage_neg_4]
   (cur_stage N V prepare ∧ ¬ ctx.is_byz N) →
     ¬ (prepared_node N V ∨ sent_lock_in_prepare N V IL SL VL)
 
+-- Genesis never enters the pipeline
 invariant [genesis_not_in_pipeline]
   ¬ ( ¬ ctx.is_byz N ∧ (proposed_repropose N V genesis ∨ proposed_extend N V genesis ∨ prevoted_node N V genesis
   ∨ prevoted_operator N V genesis ∨ precommitted_node N V genesis
@@ -641,6 +706,9 @@ invariant [precommitted_node_implies_lock]
     ¬ ctx.is_byz n → ((precommitted_node n v ixn ∧ ixn ≠ genesis) →
       ∃ (u : view), tot_view.le u v ∧ (locked n ixn prevote u ∨ locked n ixn precommit u))
 
+-- Combined: precommitted node implies prevoted AND locked (flattened).
+-- Collapses precommit_nodes_only_if_prevoted_for_same_ixn + precommitted_node_implies_lock
+-- into a single inference step for INV3.
 invariant [precommit_quorum_prevoted_and_locked]
   (¬ ctx.is_byz NC ∧ precommitted_node NC V IXN ∧ IXN ≠ genesis) →
   (prevoted_node NC V IXN ∧
@@ -653,7 +721,7 @@ invariant [decide_only_if_precommit_operator]
 -- At prevote stage, node prevoted for the proposed interaction
 invariant [stage_2]
   (cur_stage N V prevote ∧ ¬ ctx.is_byz N)
-  → (∃ (i : interaction), ((∃ (op : node), proposed_repropose op V i ∨ proposed_extend op V i) ∧ prevoted_node N V i) ∨ (∃ (op : node), proposed_nil op V))
+  → (∃ (i : interaction), (∃ (op : node), proposed_repropose op V i ∨ proposed_extend op V i) ∧ prevoted_node N V i)
 
 -- Only one proposal per view
 invariant [unique_proposal]
@@ -690,34 +758,29 @@ invariant [prepared_node_has_lock_sent]
 -- # Decision Invariants
 -- ####################################################################
 
+-- If J is decided and has parent I, then I was decided at an earlier view
 invariant [committed_implies_parent_committed]
   (decided M V J ∧ parent I J ∧ J ≠ genesis) →
     ∃ (u : view) (n : node), tot_view.lt u V ∧ decided n u I
 
+-- Any non-genesis decision implies genesis was decided earlier
 invariant [genesis_decided_first]
   (decided N V J ∧ J ≠ genesis) →
     ∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u genesis
 
+-- A decided non-genesis interaction requires the deciding node to hold a precommit lock
 invariant [decision_requires_precommit_lock]
   (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → locked N I precommit V
 
-invariant [precommit_lock_implies_decided]
-  locked N I precommit V → decided N V I
-
+-- Decisions only at past or current view
 invariant [decisions_not_from_higher_views]
   (cur_view N V ∧ decided N U I) → tot_view.le U V
 
+-- Genesis was decided at view zero
 invariant [genesis_view_zero]
   (¬ ctx.is_byz N ∧ decided N V I ∧ tot_view.zero = V) → I = genesis
 
-invariant [genesis_decided_at_zero]
-  ∀ (n : node), decided n tot_view.zero genesis
-
-/-
-invariant [genesis_decided_only_at_zero]
-  (¬ ctx.is_byz N ∧ decided N V genesis) → V = tot_view.zero
--/
-
+-- Decision implies a quorum precommitted
 invariant [decide_only_if_quorum_precommit]
   (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) →
     (∃ (s : nodeset), ctx.supermajority s ∧
@@ -727,40 +790,37 @@ invariant [decide_only_if_quorum_precommit]
 -- # Ancestor/Parent Structural Invariants (additional)
 -- ####################################################################
 
+-- Each interaction has at most one parent
 invariant [unique_parent]
   parent J I ∧ parent K I → J = K
 
+-- No interaction is its own parent
 invariant [parent_irreflexive]
   ¬ parent I I
 
+-- Genesis has no parent
 invariant [genesis_has_no_parent]
   ¬ parent I genesis
 
+-- Height 0 among decided interactions ↔ genesis
 invariant [genesis_height_zero]
   (height I = 0 ∧ (∃ (v : view) (n : node), decided n v I)) ↔ I = genesis
 
+-- Parent edges only exist because of propose_extend
 invariant [parent_only_if_proposed]
   parent I J ∧ J ≠ genesis → ∃ (n : node) (v : view), proposed_extend n v J
-
-/-
-invariant [proposed_extend_parent_decided]
-  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J ∧ J ≠ genesis) →
-    ∃ (U : view), decided OP U I
-
-invariant [proposed_repropose_parent_decided]
-  (proposed_repropose OP V J ∧ parent I J ∧ J ≠ genesis) →
-    ∃ (N : node) (U : view), decided N U I
--/
 
 -- ####################################################################
 -- # Operator/Quorum Invariants
 -- ####################################################################
 
+-- Operator prevote implies a quorum prevoted
 invariant [prevote_operator_only_if_quorum_prevoted]
   ¬ ctx.is_byz N → (prevoted_operator N V I →
     (∃ (s : nodeset), ctx.supermajority s ∧
       ∀ (NC : node), ctx.member NC s → prevoted_node NC V I))
 
+-- Precommit operator implies a quorum precommitted
 invariant [precommit_operator_only_if_quorum_precommit]
   ¬ ctx.is_byz OP → (precommitted_operator OP V I →
     (∃ (s : nodeset), ctx.supermajority s ∧
@@ -770,16 +830,20 @@ invariant [precommit_operator_only_if_quorum_precommit]
 -- # Uniqueness Invariants (additional)
 -- ####################################################################
 
+-- At most one sent lock per node per view
 invariant [unique_lock_sent]
   (¬ ctx.is_byz N ∧ sent_lock_in_prepare N V IL1 SL1 VL1 ∧ sent_lock_in_prepare N V IL2 SL2 VL2) →
     (IL1 = IL2 ∧ SL1 = SL2 ∧ VL1 = VL2)
 
+-- A node can only precommit one interaction per view
 invariant [unique_precommit_nodes]
   (¬ ctx.is_byz N ∧ precommitted_node N V I ∧ precommitted_node N V J) → I = J
 
+-- An operator can only prevote one interaction per view
 invariant [unique_prevote_operator]
   (¬ ctx.is_byz OP ∧ prevoted_operator OP V I ∧ prevoted_operator OP V J) → I = J
 
+-- An operator can only precommit one interaction per view
 invariant [unique_precommit_operator]
   (¬ ctx.is_byz OP ∧ precommitted_operator OP V I ∧ precommitted_operator OP V J) → I = J
 
@@ -787,37 +851,55 @@ invariant [unique_precommit_operator]
 -- # Additional Supporting Invariants
 -- ####################################################################
 
+-- Sent lock implies prepared
 invariant [sent_lock_only_if_prepare]
   (¬ ctx.is_byz N ∧ sent_lock_in_prepare N V IL SL VL) → prepared_node N V
 
+-- Propose stage implies a sent lock exists
 invariant [stage_1]
   (cur_stage N V propose ∧ ¬ ctx.is_byz N) →
     (∃ (il : interaction) (sl : stage) (vl : view), sent_lock_in_prepare N V il sl vl)
 
+-- Precommit stage implies a prevote lock exists
 invariant [stage_3]
   (cur_stage N V precommit ∧ ¬ ctx.is_byz N) →
-    (∃ (i : interaction), (prevoted_operator N V i ∨ precommitted_node N V i) ∧
-     (locked N i prevote V ∨ (∃ (u : view), tot_view.le u V ∧ locked N i precommit u)))
+    (∃ (i : interaction), (prevoted_operator N V i ∨ precommitted_node N V i) ∧ locked N i prevote V)
 
+-- Commit stage implies a precommit lock exists
 invariant [stage_4]
   (cur_stage N V commit ∧ ¬ ctx.is_byz N) →
     (∃ (i : interaction), (precommitted_operator N V i ∨ decided N V i) ∧ locked N i precommit V)
 
+-- Prepared operator not at view zero
 invariant [prepared_operator_not_at_zero]
   (prepared_operator OP V ∧ ¬ ctx.is_byz OP) → V ≠ tot_view.zero
 
+-- Proposal implies operator prepared
 invariant [propose_only_if_operator_prepare]
   (¬ ctx.is_byz N ∧ (proposed_repropose N V I ∨ proposed_extend N V I)) → prepared_operator N V
 
+-- Proposal requires a locked parent (for extend proposals)
 invariant [propose_only_if_parent_locked]
   (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J) →
     (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ locked n I s u)
 
+-- ####################################################################
+-- # Main Safety Property
+-- ####################################################################
+
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
 
 -- ####################################################################
 -- # Height-Based Uniqueness Invariants
 -- ####################################################################
 
+-- Decided interactions at the same height are identical
+-- (corollary of main_safety + no_ancestor_equal_height)
 invariant [unique_decided_at_height]
   (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
    decided N1 V1 I1 ∧
@@ -825,6 +907,8 @@ invariant [unique_decided_at_height]
    height I1 = height I2)
   → I1 = I2
 
+-- Honest non-genesis locks at the same height are on the same interaction (cross-node)
+-- (corollary of cross_node_unique_lock + lock_descendant_monotone + ancestor_height_strict)
 invariant [unique_locked_at_height]
   (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
    locked N1 I1 S1 V1 ∧ locked N2 I2 S2 V2 ∧
@@ -836,29 +920,16 @@ invariant [unique_locked_at_height]
 -- # View-Height Monotonicity Invariants
 -- ####################################################################
 
-invariant [prevoted_height_ge_locks]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧
-   locked N J S U ∧ tot_view.lt U V)
-  → height J ≤ height I
-
-/-
-invariant [prevote_descends_from_earlier_precommit_lock]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧
-   locked N J precommit U ∧ tot_view.lt U V ∧ J ≠ I)
-  → ancestor J I
-
-invariant [lock_descends_from_earlier_precommit]
-  (¬ ctx.is_byz N ∧ locked N I S V ∧ I ≠ genesis ∧
-   locked N J precommit U ∧ tot_view.lt U V ∧ J ≠ I)
-  → ancestor J I
--/
-
+-- Single-node lock height monotonicity: locks at later views have >= height
+-- (corollary of lock_descendant_monotone + ancestor_height_strict)
 invariant [lock_height_monotone]
   (¬ ctx.is_byz N ∧
    locked N I1 S1 V1 ∧ locked N I2 S2 V2 ∧
    tot_view.le V1 V2)
   → height I1 ≤ height I2
 
+-- Cross-node decision height monotonicity: decisions at later views have >= height
+-- (corollary of main_safety + committed_implies_parent_committed + ancestor_height_strict)
 invariant [decision_height_monotone]
   (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
    decided N1 V1 I1 ∧
@@ -866,64 +937,44 @@ invariant [decision_height_monotone]
    tot_view.lt V1 V2)
   → height I1 ≤ height I2
 
--- ####################################################################
--- # Committed State Invariants
--- ####################################################################
-
-invariant [unique_committed_ixn]
-  (committed_ixn N I1 ∧ committed_ixn N I2) → I1 = I2
-
-invariant [node_has_committed_ixn]
-  ∀ (n : node), ∃ (i : interaction), committed_ixn n i
-
-invariant [committed_ixn_decided]
-  (¬ ctx.is_byz N ∧ committed_ixn N I) →
-    ∃ (V : view), decided N V I
-
-invariant [committed_ixn_height_upper_bound]
-  (¬ ctx.is_byz N ∧ decided N V I ∧ committed_ixn N CI) → height I ≤ height CI
-
-invariant [committed_ixn_is_genesis_or_has_parent]
-  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
-
-invariant [committed_ixn_descends_from_genesis]
-  (¬ ctx.is_byz N ∧ committed_ixn N I) → ancestor genesis I
-
-invariant [committed_ixn_precommit_locked]
-  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) →
-    ∃ (V : view), locked N I precommit V
-
-invariant [committed_ixn_unique_at_height]
-  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-   committed_ixn N1 I1 ∧ committed_ixn N2 I2 ∧
-   height I1 = height I2) → I1 = I2
-
-invariant [committed_ixn_height_positive]
-  (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → height I ≥ 1
-
--- ####################################################################
--- # Height Positivity Invariants
--- ####################################################################
-
-invariant [locked_height_positive]
-  (locked N I S V ∧ I ≠ genesis) → height I ≥ 1
-
-invariant [proposed_height_positive]
-  ((proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) →
-    height I ≥ 1
-
-invariant [decided_height_positive]
-  (decided N V I ∧ I ≠ genesis) → height I ≥ 1
-
-invariant [prevoted_height_positive]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) → height I ≥ 1
-
-
+-- set_option maxHeartbeats 10000000
 set_option veil.smt.timeout 1300
 #gen_spec
 
 set_option veil.printCounterexamples true
 
+-- #model_check interpreted
+-- { view := Fin 2,
+--   node := Fin 2,
+--   interaction := Fin 2,
+--   nodeset := Fin 1,
+--   stage := Fin 5 }
+-- { tot_view := {
+--     le := fun x y => x.val ≤ y.val,
+--     lt := fun x y => x.val < y.val,
+--     le_refl := by intro x; omega,
+--     le_trans := by intro x y z h1 h2; omega,
+--     le_antisymm := by intro x y h1 h2; ext; omega,
+--     le_total := by intro x y; omega,
+--     le_lt := by intro x y; simp only; constructor <;> intro h <;> (try ext) <;> omega,
+--     next := fun x y => x.val + 1 = y.val,
+--     next_def := by intro x y; simp only; sorry,
+--     zero := 0,
+--     zero_lt := by intro x; omega },
+--   ctx := {
+--     is_byz := fun _ => False,
+--     member := fun _ _ => True,
+--     supermajority := fun _ => True,
+--     supermajorities_intersect_in_honest := by
+--       intro s1 s2 ⟨_, _⟩; exact ⟨0, trivial, trivial, id⟩ },
+--   prepare := 0,
+--   propose := 1,
+--   prevote := 2,
+--   precommit := 3,
+--   commit := 4 } (maxDepth := 3)
+
 #check_action respond_prevote
 
-end IFPProtocolN
+-- #check_invariants
+
+end IFPProtocolNL
