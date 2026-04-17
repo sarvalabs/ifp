@@ -113,27 +113,27 @@ after_init {
 -- # Actions
 -- ####################################################################
 
-action set_view (v_cur v_next : view) {
-  require ∀ (n : node), cur_view n v_cur
-  require tot_view.next v_cur v_next
-  cur_view N V := decide $ (V = v_next)
-}
+-- action set_view (v_cur v_next : view) {
+--   require ∀ (n : node), cur_view n v_cur
+--   require tot_view.next v_cur v_next
+--   cur_view N V := decide $ (V = v_next)
+-- }
 
-action pick_operator (op : node) (v : view) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require ∀ (n : node), ¬ operator n v
-  operator op v := true
-}
+-- action pick_operator (op : node) (v : view) {
+--   require v ≠ tot_view.zero
+--   require cur_view op v
+--   require ∀ (n : node), ¬ operator n v
+--   operator op v := true
+-- }
 
-action operator_prepare (op : node) (v : view) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require cur_stage op v prepare
-  require operator op v
-  require ¬ prepared_operator op v
-  prepared_operator op v := true
-}
+-- action operator_prepare (op : node) (v : view) {
+--   require v ≠ tot_view.zero
+--   require cur_view op v
+--   require cur_stage op v prepare
+--   require operator op v
+--   require ¬ prepared_operator op v
+--   prepared_operator op v := true
+-- }
 
 action respond_prepare (n : node) (v : view) {
   require v ≠ tot_view.zero
@@ -318,12 +318,7 @@ action respond_propose (n : node) (v : view) (ixn : interaction) {
     sent_lock_in_prepare n_max v ixn_max s_max v_max
     ∧ locked n_max ixn_max s_max v_max ∧
     ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → (
-        height ixn_l < height ixn_max
-        ∨ (height ixn_l = height ixn_max ∧ s_l = prevote ∧ s_max = precommit)
-        ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
-        ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
-      )
+      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
     )
   )
   -- Valid proposal: repropose or extend
@@ -666,6 +661,19 @@ invariant [unique_proposed_interaction]
 invariant [prevote_implies_proposed]
   (prevoted_node N V I ∧ ¬ ctx.is_byz N) → (∃ (op : node), (operator op V ∧ (proposed_repropose op V I ∨ proposed_extend op V I)))
 
+-- A prevoting node's choice must be witnessed by a sent-lock at V:
+-- either a prevote sent-lock on I itself (repropose) or a precommit sent-lock
+-- on I's parent (extend-after-precommit). Carries forward respond_propose's
+-- precondition so SMT can exclude spurious states where prevoted_node has no
+-- consistent sent-lock witness.
+invariant [prevote_node_linked_to_sent_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ V ≠ tot_view.zero) →
+    ((∃ (N' : node) (VL : view),
+        sent_lock_in_prepare N' V I prevote VL) ∨
+     (∃ (N' : node) (J : interaction) (VL : view),
+        sent_lock_in_prepare N' V J precommit VL ∧
+        parent J I ∧ height I = height J + 1))
+
 invariant [precommit_only_if_propose]
   (¬ ctx.is_byz N ∧ precommitted_node N V I) → (∃ (op : node), operator op V ∧ (proposed_repropose op V I ∨ proposed_extend op V I))
 
@@ -812,6 +820,11 @@ invariant [propose_only_if_operator_prepare]
 invariant [propose_only_if_parent_locked]
   (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J) →
     (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ locked n I s u)
+
+invariant [proposed_extend_parent_is_committed_at_equal_height]
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J ∧
+   committed_ixn OP CI ∧ height I = height CI)
+    → I = CI
 
 
 -- ####################################################################
