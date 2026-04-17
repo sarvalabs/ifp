@@ -69,10 +69,10 @@ The operator's proposal decision after collecting locks from both contexts:
 
 ### Safety Proof Strategy (Restricted IFP with 2 Participants)
 
-The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Safety is established through 4 key invariants:
+The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Safety is established through the following key invariants:
 
 **SAFETY-1 (main_safety):** If two honest nodes have decided two interactions I1 and I2, then one is an ancestor of the other.
-- Dependencies: INV-1, INV-2, INV-3, INV-4
+- Dependencies: INV-1, INV-2, INV-3
 
 **INV-1 (unique_prevote):** Honest nodes cannot prevote on two different interactions in a given view.
 - Dependencies: None
@@ -88,11 +88,6 @@ The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Saf
 - Dependencies: None
 - Follows from: precommitQC is required for decide, which requires prevoteQC, which means a supermajority from each context prevoted → prevote-locked.
 - Model: `decided_only_if_quorum_prevote_locked`
-
-**INV-4 (lock_discovery):** If a quorum of nodes has committed an interaction T in view v, then in every later view v' > v, the operator during prepare will discover either (1) a prevote/precommit lock on T, or (2) a prevote/precommit lock on a descendant of T from some view v_l > v.
-- Dependencies: INV-3
-- Follows from: INV-3 + quorum intersection guaranteeing one of the locked nodes sends its lock in prepare responses.
-- This is the **hardest invariant** — it bridges committed state to future views.
 
 ### Protocol Stage Details (Precise)
 
@@ -137,6 +132,79 @@ The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Saf
 ## Important Workflow Rules
 
 - **NEVER run `lake build` or `lake lean`**. The user checks results via the Lean InfoView in their IDE. If you need output (e.g., error messages, counterexamples, proof states), ask the user to provide it from InfoView.
+
+## Working Principles (Veil Verification)
+
+These principles bias toward caution over speed. Verification here is indirect (each round-trip costs a user `lake build` + InfoView relay), counterexamples are ground truth, and the IFP model is fragile — fifty-plus invariants whose interactions are easily broken. For trivial edits, use judgment.
+
+### 1. Think Before Asserting
+
+**Don't assume. Don't hide confusion. Decode the counterexample first.**
+
+Before proposing any invariant, lemma, or model edit:
+- **Read the counterexample before theorizing.** If no InfoView output has been shared, ask for it rather than guessing from the dependency tree.
+- **State the candidate invariant's shape explicitly**: what it asserts, which transitions could violate it, which existing invariants it leans on for preservation.
+- **Flag the three common traps**:
+  - *Circularity* — does the invariant presuppose what it's trying to prove? (ancestor/lock-propagation framings are the usual offenders)
+  - *Byzantine holes* — quorum-quantified conclusions without `¬is_byz` guards on the member
+  - *Protocol fidelity loss* — the fix requires weakening an action's preconditions or adding an artificial guard
+- If multiple invariant formulations are plausible, present them — don't pick silently.
+
+### 2. Minimal Invariant Strength
+
+**State the weakest invariant that closes the counterexample. Nothing speculative.**
+
+- No "just in case" invariants. Each one must be traceable to a specific counterexample or a direct dependency from the tree.
+- Prefer height-indexed or view-guarded forms over universally quantified ones when they suffice.
+- Prefer preserved-by-construction forms (init-persistence, monotonic predicates) over forms that need their own supporting chain.
+- No over-quantification: if a guard isn't needed for preservation, leave it out.
+- Senior-engineer test: *"Does this invariant reflect a real protocol property, or am I just patching the SMT solver?"* If the latter, rethink.
+
+### 3. Surgical Model Edits
+
+**One invariant, one edit. Every changed line traces to a specific counterexample.**
+
+- Don't touch adjacent invariants, action preconditions, or state signatures while adding a lemma — each unrelated change risks invalidating prior verification.
+- Don't reformat or "clean up" existing `@[invProof]` theorems even if verbose; they're load-bearing for specific transitions.
+- **Never weaken an action's preconditions to make an invariant go through.** That breaks protocol fidelity. Surface the tradeoff instead.
+- *Orphan rule*: if an edit makes a helper lemma unused, mention it — don't silently delete it; it may be invoked by name in `@[invProof]` attributes elsewhere.
+- If unrelated dead code or a stale invariant is spotted, mention it; don't remove it unless asked.
+
+### 4. Counterexample-Driven Loop
+
+**Define success criteria per (invariant × transition) pair. Loop until all transitions verify.**
+
+Structure each verification round as:
+```
+1. Get failing (invariant × transition) from InfoView
+   → verify: concrete counterexample in hand
+2. Decode counterexample to a protocol-level scenario
+   → verify: user confirms the scenario is real / matches protocol intent
+3. Propose minimal invariant or lemma change
+   → verify: user re-runs and reports pass/fail per transition
+4. If a new transition fails, loop to step 1 on the new pair
+   → verify: all transitions green, no regressions in other invariants
+```
+
+Weak goals ("make INV-3 work") are especially expensive here because each iteration costs a user round-trip. Strong goals ("INV-3 verifies on `respond_precommit` without regressing INV-2") let the loop close. Always discharge cheap structural (leaf) invariants first — they're low-effort and unblock many higher-tier invariants, so the loop doesn't stall on leaf failures.
+
+### 5. Paper- and Implementation-Grounded Model Edits
+
+**Model changes answer to the protocol, not to the SMT solver.**
+
+When a counterexample suggests that an action, state relation, or precondition is itself wrong (not just missing an invariant), the fix must be grounded in an external source of truth:
+- **Primary source: `paper.pdf`** — the IFP paper. Section 5 (safety argument) and the protocol stage descriptions define correctness. Quote or paraphrase the relevant passage when justifying a model change.
+- **Secondary source: `IFPSafety/IFP.go`** — the reference Go implementation. Use it to resolve ambiguities the paper leaves open (ordering of updates within a stage, how a field is used in practice, concrete predicate definitions).
+- **Tertiary sources: `fasthotstuff-jnfg20.pdf` and `jolteonditto-gkss21.pdf`** — the restricted IFP is structurally a 2-chain BFT; when the IFP paper is silent or inaccurate (CLAUDE.md already notes Section 5 is "inaccurate in details"), safety patterns from Fast-HotStuff and Jolteon are the next-best guide.
+- **Never patch the model with a constraint that has no counterpart in paper, Go reference, or a cited sibling protocol.** Per the Modeling Constraints section: "Any change to the model must faithfully represent the protocol. Do not add artificial constraints or simplifications beyond the stated restrictions."
+- When citing a source, be specific: *"paper.pdf §3.4: validators check 'did not prevote on another interaction with any of the participants' — so the `respond_propose` precondition must include..."*. Vague appeals ("this is standard in BFT") are not acceptable justification.
+- If paper and Go diverge, flag the divergence and ask — don't pick silently.
+
+**Failure mode guarded against**: silently strengthening the model to make proofs go through, producing a theorem about a protocol that is no longer IFP.
+
+---
+
+**These principles are working if**: counterexamples are decoded before invariants are proposed, each InfoView round-trip carries a precise question or a minimal edit, the protocol spec stays faithful to `paper.pdf`, and diffs shrink rather than grow across iterations.
 
 ## Build Commands
 
@@ -201,112 +269,9 @@ The core property proven: if two honest (non-Byzantine) nodes decide on interact
 
 ## Invariant Dependency Tree
 
-The safety proof is structured as a dependency tree. Each invariant may require other invariants
-to be present for the SMT solver to verify it across all transitions. The tree below shows
-`X → Y` meaning "X requires Y to be verified."
+File-specific dependency trees live in memory (see `MEMORY.md`). They rot as invariants are added/removed, so they're maintained alongside the proof state rather than inline here.
 
-### Tier 0: Goal
-
-```
-main_safety
-├── INV1_unique_prevote_nodes
-├── INV2_unique_prevote_lock_in_view
-├── INV3_decided_only_if_quorum_prevote_locked
-└── INV4_quorum_locked_implies_lock_of_descendant_discovered
-```
-
-### Tier 1: Core Safety Invariants
-
-```
-INV1_unique_prevote_nodes
-├── unique_stage                  (prevent double-stage allowing double-prevote)
-└── stage_neg_3                   (propose/prepare → no prevotes exist)
-
-INV2_unique_prevote_lock_in_view
-├── INV1_unique_prevote_nodes     (unique prevotes → quorum intersection → unique locks)
-├── prevote_lock_only_if_quorun_prevoted  (lock ↔ quorum prevoted)
-└── unique_lock_interaction_per_view      (one lock per view per participant)
-
-INV3_decided_only_if_quorum_prevote_locked
-├── precommitted_node_implies_lock        (precommit node → lock exists)
-├── precommit_lock_implies_prevoted       (precommit lock → prevoted)
-└── prevote_operator_only_if_quorum_prevoted  (prevote operator → quorum)
-
-INV4_quorum_locked_implies_lock_of_descendant_discovered
-├── locks_sent_only_if_locked_1           (sent lock is real, p1)
-├── locks_sent_only_if_locked_2           (sent lock is real, p2)
-├── highest_lock_sent                     (sent lock is highest)
-├── genesis_lock_existence                (base case: genesis locks exist)
-├── genesis_lock_only_at_zero             (genesis locks only at view 0)
-└── locked_only_if_prepared               (non-genesis locks require prepare)
-```
-
-### Tier 2: Supporting Invariants (and their own dependencies)
-
-```
-unique_lock_interaction_per_view
-├── stage_neg_2                   (prevote/propose/prepare → no locks at that view)
-├── unique_stage                  (one stage per view)
-└── genesis_lock_only_at_zero     (genesis locks don't interfere)
-
-precommitted_node_implies_lock
-└── stage_neg_2                   (wrong stage → no precommits or locks)
-
-precommit_lock_implies_prevoted
-└── stage_neg_1                   (before commit → no precommit locks)
-
-highest_lock_sent
-├── locked_only_if_prepared       (locks need prepare)
-└── genesis_lock_only_at_zero     (genesis locks are at view 0)
-
-prevote_lock_only_if_quorun_prevoted
-└── (self-contained from respond_prevote preconditions)
-
-prevote_operator_only_if_quorum_prevoted
-└── (self-contained from prevote preconditions)
-
-locks_sent_only_if_locked_1/2
-└── (self-contained from respond_prepare definition)
-
-genesis_lock_existence
-└── (established at init, no action removes genesis locks)
-```
-
-### Tier 3: Structural Invariants (leaf nodes, no further dependencies)
-
-```
-unique_stage                ← structural, from action stage updates
-stage_neg_1                 ← structural (before commit → no precommit locks/decides)
-stage_neg_2                 ← structural (before precommit → no locks/precommits)
-stage_neg_3                 ← structural (before prevote → no prevotes)
-stage_neg_4                 ← structural (prepare stage → nothing sent)
-stage_init_prepare          ← structural (unprepared → prepare stage)
-genesis_lock_only_at_zero   ← structural (init sets V=0, actions require V≠0)
-locked_only_if_prepared     ← structural (lock actions require prepare first)
-unique_cur_view             ← structural (set_view replaces)
-node_has_cur_view           ← structural (init sets, set_view replaces)
-cur_stage_exists            ← structural (always one of 5 stages)
-```
-
-### Impact Ranking (for `/infer-invs`)
-
-When multiple invariants are failing, prioritize fixes by **impact-to-effort ratio**:
-
-| Priority | Invariant | Impact | Effort | Rationale |
-|----------|-----------|--------|--------|-----------|
-| 1 | `unique_stage` | Very High | Low | Unblocks stage_neg_*, unique_lock, many others |
-| 2 | `stage_neg_2` | High | Low | Unblocks unique_lock_per_view, precommitted_node_implies_lock |
-| 3 | `genesis_lock_only_at_zero` | High | Low | Unblocks unique_lock_per_view, highest_lock_sent, INV4 |
-| 4 | `stage_neg_1` | Medium | Low | Unblocks precommit_lock_implies_prevoted |
-| 5 | `stage_neg_3` | Medium | Low | Unblocks INV1 |
-| 6 | `locked_only_if_prepared` | Medium | Low | Unblocks highest_lock_sent, INV4 |
-| 7 | `precommitted_node_implies_lock` | Medium | Medium | Unblocks INV3 |
-| 8 | `highest_lock_sent` | Medium | Medium | Unblocks INV4 |
-| 9 | `stage_neg_4` | Low | Low | Only for stage_1 |
-| 10 | `stage_init_prepare` | Low | Low | Supporting |
-
-**Key principle**: Tier 3 (structural) invariants are cheap to add and unblock many Tier 2 invariants.
-Always add needed Tier 3 invariants first before attempting Tier 2 or Tier 1 fixes.
+- For `IFPSafety/IFPN.lean`, see the `ifpn_dependency_tree` memory entry.
 
 ## Key Dependencies
 

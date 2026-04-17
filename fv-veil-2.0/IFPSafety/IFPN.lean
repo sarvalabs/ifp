@@ -585,6 +585,9 @@ invariant [proposed_only_by_operator]
 invariant [genesis_lock_only_at_zero]
   locked N genesis S V → (V = tot_view.zero ∧ S = precommit)
 
+invariant [lock_at_zero_only_genesis]
+  locked N I S tot_view.zero → (I = genesis ∧ S = precommit)
+
 invariant [lock_stage_valid]
   locked N I S V → (S = prevote ∨ S = precommit)
 
