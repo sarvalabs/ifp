@@ -38,14 +38,6 @@ Each consensus instance proceeds through 5 stages per node per view:
 4. **Precommit** (= paper's "Commit") — Nodes precommit; operator aggregates into precommitQC. Nodes acquire a **precommit lock** (`locked ... false v`).
 5. **Decide** (= paper's "Committing a Tesseract") — Nodes commit the interaction to their history.
 
-### Lock Semantics
-
-Locks are encoded as `locked : node → participant → interaction → Bool → view → Prop` where:
-- `Bool = true` → **prevote lock** (acquired during respond_prevote)
-- `Bool = false` → **precommit lock** (acquired during respond_precommit, also triggers decision)
-
-A precommit lock is stronger than a prevote lock. The `sent_lock_in_prepare_1/2` relations capture the highest lock each node sends during the prepare phase, encoding the `IsHighestLock` predicate.
-
 ### Key Safety Insight
 
 The paper's safety analysis (Section 5) is **inaccurate in details** but provides the general picture. The core argument:
@@ -53,17 +45,9 @@ The paper's safety analysis (Section 5) is **inaccurate in details** but provide
 - **Lemma 3** (lock propagation): If a precommitQC exists for interaction T, its prevoteQC will be discovered by the operator in subsequent views via prepare responses.
 - **Theorem 3** (safety): Combining the above — any future proposal must extend (be a child of) previously committed interactions, not conflict with them.
 
-### Proposal Logic (Critical for Invariants)
-
-The operator's proposal decision after collecting locks from both contexts:
-- If both highest locks are **prevote** locks for the **same** interaction → **repropose** that interaction
-- If both highest locks are **precommit** locks for the **same** interaction → **extend** (propose new interaction with that as parent)
-- If both highest locks are **prevote** locks for **different** interactions → **propose nil** (no progress)
-
 ### Additional Modeling Decisions
 
 - **Synchronous view changes**: `set_view` requires all nodes to be in `v_cur` before transitioning to `v_next`. This is an intentional simplification.
-- **Byzantine actions**: Currently not modeled (`byz_sabotage` is commented out). Will be added later. For now, Byzantine behavior is only implicit through the `is_byz` predicate on quorum axioms.
 - **Genesis interaction**: Special initial interaction decided at `tot_view.zero`. All nodes start with a precommit lock on genesis for both participants. Genesis has height 0 and no parent.
 - **Chain growth**: New interactions are created via `propose` by setting `parent ixn_max ixn_propose` and updating `ancestor` transitively. Heights increment by 1 from parent.
 
@@ -124,10 +108,6 @@ The restricted IFP is a 2-chain protocol (like Jolteon/Basic Fast-HotStuff). Saf
 
 - **Any change to the model must faithfully represent the protocol.** Do not add artificial constraints or simplifications beyond the stated restrictions.
 - Invariants should be guided by Fast-HotStuff/Jolteon safety analysis patterns extended to the IFP setting.
-
-## Proof Status
-
-*To be documented — will track which invariant×transition pairs have manual `@[invProof]` theorems vs. auto-verified vs. pending.*
 
 ## Important Workflow Rules
 
@@ -223,15 +203,12 @@ Build configuration is in `lakefile.toml`. The primary dependency is the [Veil](
 
 ### Core Modules
 
-- **`IFPSafety.lean`** — Root module entry point, imports all submodules.
-- **`IFPSafety/IFP.lean`** — Main protocol specification (~1,760 lines). Contains the full state machine: types, state relations, 10 protocol actions (`set_view`, `pick_operator`, `prepare`, `respond_prepare`, `propose`, `respond_propose`, `prevote`, `respond_prevote`, `precommit`, `respond_precommit`), 50+ safety invariants, and the main safety theorem. Also contains manual `@[invProof]` theorems for cases where Veil's automation needs help.
-- **`IFPSafety/IFPTheory.lean`** — Foundational type classes: `TotalOrderWithMinimum` (view ordering), `ByzQuorum` (Byzantine quorum semantics with supermajority properties), `IsHighestLock` (lock tracking for consensus).
-- **`IFPSafety/Test.lean`** — For Testing simple functionalities of Lean. Can ignore. 
-- **`IFPSafety/IFP.go`** — Reference Go implementation of the protocol.
+The project is a collection of model variants under `IFPSafety/` (e.g., `IFP*.lean`), each exploring a different formulation of the restricted IFP. These files are churned frequently — new variants are added and old ones are removed. **Treat the file currently open in the IDE as the active variant** and the subject of the user's questions unless told otherwise.
 
-### Examples Directory (`IFPSafety/Examples/`)
+Shared support files:
 
-Protocol implementations for comparison/reference: PaxosEPR, Blockchain, ReliableBroadcast, Ring election, SCP (Stellar Consensus), SuzukiKasami, Rabia, VerticalPaxos.
+- **`IFPSafety/IFPTheory.lean`** — Foundational type classes: `TotalOrderWithMinimum` (view ordering), `ByzQuorum` (Byzantine quorum semantics with supermajority properties), `IsHighestLock` (lock tracking for consensus). Used across all variants.
+- **`IFPSafety/IFP.go`** — Reference Go implementation of the protocol. Authoritative on concrete behavior when the paper is ambiguous.
 
 ### Veil DSL Patterns
 
@@ -245,39 +222,9 @@ The protocol uses Veil's embedded DSL within Lean 4:
 - **`@[invProof]`** — Attribute marking lemmas as invariant proofs
 - **`#gen_state`** / **`#gen_spec`** — Macros generating state datatype and verification spec
 
-### Verification Approach
-
-Safety properties are proved by showing invariants are preserved across all protocol transitions. Key proof tactics:
-- `solve_clause` — Veil's automated invariant discharge
-- `unhygienic intros` — Introduction of hypotheses
-- `simp_all` — Simplification
-- SMT backend (Z3/CVC5) handles first-order logic goals
-
-### Important `set_option` flags
-
-```lean
-set_option veil.printCounterexamples true   -- Show counterexamples on proof failure
-set_option veil.smt.model.minimize true     -- Minimize SMT models
-set_option veil.smt.seed 44                 -- Reproducible SMT results
-set_option veil.vc_gen "transition"         -- VC generation strategy
-set_option synthInstance.maxSize 8192       -- Required for large proof search
-```
-
-### Main Safety Theorem
-
-The core property proven: if two honest (non-Byzantine) nodes decide on interactions for the same participants, those interactions must be ancestrally related (consensus agreement).
-
 ## Invariant Dependency Tree
 
 File-specific dependency trees live in memory (see `MEMORY.md`). They rot as invariants are added/removed, so they're maintained alongside the proof state rather than inline here.
 
 - For `IFPSafety/IFPN.lean`, see the `ifpn_dependency_tree` memory entry.
 
-## Key Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| **veil** | Verification framework for transition systems |
-| **mathlib4** | Mathematical library |
-| **Aesop** | Automated proof search |
-| **lean-smt** | SMT solver integration (Z3/CVC5) |
