@@ -680,6 +680,13 @@ invariant [prevote_only_by_operator]
 invariant [precommit_only_by_operator]
   (¬ ctx.is_byz OP ∧ precommitted_operator OP V I) → operator OP V
 
+invariant [prevote_justified_by_highest_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
+    ((∃ (n_max : node) (v_max : view),
+        sent_lock_in_prepare n_max V I prevote v_max) ∨
+     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
+        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
+
 invariant [prepared_node_has_lock_sent]
   (¬ ctx.is_byz N ∧ prepared_node N V ∧ V ≠ tot_view.zero ∧
    locked N IL SL VL ∧
