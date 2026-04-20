@@ -424,7 +424,7 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
 
 -- Supporting: Prevote lock implies a quorum prevoted for the interaction
 invariant [prevote_lock_only_if_quorum_prevoted]
-  (¬ ctx.is_byz N ∧ locked N I prevote V) → (∃ (s : nodeset), ctx.supermajority s ∧
+  locked N I prevote V → (∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (NC : node), ctx.member NC s → prevoted_node NC V I)
 
 -- Supporting (cross-node): If honest NC has precommitted for I at V, and honest N has a prevote lock
@@ -451,7 +451,7 @@ invariant [precommit_lock_implies_prevoted]
 
 -- Supporting: Sent locks in prepare phase correspond to actual locks
 invariant [locks_sent_only_if_locked]
-  (¬ ctx.is_byz N ∧ sent_lock_in_prepare N V IL SL VL) → locked N IL SL VL
+  sent_lock_in_prepare N V IL SL VL → locked N IL SL VL
 
 -- Supporting: Genesis locks exist for all nodes
 invariant [genesis_lock_existence]
