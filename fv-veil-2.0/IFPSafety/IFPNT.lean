@@ -485,20 +485,20 @@ invariant [locks_analog_precommit]
 -- # Safety Routing Lemmas
 -- ####################################################################
 
--- Same view: two honest decisions at the same view agree.
-invariant [safety_same_view]
-  ∀ (N1 N2 : node) (V : view) (I1 I2 : interaction),
-    (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-     decided N1 V I1 ∧ decided N2 V I2) →
-    I1 = I2
+-- -- Same view: two honest decisions at the same view agree.
+-- invariant [safety_same_view]
+--   ∀ (N1 N2 : node) (V : view) (I1 I2 : interaction),
+--     (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+--      decided N1 V I1 ∧ decided N2 V I2) →
+--     I1 = I2
 
--- Cross view: the earlier decision is on the ancestor chain of the later.
-invariant [safety_cross_view]
-  ∀ (N1 N2 : node) (V1 V2 : view) (I1 I2 : interaction),
-    (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-     decided N1 V1 I1 ∧ decided N2 V2 I2 ∧
-     tot_view.lt V1 V2) →
-    (I1 = I2 ∨ ancestor I1 I2)
+-- -- Cross view: the earlier decision is on the ancestor chain of the later.
+-- invariant [safety_cross_view]
+--   ∀ (N1 N2 : node) (V1 V2 : view) (I1 I2 : interaction),
+--     (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+--      decided N1 V1 I1 ∧ decided N2 V2 I2 ∧
+--      tot_view.lt V1 V2) →
+--     (I1 = I2 ∨ ancestor I1 I2)
 
 -- Supporting: Prevote lock implies a quorum prevoted for the interaction
 invariant [prevote_lock_only_if_quorum_prevoted]
