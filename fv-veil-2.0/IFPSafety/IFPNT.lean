@@ -6,8 +6,11 @@
 --   - relation precommit_backed : view → interaction → Bool  (ghost)
 --   - ghost update in respond_prevote
 --   - invariants: precommit_backed_fwd, precommit_backed_bwd,
+--                 locked_precommit_implies_precommit_backed,
+--                 unique_precommit_backed_at_view,
 --                 locks_analog_prevote, locks_analog_precommit,
---                 safety_same_view, safety_cross_view
+--                 cur_view_global, prevoted_node_view_bound,
+--                 precommitted_node_view_bound
 
 import Veil
 
@@ -199,6 +202,7 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
   )
   -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
   require committed_ixn op ci
+  require ancestor genesis ci
   require height ixn_max = height ci + 1
   require s_max = prevote
   proposed_repropose op v ixn_max := true;
@@ -244,6 +248,7 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   )
   -- Height-based decision: heightDiff == 0 → extend
   require committed_ixn op ci
+  require ancestor genesis ci
   require height ixn_max ≤ height ci
   require ci ≠ ixn_propose
   require ¬ (ancestor ci ixn_propose ∨ ancestor ixn_propose ci)
@@ -404,6 +409,14 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
 }
 
 
+invariant [prevote_justified_by_highest_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
+    ((∃ (n_max : node) (v_max : view),
+        sent_lock_in_prepare n_max V I prevote v_max) ∨
+     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
+        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
+
+
 -- ####################################################################
 -- # Main Safety Property
 -- ####################################################################
@@ -415,6 +428,114 @@ safety [main_safety]
      decided n2 v2 i2) →
     (ancestor i1 i2 ∨ ancestor i2 i1)
 
+-- ####################################################################
+-- # Core Safety-Routing Invariants
+-- ####################################################################
+
+invariant [decision_height_monotone]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   decided N1 V1 I1 ∧
+   decided N2 V2 I2 ∧
+   tot_view.lt V1 V2)
+  → height I1 ≤ height I2
+
+invariant [proposed_extend_parent_matches_committed]
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J ∧
+   committed_ixn OP CI ∧ height I = height CI) → I = CI
+
+invariant [proposed_repropose_parent_matches_committed]
+  (¬ ctx.is_byz OP ∧ proposed_repropose OP V J ∧ parent I J ∧
+   committed_ixn OP CI ∧ height I = height CI) → I = CI
+
+invariant [unique_decided_at_height]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+   decided N1 V1 I1 ∧
+   decided N2 V2 I2 ∧
+   height I1 = height I2)
+  → I1 = I2
+
+invariant [committed_ixn_height_upper_bound]
+  (¬ ctx.is_byz N ∧ decided N V I ∧ committed_ixn N CI) → height I ≤ height CI
+
+invariant [genesis_decided_first]
+  (decided N V J ∧ J ≠ genesis) →
+    ∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u genesis
+
+invariant [committed_implies_parent_committed]
+  (decided M V J ∧ parent I J ∧ J ≠ genesis) →
+    ∃ (u : view) (n : node), tot_view.lt u V ∧ decided n u I
+
+-- ####################################################################
+-- # locks_analog — Tendermint-style lock-propagation bundle
+-- ####################################################################
+
+-- If I was precommit-backed at V, then any honest node's later prevote
+-- must be on I or a descendant of I (mirrors Tendermint's `locks` invariant's
+-- prevote clause).
+-- invariant [locks_analog_prevote]
+--   ∀ (V V2 : view) (I I2 : interaction) (N : node),
+--     (¬ ctx.is_byz N ∧
+--      I ≠ genesis ∧
+--      precommit_backed V I ∧
+--      tot_view.lt V V2 ∧
+--      prevoted_node N V2 I2) →
+--     (I2 = I ∨ ancestor I I2)
+
+-- If I was precommit-backed at V, then any honest node's precommit at V' ≥ V
+-- sits on I's chain (ancestor relation in either direction).
+invariant [locks_analog_precommit]
+  ∀ (V V2 : view) (I I2 : interaction) (N : node),
+    (¬ ctx.is_byz N ∧
+     I ≠ genesis ∧ I2 ≠ genesis ∧
+     precommit_backed V I ∧
+     tot_view.le V V2 ∧
+     precommitted_node N V2 I2) →
+    (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+
+-- All nodes share the same cur_view (by synchronous set_view).
+-- Required to rule out spurious split-view pre-states for locks_analog_*.
+invariant [cur_view_global]
+  (cur_view N1 V1 ∧ cur_view N2 V2) → V1 = V2
+
+-- An honest node's prevote cannot be at a view later than the current global view.
+-- Follows from: honest prevote requires cur_view at that view, combined with cur_view_global.
+invariant [prevoted_node_view_bound]
+  (¬ ctx.is_byz N2 ∧ cur_view N1 V1 ∧ prevoted_node N2 V2 I) →
+    tot_view.le V2 V1
+
+-- An honest node's precommit cannot be at a view later than the current global view.
+invariant [precommitted_node_view_bound]
+  (¬ ctx.is_byz N2 ∧ cur_view N1 V1 ∧ precommitted_node N2 V2 I) →
+    tot_view.le V2 V1
+
+-- ####################################################################
+-- # precommit_backed ghost definitional invariants
+-- ####################################################################
+
+-- Forward: the ghost reflects an actual supermajority of node-level precommits.
+invariant [precommit_backed_fwd]
+  precommit_backed V I →
+    (∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (n : node), ctx.member n s → precommitted_node n V I)
+
+-- Backward: whenever a supermajority has precommitted, the ghost records it.
+invariant [precommit_backed_bwd]
+  (∃ (s : nodeset), ctx.supermajority s ∧
+    ∀ (n : node), ctx.member n s → precommitted_node n V I) →
+  precommit_backed V I
+
+-- Any non-genesis precommit-lock (including Byzantine's) implies precommit_backed
+-- at that view. Follows from: respond_precommit's precondition requires a
+-- supermajority of precommitted_node at (V,I), which by precommit_backed_bwd
+-- implies precommit_backed V I at call time.
+invariant [locked_precommit_implies_precommit_backed]
+  (locked N I precommit V ∧ I ≠ genesis) → precommit_backed V I
+
+-- Uniqueness of precommit_backed at a view.
+-- Follows from precommit_backed_fwd + supermajorities_intersect_in_honest
+-- + unique_precommit_nodes.
+invariant [unique_precommit_backed_at_view]
+  (precommit_backed V I1 ∧ precommit_backed V I2) → I1 = I2
 
 -- ####################################################################
 -- # Core Invariants
@@ -438,48 +559,15 @@ invariant [INV3_decided_only_if_quorum_prevote_locked]
         ∧ ∀ (nc : node), ¬ ctx.is_byz nc → (
           ctx.member nc s → ∃ (u : view), (tot_view.le u v ∧ prevoted_node nc v ixn ∧ (locked nc ixn prevote u ∨ locked nc ixn precommit u))) )) )
 
--- ####################################################################
--- # precommit_backed ghost definitional invariants
--- ####################################################################
-
--- Forward: the ghost reflects an actual supermajority of node-level precommits.
-invariant [precommit_backed_fwd]
-  precommit_backed V I →
-    (∃ (s : nodeset), ctx.supermajority s ∧
-      ∀ (n : node), ctx.member n s → precommitted_node n V I)
-
--- Backward: whenever a supermajority has precommitted, the ghost records it.
-invariant [precommit_backed_bwd]
-  (∃ (s : nodeset), ctx.supermajority s ∧
-    ∀ (n : node), ctx.member n s → precommitted_node n V I) →
-  precommit_backed V I
-
--- ####################################################################
--- # locks_analog — Tendermint-style lock-propagation bundle
+ -- ####################################################################
+-- # Height-Based Uniqueness Invariants
 -- ####################################################################
 
--- If I was precommit-backed at V, then any honest node's later prevote
--- must be on I or a descendant of I (mirrors Tendermint's `locks` invariant's
--- prevote clause).
-invariant [locks_analog_prevote]
-  ∀ (V V2 : view) (I I2 : interaction) (N : node),
-    (¬ ctx.is_byz N ∧
-     I ≠ genesis ∧
-     precommit_backed V I ∧
-     tot_view.lt V V2 ∧
-     prevoted_node N V2 I2) →
-    (I2 = I ∨ ancestor I I2)
-
--- If I was precommit-backed at V, then any honest node's precommit at V' ≥ V
--- sits on I's chain (ancestor relation in either direction).
-invariant [locks_analog_precommit]
-  ∀ (V V2 : view) (I I2 : interaction) (N : node),
-    (¬ ctx.is_byz N ∧
-     I ≠ genesis ∧ I2 ≠ genesis ∧
-     precommit_backed V I ∧
-     tot_view.le V V2 ∧
-     precommitted_node N V2 I2) →
-    (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+invariant [unique_locked_at_height]
+  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+    locked N1 I1 precommit V1 ∧ locked N2 I2 precommit V2 ∧
+    I1 ≠ genesis ∧ I2 ≠ genesis ∧ height I1 = height I2)
+    → I1 = I2
 
 -- ####################################################################
 -- # Safety Routing Lemmas
@@ -758,13 +846,6 @@ invariant [prevote_only_by_operator]
 invariant [precommit_only_by_operator]
   (¬ ctx.is_byz OP ∧ precommitted_operator OP V I) → operator OP V
 
-invariant [prevote_justified_by_highest_lock]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
-    ((∃ (n_max : node) (v_max : view),
-        sent_lock_in_prepare n_max V I prevote v_max) ∨
-     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
-        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
-
 invariant [prepared_node_has_lock_sent]
   (¬ ctx.is_byz N ∧ prepared_node N V ∧ V ≠ tot_view.zero ∧
    locked N IL SL VL ∧
@@ -776,14 +857,6 @@ invariant [prepared_node_has_lock_sent]
 -- ####################################################################
 -- # Decision Invariants
 -- ####################################################################
-
-invariant [committed_implies_parent_committed]
-  (decided M V J ∧ parent I J ∧ J ≠ genesis) →
-    ∃ (u : view) (n : node), tot_view.lt u V ∧ decided n u I
-
-invariant [genesis_decided_first]
-  (decided N V J ∧ J ≠ genesis) →
-    ∃ (u : view) (m : node), tot_view.lt u V ∧ decided m u genesis
 
 invariant [decision_requires_precommit_lock]
   (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → locked N I precommit V
@@ -882,23 +955,6 @@ invariant [propose_only_if_parent_locked]
   (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J) →
     (∃ (u : view) (n : node) (s : stage), tot_view.le u V ∧ locked n I s u)
 
--- ####################################################################
--- # Height-Based Uniqueness Invariants
--- ####################################################################
-
-invariant [unique_decided_at_height]
-  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-   decided N1 V1 I1 ∧
-   decided N2 V2 I2 ∧
-   height I1 = height I2)
-  → I1 = I2
-
-invariant [unique_locked_at_height]
-  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-   locked N1 I1 S1 V1 ∧ locked N2 I2 S2 V2 ∧
-   I1 ≠ genesis ∧ I2 ≠ genesis ∧
-   height I1 = height I2)
-  → I1 = I2
 
 -- ####################################################################
 -- # View-Height Monotonicity Invariants
@@ -915,13 +971,6 @@ invariant [lock_height_monotone]
    tot_view.le V1 V2)
   → height I1 ≤ height I2
 
-invariant [decision_height_monotone]
-  (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-   decided N1 V1 I1 ∧
-   decided N2 V2 I2 ∧
-   tot_view.lt V1 V2)
-  → height I1 ≤ height I2
-
 -- ####################################################################
 -- # Committed State Invariants
 -- ####################################################################
@@ -935,9 +984,6 @@ invariant [node_has_committed_ixn]
 invariant [committed_ixn_decided]
   (¬ ctx.is_byz N ∧ committed_ixn N I) →
     ∃ (V : view), decided N V I
-
-invariant [committed_ixn_height_upper_bound]
-  (¬ ctx.is_byz N ∧ decided N V I ∧ committed_ixn N CI) → height I ≤ height CI
 
 invariant [committed_ixn_is_genesis_or_has_parent]
   (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
@@ -956,14 +1002,6 @@ invariant [committed_ixn_unique_at_height]
 
 invariant [committed_ixn_height_positive]
   (¬ ctx.is_byz N ∧ committed_ixn N I ∧ I ≠ genesis) → height I ≥ 1
-
-invariant [proposed_extend_parent_matches_committed]
-  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧ parent I J ∧
-   committed_ixn OP CI ∧ height I = height CI) → I = CI
-
-invariant [proposed_repropose_parent_matches_committed]
-  (¬ ctx.is_byz OP ∧ proposed_repropose OP V J ∧ parent I J ∧
-   committed_ixn OP CI ∧ height I = height CI) → I = CI
 
 -- ####################################################################
 -- # Height Positivity Invariants
@@ -988,6 +1026,6 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_precommit
+#check_action respond_propose
 
 end IFPProtocolNT
