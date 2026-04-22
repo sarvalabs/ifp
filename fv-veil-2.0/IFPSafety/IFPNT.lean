@@ -409,14 +409,6 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
 }
 
 
-invariant [prevote_justified_by_highest_lock]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
-    ((∃ (n_max : node) (v_max : view),
-        sent_lock_in_prepare n_max V I prevote v_max) ∨
-     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
-        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
-
-
 -- ####################################################################
 -- # Main Safety Property
 -- ####################################################################
@@ -632,6 +624,13 @@ invariant [highest_lock_sent]
      tot_view.lt VL V ∧
      (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N i' s' v') ∧
      (SL = prevote → ¬ locked N IL precommit VL))
+
+invariant [prevote_justified_by_highest_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
+    ((∃ (n_max : node) (v_max : view),
+        sent_lock_in_prepare n_max V I prevote v_max) ∨
+     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
+        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
 
 -- Stepping stone for INV4: consecutive view case
 invariant [precommit_next_view_discovery]
