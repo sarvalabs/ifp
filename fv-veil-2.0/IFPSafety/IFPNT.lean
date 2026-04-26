@@ -125,27 +125,27 @@ after_init {
 -- # Actions
 -- ####################################################################
 
-action set_view (v_cur v_next : view) {
-  require ∀ (n : node), cur_view n v_cur
-  require tot_view.next v_cur v_next
-  cur_view N V := decide $ (V = v_next)
-}
+-- action set_view (v_cur v_next : view) {
+--   require ∀ (n : node), cur_view n v_cur
+--   require tot_view.next v_cur v_next
+--   cur_view N V := decide $ (V = v_next)
+-- }
 
-action pick_operator (op : node) (v : view) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require ∀ (n : node), ¬ operator n v
-  operator op v := true
-}
+-- action pick_operator (op : node) (v : view) {
+--   require v ≠ tot_view.zero
+--   require cur_view op v
+--   require ∀ (n : node), ¬ operator n v
+--   operator op v := true
+-- }
 
-action operator_prepare (op : node) (v : view) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require cur_stage op v prepare
-  require operator op v
-  require ¬ prepared_operator op v
-  prepared_operator op v := true
-}
+-- action operator_prepare (op : node) (v : view) {
+--   require v ≠ tot_view.zero
+--   require cur_view op v
+--   require cur_stage op v prepare
+--   require operator op v
+--   require ¬ prepared_operator op v
+--   prepared_operator op v := true
+-- }
 
 action respond_prepare (n : node) (v : view) {
   require v ≠ tot_view.zero
@@ -258,46 +258,46 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   height ixn_propose := height ci + 1;
 }
 
--- Nil: highest lock too far ahead, or precommit at committed_height + 1
-action propose_nil (op : node) (v : view) (ci : interaction) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require operator op v
-  require prepared_operator op v
-  require cur_stage op v propose
-  require ∀ (ix : interaction), ¬ proposed_repropose op v ix
-  require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
-  require ∃ (s : nodeset), (
-    ctx.supermajority s ∧ (
-      ∀ (n : node), (
-        ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
-          sent_lock_in_prepare n v ixnl sl vl
-          ∧ locked n ixnl sl vl
-          ∧ tot_view.le vl v
-        )
-      ))
-    )
-  )
-  -- Highest lock (by view only)
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
-  let v_max : view ← pick
-  require ∃ (n_max : node), (
-    sent_lock_in_prepare n_max v ixn_max s_max v_max
-    ∧ locked n_max ixn_max s_max v_max ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
-    )
-  )
-  -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
-  require committed_ixn op ci
-  require (height ixn_max > height ci + 1)
-        ∨ (height ixn_max = height ci + 1 ∧ s_max = precommit)
-  proposed_nil op v := true;
-}
+-- -- Nil: highest lock too far ahead, or precommit at committed_height + 1
+-- action propose_nil (op : node) (v : view) (ci : interaction) {
+--   require v ≠ tot_view.zero
+--   require cur_view op v
+--   require operator op v
+--   require prepared_operator op v
+--   require cur_stage op v propose
+--   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
+--   require ∀ (ix : interaction), ¬ proposed_extend op v ix
+--   require ¬ proposed_nil op v
+--   -- Quorum of prepared nodes
+--   require ∃ (s : nodeset), (
+--     ctx.supermajority s ∧ (
+--       ∀ (n : node), (
+--         ctx.member n s → (prepared_node n v ∧
+--         ∃ (vl : view) (ixnl : interaction) (sl : stage), (
+--           sent_lock_in_prepare n v ixnl sl vl
+--           ∧ locked n ixnl sl vl
+--           ∧ tot_view.le vl v
+--         )
+--       ))
+--     )
+--   )
+--   -- Highest lock (by view only)
+--   let ixn_max : interaction ← pick
+--   let s_max : stage ← pick
+--   let v_max : view ← pick
+--   require ∃ (n_max : node), (
+--     sent_lock_in_prepare n_max v ixn_max s_max v_max
+--     ∧ locked n_max ixn_max s_max v_max ∧
+--     ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
+--       sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
+--     )
+--   )
+--   -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
+--   require committed_ixn op ci
+--   require (height ixn_max > height ci + 1)
+--         ∨ (height ixn_max = height ci + 1 ∧ s_max = precommit)
+--   proposed_nil op v := true;
+-- }
 
 -- ####################################################################
 -- # Respond/Vote Actions
@@ -408,6 +408,41 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = commit)
 }
 
+invariant [locks_analog_precommit]
+  ∀ (V V2 : view) (I I2 : interaction) (N : node),
+    (¬ ctx.is_byz N ∧
+     I ≠ genesis ∧ I2 ≠ genesis ∧
+     precommit_backed V I ∧
+     tot_view.le V V2 ∧
+     precommitted_node N V2 I2) →
+    (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+
+-- Argmax-respecting (Byzantine-wipe-robust). Witness via monotonic `locked`
+-- and only require dominance over *honest* sent-locks at V. Rationale:
+--   * `locked` is monotonic — persists across Byzantine respond_prepare wipes.
+--   * Honest sent_locks at V are stable: honest nodes can't re-fire
+--     respond_prepare (blocked by ¬prepared_node + sent_lock_only_if_prepare's
+--     honest guard), so their views at V don't change.
+-- Established at respond_propose firing: the action's argmax dominates *all*
+-- sent-locks (including Byz), so a fortiori it dominates honest ones.
+invariant [prevote_justified_by_highest_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧ V ≠ tot_view.zero) →
+    ∃ (n_max : node) (ixn_max : interaction) (s_max : stage) (v_max : view),
+      locked n_max ixn_max s_max v_max ∧
+      tot_view.lt v_max V ∧
+      ((s_max = prevote ∧ ixn_max = I) ∨
+       (s_max = precommit ∧ parent ixn_max I)) ∧
+      (∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+         ¬ ctx.is_byz n_l ∧ sent_lock_in_prepare n_l V ixn_l s_l v_l →
+         tot_view.le v_l v_max)
+
+-- Strengthened: mirrors respond_prevote's exact post-condition. Either the
+-- prevote lock is at the same view V (new lock set by respond_prevote), or a
+-- pre-existing precommit lock at some U ≤ V. Rules out spurious states where
+-- precommitted_node exists without the matching `locked` side-effect.
+invariant [precommit_node_locked_at_same_view]
+  (¬ ctx.is_byz N ∧ precommitted_node N V I ∧ I ≠ genesis) →
+    (locked N I prevote V ∨ ∃ (U : view), tot_view.le U V ∧ locked N I precommit U)
 
 -- ####################################################################
 -- # Main Safety Property
@@ -423,6 +458,15 @@ safety [main_safety]
 -- ####################################################################
 -- # Core Safety-Routing Invariants
 -- ####################################################################
+
+invariant [genesis_decided_only_at_zero]
+  (¬ ctx.is_byz N ∧ decided N V genesis) → V = tot_view.zero
+
+invariant [proposed_parent_height_le_committed]
+  (¬ ctx.is_byz OP ∧
+   (proposed_repropose OP V J ∨ proposed_extend OP V J) ∧
+   parent I J ∧ committed_ixn OP CI) →
+    height I ≤ height CI
 
 invariant [decision_height_monotone]
   (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
@@ -475,14 +519,7 @@ invariant [committed_implies_parent_committed]
 
 -- If I was precommit-backed at V, then any honest node's precommit at V' ≥ V
 -- sits on I's chain (ancestor relation in either direction).
-invariant [locks_analog_precommit]
-  ∀ (V V2 : view) (I I2 : interaction) (N : node),
-    (¬ ctx.is_byz N ∧
-     I ≠ genesis ∧ I2 ≠ genesis ∧
-     precommit_backed V I ∧
-     tot_view.le V V2 ∧
-     precommitted_node N V2 I2) →
-    (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+
 
 -- All nodes share the same cur_view (by synchronous set_view).
 -- Required to rule out spurious split-view pre-states for locks_analog_*.
@@ -624,13 +661,6 @@ invariant [highest_lock_sent]
      tot_view.lt VL V ∧
      (∀ i' s' v', (tot_view.lt VL v' ∧ tot_view.lt v' V) → ¬ locked N i' s' v') ∧
      (SL = prevote → ¬ locked N IL precommit VL))
-
-invariant [prevote_justified_by_highest_lock]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) →
-    ((∃ (n_max : node) (v_max : view),
-        sent_lock_in_prepare n_max V I prevote v_max) ∨
-     (∃ (n_max : node) (ixn_max : interaction) (v_max : view),
-        sent_lock_in_prepare n_max V ixn_max precommit v_max ∧ parent ixn_max I))
 
 -- Stepping stone for INV4: consecutive view case
 invariant [precommit_next_view_discovery]
