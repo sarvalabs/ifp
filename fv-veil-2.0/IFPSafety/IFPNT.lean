@@ -1,13 +1,17 @@
--- IFPNT: IFPN extended with Tendermint-style precommit_backed ghost + locks_analog
--- invariants. Routes safety through a single lock-propagation bundle mirroring
--- the `locks` invariant in tendermint/spec/ivy-proofs/classic_safety.ivy.
+-- IFPNT: IFPN extended with Tendermint-style precommit_backed predicate +
+-- locks_analog invariants. Routes safety through a lock-propagation bundle
+-- mirroring the `locks` invariant in tendermint/spec/ivy-proofs/classic_safety.ivy.
+--
+-- precommit_backed is a *definition* (∃ op. precommitted_operator op V I), not a
+-- stored ghost relation. This concentrates SMT cost on operator_precommit (a
+-- small, focused action) instead of respond_prevote, where the existential-in-
+-- update of the prior ghost form was a 4000s+ bottleneck.
 --
 -- Delta from IFPN:
---   - relation precommit_backed : view → interaction → Bool  (ghost)
---   - ghost update in respond_prevote
---   - invariants: precommit_backed_fwd, precommit_backed_bwd,
---                 locked_precommit_implies_precommit_backed,
+--   - def precommit_backed (V : view) (I : interaction) : Prop
+--   - invariants: locked_precommit_implies_precommit_backed,
 --                 unique_precommit_backed_at_view,
+--                 decided_implies_precommit_backed,
 --                 locks_analog_prevote, locks_analog_precommit,
 --                 cur_view_global, prevoted_node_view_bound,
 --                 precommitted_node_view_bound
@@ -82,13 +86,13 @@ relation committed_ixn : node → interaction → Bool
 
 relation locked_at_view : node → view → Bool
 
--- Ghost: an honest-or-not supermajority has precommitted I at V.
--- Updated monotonically in respond_prevote; tied to precommitted_node by
--- precommit_backed_fwd / precommit_backed_bwd (an iff-definition in two halves).
-relation precommit_backed : view → interaction → Bool
-
 
 #gen_state
+
+-- precommit_backed (V, I) ≡ ∃ op. precommitted_operator op V I.
+-- Inlined at use sites because top-level defs can't reference Veil module state.
+-- By operator_precommit's precondition, this implies a real supermajority of
+-- precommitted_node at (V, I), regardless of operator honesty.
 
 -- `assumptions`
 
@@ -118,7 +122,6 @@ after_init {
   precommitted_node N V I := false;
   committed_ixn N I := decide $ (I = genesis);
   locked_at_view N V := decide $ (V = tot_view.zero);
-  precommit_backed V I := false;
 }
 
 -- ####################################################################
@@ -369,13 +372,6 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) {
   require ∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (nc : node), ctx.member nc s → prevoted_node nc v ixn
   precommitted_node n v ixn := true
-  -- Ghost update: monotonically record any supermajority-precommit fact.
-  -- Only the pair (v, ixn) could become newly true via this action.
-  precommit_backed V I := decide $
-    (precommit_backed V I ∨
-     (V = v ∧ I = ixn ∧
-      ∃ (s : nodeset), ctx.supermajority s ∧
-        ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn))
   if ( ¬ ∃ (u : view), (tot_view.le u v ∧ locked n ixn precommit u) ) then
     locked n ixn prevote v := true;
     locked_at_view n v := true;
@@ -412,32 +408,29 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
 -- Symmetric form: both sides are precommit_backed.
   invariant [locks_analog_precommit]
     (I ≠ genesis ∧ I2 ≠ genesis ∧
-     precommit_backed V I ∧ precommit_backed V2 I2 ∧
+     (∃ (op1 : node), precommitted_operator op1 V I) ∧
+     (∃ (op2 : node), precommitted_operator op2 V2 I2) ∧
      tot_view.le V V2) →
       (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
 
   -- Bridge for main_safety to feed this invariant.
   invariant [decided_implies_precommit_backed]
-    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → precommit_backed V I
+    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) →
+      (∃ (op : node), precommitted_operator op V I)
 
--- Argmax-respecting (Byzantine-wipe-robust). Witness via monotonic `locked`
--- and only require dominance over *honest* sent-locks at V. Rationale:
---   * `locked` is monotonic — persists across Byzantine respond_prepare wipes.
---   * Honest sent_locks at V are stable: honest nodes can't re-fire
---     respond_prepare (blocked by ¬prepared_node + sent_lock_only_if_prepare's
---     honest guard), so their views at V don't change.
--- Established at respond_propose firing: the action's argmax dominates *all*
--- sent-locks (including Byz), so a fortiori it dominates honest ones.
+-- Honest non-genesis prevote at non-zero view is justified by some pre-existing
+-- lock (monotonic witness). The dominance / argmax clause was dropped: it fails
+-- preservation on respond_prepare when a late preparer m (honest, different
+-- from the prevoter) first prepares at V with a lock view > the prevote's
+-- v_max — protocol-allowed, since respond_propose's argmax is a snapshot, not
+-- a forward-time-stable property.
 invariant [prevote_justified_by_highest_lock]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧ V ≠ tot_view.zero) →
     ∃ (n_max : node) (ixn_max : interaction) (s_max : stage) (v_max : view),
       locked n_max ixn_max s_max v_max ∧
       tot_view.lt v_max V ∧
       ((s_max = prevote ∧ ixn_max = I) ∨
-       (s_max = precommit ∧ parent ixn_max I)) ∧
-      (∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
-         ¬ ctx.is_byz n_l ∧ sent_lock_in_prepare n_l V ixn_l s_l v_l →
-         tot_view.le v_l v_max)
+       (s_max = precommit ∧ parent ixn_max I))
 
 -- Strengthened: mirrors respond_prevote's exact post-condition. Either the
 -- prevote lock is at the same view V (new lock set by respond_prevote), or a
@@ -541,33 +534,24 @@ invariant [precommitted_node_view_bound]
     tot_view.le V2 V1
 
 -- ####################################################################
--- # precommit_backed ghost definitional invariants
+-- # precommit_backed support invariants
 -- ####################################################################
-
--- Forward: the ghost reflects an actual supermajority of node-level precommits.
-invariant [precommit_backed_fwd]
-  precommit_backed V I →
-    (∃ (s : nodeset), ctx.supermajority s ∧
-      ∀ (n : node), ctx.member n s → precommitted_node n V I)
-
--- Backward: whenever a supermajority has precommitted, the ghost records it.
-invariant [precommit_backed_bwd]
-  (∃ (s : nodeset), ctx.supermajority s ∧
-    ∀ (n : node), ctx.member n s → precommitted_node n V I) →
-  precommit_backed V I
+-- precommit_backed (V, I) is inlined as `∃ op. precommitted_operator op V I`
+-- (no stored ghost relation, no _fwd / _bwd / ghost-update infrastructure).
 
 -- Any non-genesis precommit-lock (including Byzantine's) implies precommit_backed
--- at that view. Follows from: respond_precommit's precondition requires a
--- supermajority of precommitted_node at (V,I), which by precommit_backed_bwd
--- implies precommit_backed V I at call time.
+-- at that view. Follows from: respond_precommit's precondition gives an
+-- operator witness with precommitted_operator op V I.
 invariant [locked_precommit_implies_precommit_backed]
-  (locked N I precommit V ∧ I ≠ genesis) → precommit_backed V I
+  (locked N I precommit V ∧ I ≠ genesis) →
+    (∃ (op : node), precommitted_operator op V I)
 
--- Uniqueness of precommit_backed at a view.
--- Follows from precommit_backed_fwd + supermajorities_intersect_in_honest
+-- Uniqueness at a view: two distinct operator-QCs at the same view contradict
+-- via supermajority intersection on their underlying precommitted_node quorums
 -- + unique_precommit_nodes.
 invariant [unique_precommit_backed_at_view]
-  (precommit_backed V I1 ∧ precommit_backed V I2) → I1 = I2
+  ((∃ (op1 : node), precommitted_operator op1 V I1) ∧
+   (∃ (op2 : node), precommitted_operator op2 V I2)) → I1 = I2
 
 -- ####################################################################
 -- # Core Invariants
@@ -1058,6 +1042,6 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_prevote
+#check_action respond_prepare
 
 end IFPProtocolNT
