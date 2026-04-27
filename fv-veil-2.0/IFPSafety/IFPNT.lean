@@ -1,15 +1,18 @@
--- IFPNT: IFPN extended with Tendermint-style precommit_backed predicate +
+-- IFPNT: IFPN extended with Tendermint-style precommit_backed ghost +
 -- locks_analog invariants. Routes safety through a lock-propagation bundle
 -- mirroring the `locks` invariant in tendermint/spec/ivy-proofs/classic_safety.ivy.
 --
--- precommit_backed is a *definition* (∃ op. precommitted_operator op V I), not a
--- stored ghost relation. This concentrates SMT cost on operator_precommit (a
--- small, focused action) instead of respond_prevote, where the existential-in-
--- update of the prior ghost form was a 4000s+ bottleneck.
+-- precommit_backed is a stored ghost relation, set inside operator_precommit
+-- (whose precondition guarantees a real supermajority of precommitted_node,
+-- regardless of operator honesty). Only the forward direction (ghost ⇒ quorum
+-- witness) is asserted; no _bwd, so SMT doesn't have to flip the ghost on
+-- respond_prevote's state changes.
 --
 -- Delta from IFPN:
---   - def precommit_backed (V : view) (I : interaction) : Prop
---   - invariants: locked_precommit_implies_precommit_backed,
+--   - relation precommit_backed : view → interaction → Bool
+--   - ghost set in operator_precommit
+--   - invariants: precommit_backed_fwd,
+--                 locked_precommit_implies_precommit_backed,
 --                 unique_precommit_backed_at_view,
 --                 decided_implies_precommit_backed,
 --                 locks_analog_prevote, locks_analog_precommit,
@@ -86,13 +89,15 @@ relation committed_ixn : node → interaction → Bool
 
 relation locked_at_view : node → view → Bool
 
+-- Ghost: a precommit-QC has been aggregated at (V, I).
+-- Set by operator_precommit (whose precondition guarantees a real supermajority
+-- of precommitted_node, regardless of operator honesty). Tied to that quorum
+-- by precommit_backed_fwd. No _bwd direction (avoids SMT cost of asserting
+-- the ghost flip on every supermajority change in respond_prevote).
+relation precommit_backed : view → interaction → Bool
+
 
 #gen_state
-
--- precommit_backed (V, I) ≡ ∃ op. precommitted_operator op V I.
--- Inlined at use sites because top-level defs can't reference Veil module state.
--- By operator_precommit's precondition, this implies a real supermajority of
--- precommitted_node at (V, I), regardless of operator honesty.
 
 -- `assumptions`
 
@@ -122,6 +127,7 @@ after_init {
   precommitted_node N V I := false;
   committed_ixn N I := decide $ (I = genesis);
   locked_at_view N V := decide $ (V = tot_view.zero);
+  precommit_backed V I := false;
 }
 
 -- ####################################################################
@@ -386,6 +392,8 @@ action operator_precommit (op : node) (v : view) (ixn : interaction) {
   require ∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   precommitted_operator op v ixn := true
+  -- Ghost set: the precondition above is exactly precommit_backed's witness.
+  precommit_backed v ixn := true
 }
 
 action respond_precommit (n : node) (v : view) (ixn : interaction) {
@@ -404,19 +412,32 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = commit)
 }
 
+-- Bridge: precommitted_node directly implies a prevote-QC was aggregated
+-- (mirrors respond_prevote's `∃ op. operator op v ∧ prevoted_operator op v ixn`
+-- precondition lifted into a state invariant, with the operator-role guard).
+invariant [precommitted_node_implies_prevote_qc]
+  precommitted_node N V I → (∃ (op : node), operator op V ∧ prevoted_operator op V I)
 
 -- Symmetric form: both sides are precommit_backed.
   invariant [locks_analog_precommit]
     (I ≠ genesis ∧ I2 ≠ genesis ∧
-     (∃ (op1 : node), precommitted_operator op1 V I) ∧
-     (∃ (op2 : node), precommitted_operator op2 V2 I2) ∧
+     precommit_backed V I ∧ precommit_backed V2 I2 ∧
      tot_view.le V V2) →
       (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
 
   -- Bridge for main_safety to feed this invariant.
   invariant [decided_implies_precommit_backed]
-    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) →
-      (∃ (op : node), precommitted_operator op V I)
+    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → precommit_backed V I
+
+-- Bridge: precommitted_operator entails precommit_backed at the same (V, I).
+-- precommitted_operator is only written by operator_precommit, which sets
+-- precommit_backed at the same call. So at the moment precommitted_operator
+-- becomes true, precommit_backed becomes true too. Both monotonic.
+-- Required so that decided_implies_precommit_backed can chain through
+-- respond_precommit's `∃ op. operator op v ∧ precommitted_operator op v ixn`
+-- precondition to derive precommit_backed.
+invariant [precommitted_operator_implies_precommit_backed]
+  precommitted_operator OP V I → precommit_backed V I
 
 -- Honest non-genesis prevote at non-zero view is justified by some pre-existing
 -- lock (monotonic witness). The dominance / argmax clause was dropped: it fails
@@ -439,6 +460,30 @@ invariant [prevote_justified_by_highest_lock]
 invariant [precommit_node_locked_at_same_view]
   (¬ ctx.is_byz N ∧ precommitted_node N V I ∧ I ≠ genesis) →
     (locked N I prevote V ∨ ∃ (U : view), tot_view.le U V ∧ locked N I precommit U)
+
+-- An honest non-genesis prevote at non-zero V is justified by N's OWN most-recent
+-- lock (at v_max < V): the lock either is a prevote-lock on I, or a precommit-lock
+-- whose ixn is the parent of I. Lifts respond_propose's argmax precondition (over
+-- sent_lock_in_prepare, which by sent_lock_only_if_prepare/locks_sent_only_if_locked
+-- captures N's own locks when N is prepared at V) into a state invariant.
+invariant [prevote_justified_by_own_highest_lock]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧ V ≠ tot_view.zero) →
+    ∃ (ixn_max : interaction) (s_max : stage) (v_max : view),
+      locked N ixn_max s_max v_max ∧
+      tot_view.lt v_max V ∧
+      ((s_max = prevote ∧ ixn_max = I) ∨
+       (s_max = precommit ∧ parent ixn_max I)) ∧
+      (∀ (i' : interaction) (s' : stage) (v' : view),
+         locked N i' s' v' ∧ tot_view.lt v' V →
+         tot_view.le v' v_max)
+
+-- Precommit locks are bounded by the holder's committed_ixn height. Established
+-- atomically in respond_precommit (sets locked precommit + updates committed_ixn
+-- when height ≥ old). Rules out spurious states where a precommit lock exists
+-- without the matching committed_ixn bookkeeping.
+invariant [precommit_lock_height_le_committed]
+  (¬ ctx.is_byz N ∧ locked N I precommit V ∧ committed_ixn N CI) →
+    height I ≤ height CI
 
 -- ####################################################################
 -- # Main Safety Property
@@ -536,22 +581,31 @@ invariant [precommitted_node_view_bound]
 -- ####################################################################
 -- # precommit_backed support invariants
 -- ####################################################################
--- precommit_backed (V, I) is inlined as `∃ op. precommitted_operator op V I`
--- (no stored ghost relation, no _fwd / _bwd / ghost-update infrastructure).
+-- precommit_backed is a stored ghost set in operator_precommit, where the
+-- supermajority precondition guarantees a real precommitted_node quorum.
+-- Tied to the underlying quorum by precommit_backed_fwd; no _bwd direction
+-- (avoids SMT cost on respond_prevote — the ghost lags the supermajority
+-- formation but is set as soon as any operator aggregates the QC).
 
--- Any non-genesis precommit-lock (including Byzantine's) implies precommit_backed
--- at that view. Follows from: respond_precommit's precondition gives an
--- operator witness with precommitted_operator op V I.
+-- Forward: ghost ⇒ supermajority of precommitted_node exists.
+-- Established by operator_precommit's precondition; preserved by monotonicity
+-- of precommitted_node (no action ever unsets it).
+invariant [precommit_backed_fwd]
+  precommit_backed V I →
+    (∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (n : node), ctx.member n s → precommitted_node n V I)
+
+
+-- Any non-genesis precommit-lock (including Byzantine's) implies precommit_backed.
+-- Follows from: respond_precommit's precondition requires precommitted_operator,
+-- which (for any operator) was set by operator_precommit, which set precommit_backed.
 invariant [locked_precommit_implies_precommit_backed]
-  (locked N I precommit V ∧ I ≠ genesis) →
-    (∃ (op : node), precommitted_operator op V I)
+  (locked N I precommit V ∧ I ≠ genesis) → precommit_backed V I
 
--- Uniqueness at a view: two distinct operator-QCs at the same view contradict
--- via supermajority intersection on their underlying precommitted_node quorums
+-- Uniqueness at a view: via precommit_backed_fwd + supermajority intersection
 -- + unique_precommit_nodes.
 invariant [unique_precommit_backed_at_view]
-  ((∃ (op1 : node), precommitted_operator op1 V I1) ∧
-   (∃ (op2 : node), precommitted_operator op2 V I2)) → I1 = I2
+  (precommit_backed V I1 ∧ precommit_backed V I2) → I1 = I2
 
 -- ####################################################################
 -- # Core Invariants
@@ -853,6 +907,7 @@ invariant [prevote_implies_proposed]
 invariant [precommit_only_if_propose]
   (¬ ctx.is_byz N ∧ precommitted_node N V I) → (∃ (op : node), operator op V ∧ (proposed_repropose op V I ∨ proposed_extend op V I))
 
+
 invariant [prepare_response_only_on_prepare]
   ¬ ctx.is_byz N → (prepared_node N V → ∃ (op : node), operator op V ∧ prepared_operator op V)
 
@@ -1042,6 +1097,6 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_prepare
+#check_action respond_prevote
 
 end IFPProtocolNT
