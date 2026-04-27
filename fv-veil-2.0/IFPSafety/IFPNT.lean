@@ -408,14 +408,17 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = commit)
 }
 
-invariant [locks_analog_precommit]
-  ∀ (V V2 : view) (I I2 : interaction) (N : node),
-    (¬ ctx.is_byz N ∧
-     I ≠ genesis ∧ I2 ≠ genesis ∧
-     precommit_backed V I ∧
-     tot_view.le V V2 ∧
-     precommitted_node N V2 I2) →
-    (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+
+-- Symmetric form: both sides are precommit_backed.
+  invariant [locks_analog_precommit]
+    (I ≠ genesis ∧ I2 ≠ genesis ∧
+     precommit_backed V I ∧ precommit_backed V2 I2 ∧
+     tot_view.le V V2) →
+      (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+
+  -- Bridge for main_safety to feed this invariant.
+  invariant [decided_implies_precommit_backed]
+    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → precommit_backed V I
 
 -- Argmax-respecting (Byzantine-wipe-robust). Witness via monotonic `locked`
 -- and only require dominance over *honest* sent-locks at V. Rationale:
@@ -1055,6 +1058,6 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_propose
+#check_action respond_prevote
 
 end IFPProtocolNT
