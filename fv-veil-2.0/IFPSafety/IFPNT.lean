@@ -12,10 +12,10 @@
 --   - relation precommit_backed : view → interaction → Bool
 --   - ghost set in operator_precommit
 --   - invariants: precommit_backed_fwd,
---                 locked_precommit_implies_precommit_backed,
+--                 precommitted_operator_implies_precommit_backed,
 --                 unique_precommit_backed_at_view,
 --                 decided_implies_precommit_backed,
---                 locks_analog_prevote, locks_analog_precommit,
+--                 locks_analog_precommit,
 --                 cur_view_global, prevoted_node_view_bound,
 --                 precommitted_node_view_bound
 
@@ -412,18 +412,26 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = commit)
 }
 
+
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
+
 -- Bridge: precommitted_node directly implies a prevote-QC was aggregated
 -- (mirrors respond_prevote's `∃ op. operator op v ∧ prevoted_operator op v ixn`
 -- precondition lifted into a state invariant, with the operator-role guard).
 invariant [precommitted_node_implies_prevote_qc]
   precommitted_node N V I → (∃ (op : node), operator op V ∧ prevoted_operator op V I)
 
--- Symmetric form: both sides are precommit_backed.
   invariant [locks_analog_precommit]
-    (I ≠ genesis ∧ I2 ≠ genesis ∧
-     precommit_backed V I ∧ precommit_backed V2 I2 ∧
-     tot_view.le V V2) →
-      (I2 = I ∨ ancestor I I2 ∨ ancestor I2 I)
+    ∀ (V V2 : view) (I I2 : interaction),
+      (I ≠ genesis ∧ I2 ≠ genesis ∧
+       precommit_backed V I ∧ precommit_backed V2 I2 ∧
+       tot_view.lt V V2) →
+      (I = I2 ∨ ancestor I I2)
 
   -- Bridge for main_safety to feed this invariant.
   invariant [decided_implies_precommit_backed]
@@ -461,6 +469,21 @@ invariant [precommit_node_locked_at_same_view]
   (¬ ctx.is_byz N ∧ precommitted_node N V I ∧ I ≠ genesis) →
     (locked N I prevote V ∨ ∃ (U : view), tot_view.le U V ∧ locked N I precommit U)
 
+
+
+-- Precommit locks are bounded by the holder's committed_ixn height. Established
+-- atomically in respond_precommit (sets locked precommit + updates committed_ixn
+-- when height ≥ old). Rules out spurious states where a precommit lock exists
+-- without the matching committed_ixn bookkeeping.
+invariant [precommit_lock_height_le_committed]
+  (¬ ctx.is_byz N ∧ locked N I precommit V ∧ committed_ixn N CI) →
+    height I ≤ height CI
+
+-- ####################################################################
+-- # Main Safety Property
+-- ####################################################################
+
+
 -- An honest non-genesis prevote at non-zero V is justified by N's OWN most-recent
 -- lock (at v_max < V): the lock either is a prevote-lock on I, or a precommit-lock
 -- whose ixn is the parent of I. Lifts respond_propose's argmax precondition (over
@@ -476,26 +499,6 @@ invariant [prevote_justified_by_own_highest_lock]
       (∀ (i' : interaction) (s' : stage) (v' : view),
          locked N i' s' v' ∧ tot_view.lt v' V →
          tot_view.le v' v_max)
-
--- Precommit locks are bounded by the holder's committed_ixn height. Established
--- atomically in respond_precommit (sets locked precommit + updates committed_ixn
--- when height ≥ old). Rules out spurious states where a precommit lock exists
--- without the matching committed_ixn bookkeeping.
-invariant [precommit_lock_height_le_committed]
-  (¬ ctx.is_byz N ∧ locked N I precommit V ∧ committed_ixn N CI) →
-    height I ≤ height CI
-
--- ####################################################################
--- # Main Safety Property
--- ####################################################################
-
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
-
 -- ####################################################################
 -- # Core Safety-Routing Invariants
 -- ####################################################################
@@ -595,12 +598,6 @@ invariant [precommit_backed_fwd]
     (∃ (s : nodeset), ctx.supermajority s ∧
       ∀ (n : node), ctx.member n s → precommitted_node n V I)
 
-
--- Any non-genesis precommit-lock (including Byzantine's) implies precommit_backed.
--- Follows from: respond_precommit's precondition requires precommitted_operator,
--- which (for any operator) was set by operator_precommit, which set precommit_backed.
-invariant [locked_precommit_implies_precommit_backed]
-  (locked N I precommit V ∧ I ≠ genesis) → precommit_backed V I
 
 -- Uniqueness at a view: via precommit_backed_fwd + supermajority intersection
 -- + unique_precommit_nodes.
@@ -1097,6 +1094,78 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_prevote
+-- #check_action operator_precommit
+
+
+theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
+    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+    [χ_rep :
+      ∀ __veil_f,
+        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+    [χ_rep_lawful :
+      ∀ __veil_f,
+        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+    [operator_precommit_dec_0 :
+      delta% @IFPProtocolNT._veil_dec_type_907530 view interaction χ nodeset node ctx stage χ_rep] :
+    ∀ (op : node) (v : view) (ixn : interaction),
+      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+        (@operator_precommit.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub operator_precommit_dec_0 op v ixn)
+        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          ρ_sub)
+        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+        (@locks_analog_precommit ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+  by
+  veil_human
+  intro hv_nz hcv hop hcs x hsm hpc V V2 I I2 hI hI2 hb1 hb2 hlt
+  by_cases h1new : V = v ∧ I = ixn
+  · -- Case: (V, I) = (v, ixn). After subst, v↦V and ixn↦I (Lean eliminates the RHS).
+    obtain ⟨hVeq, hIeq⟩ := h1new
+    subst hVeq
+    subst hIeq
+    -- Inner case-split now uses the surviving names V, I (the post-subst form of v, ixn).
+    by_cases h2new : V2 = V ∧ I2 = I
+    · -- Both new: I = I2, left disjunct holds
+      obtain ⟨_, hI2eq⟩ := h2new
+      subst hI2eq
+      exact Or.inl rfl
+    · -- (new, pre): impossible — pre-state precommit_backed V2 I2 with V2 > V (=v)
+      -- contradicts cur_view op V via precommit_backed_fwd + quorum-honest + precommitted_node_view_bound.
+      have hb2pre : st.precommit_backed V2 I2 = true :=
+        hb2 (fun hVeqV2 hIneqI2 => h2new ⟨hVeqV2.symm, hIneqI2.symm⟩)
+      exfalso
+      veil_concretize_tr
+      veil_fol
+      veil_smt
+  · -- Case: (V, I) ≠ (v, ixn) — hb1 yields pre-state precommit_backed V I
+    have hb1pre : st.precommit_backed V I = true :=
+      hb1 (fun hveqV hixneqI => h1new ⟨hveqV.symm, hixneqI.symm⟩)
+    by_cases h2new : V2 = v ∧ I2 = ixn
+    · -- (pre, new): substantive lock-propagation case
+      -- After subst, v↦V2, ixn↦I2. Goal: I = I2 ∨ ancestor I I2 with hlt : lt V V2.
+      obtain ⟨hV2eq, hI2eq⟩ := h2new
+      subst hV2eq
+      subst hI2eq
+      veil_concretize_tr
+      veil_fol
+      veil_smt
+    · -- (pre, pre): both witnesses pre-state, apply IH locks_analog_precommit (hinv.2.2.1)
+      have hb2pre : st.precommit_backed V2 I2 = true :=
+        hb2 (fun hveqV2 hixneqI2 => h2new ⟨hveqV2.symm, hixneqI2.symm⟩)
+      exact hinv.2.2.1 V V2 I I2 hI hI2 hb1pre hb2pre hlt
 
 end IFPProtocolNT
