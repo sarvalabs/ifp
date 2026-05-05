@@ -403,6 +403,8 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
   require ∃ (op : node), operator op v ∧ precommitted_operator op v ixn
   require ∃ (s : nodeset), ctx.supermajority s ∧
     ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
+  -- A node decides an interaction at most once across all views.
+  require ∀ (v_old : view), ¬ decided n v_old ixn
   locked n ixn precommit v := true;
   locked_at_view n v := true;
   decided n v ixn := true
@@ -413,36 +415,44 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) {
 }
 
 
--- Decomposition (B): "reproposal at later view of an earlier precommit-backed
--- ixn yields a reproposed interaction on that ixn's chain." Honest-operator
--- guarded; byzantine operators handled via the prevote/precommit chain.
-invariant [precommit_backed_repropose_link]
-  ∀ (V V2 : view) (I I2 : interaction) (OP : node),
-    (¬ ctx.is_byz OP ∧ I ≠ genesis ∧ I2 ≠ genesis ∧
+-- Height-only weakening of op_committed_descends_from_precommit_backed.
+-- Pure height bound: any earlier precommit_backed has height ≤ OP's current
+-- committed_ixn height. Cheaper for SMT (no ancestor reasoning) and feeds the
+-- propose_repropose case where height(ixn_max) = height(ci) + 1.
+invariant [op_committed_height_ge_precommit_backed]
+  ∀ (V V2 : view) (I CI : interaction) (OP : node),
+    (¬ ctx.is_byz OP ∧ I ≠ genesis ∧
      precommit_backed V I ∧ tot_view.lt V V2 ∧
-     proposed_repropose OP V2 I2) →
-    (I = I2 ∨ ancestor I I2)
+     committed_ixn OP CI ∧ cur_view OP V2) →
+    height I ≤ height CI
 
--- Decomposition (B): "extension at a later view than an earlier precommit-backed
--- ixn has its parent on that ixn's chain." Localizes the chain conclusion to
--- the parent, supported by parent_height + proposed_extend_parent_height_le_committed.
+-- Decomposition (B), parent-localized form (parallel to precommit_backed_extend_link).
+-- Conclusion uses bare `ancestor I PI` (equivalent to `I = PI ∨ ancestor I PI`
+-- via ancestor_refl) to avoid SMT case-splits on the disjunction.
+invariant [precommit_backed_repropose_link]
+  ∀ (V V2 : view) (I J PI : interaction) (OP : node),
+    (¬ ctx.is_byz OP ∧ I ≠ genesis ∧ J ≠ genesis ∧
+     precommit_backed V I ∧ tot_view.lt V V2 ∧
+     proposed_repropose OP V2 J ∧ parent PI J) →
+    ancestor I PI
+
+-- Decomposition (B), extend variant. Conclusion bare-ancestor form for the
+-- same SMT reason.
 invariant [precommit_backed_extend_link]
   ∀ (V V2 : view) (I I2 PI : interaction) (OP : node),
     (¬ ctx.is_byz OP ∧ I ≠ genesis ∧ I2 ≠ genesis ∧
      precommit_backed V I ∧ tot_view.lt V V2 ∧
      proposed_extend OP V2 I2 ∧ parent PI I2) →
-    (I = PI ∨ ancestor I PI)
+    ancestor I PI
 
 -- Bridge (C): the operator's committed_ixn at a later view descends from any
--- earlier precommit-backed interaction. This is the structural lever: both
--- propose_repropose's ixn_max (height(ci)+1) and propose_extend's parent (=ci)
--- thread through committed_ixn.
+-- earlier precommit-backed interaction. Bare-ancestor conclusion as above.
 invariant [op_committed_descends_from_precommit_backed]
   ∀ (V V2 : view) (I CI : interaction) (OP : node),
     (¬ ctx.is_byz OP ∧ I ≠ genesis ∧
      precommit_backed V I ∧ tot_view.lt V V2 ∧
      committed_ixn OP CI ∧ cur_view OP V2) →
-    (I = CI ∨ ancestor I CI)
+    ancestor I CI
 
 -- Height-only weakening of locks_analog_precommit. Decouples the height bound
 -- from the chain (ancestor) conclusion. Provable by quorum intersection +
@@ -1158,7 +1168,7 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action propose_repropose
+#check_action respond_precommit
 
 
 -- theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
