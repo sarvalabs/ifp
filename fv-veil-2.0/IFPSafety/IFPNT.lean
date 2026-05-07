@@ -176,39 +176,64 @@ action respond_prepare (n : node) (v : view) {
 -- ####################################################################
 
 -- Repropose: highest lock is at committed_height + 1 with prevote stage
-action propose_repropose (op : node) (v : view) (ci : interaction) {
+action propose_repropose (op : node) (v : view) (ci : interaction)
+    (s : nodeset) (n_max : node) {
   require v ≠ tot_view.zero
   require cur_view op v
   require operator op v
   require prepared_operator op v
+  -- Operator's own lock must be part of the prepare-lock set considered for the
+  -- highest-lock argmax. Mirrors the Go reference: ClusterState's
+  -- highestViewInfo is initialized as a copy of localViewInfo, so the
+  -- operator's own view info is always the seed/floor of the highest
+  -- computation. By forcing op to have responded to prepare, op's actual
+  -- highest lock is placed in sent_lock_in_prepare and the ixn_max argmax
+  -- below automatically considers it.
+  require prepared_node op v
   require cur_stage op v propose
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
   require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
-  require ∃ (s : nodeset), (
-    ctx.supermajority s ∧ (
-      ∀ (n : node), (
-        ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
-          sent_lock_in_prepare n v ixnl sl vl
-          ∧ locked n ixnl sl vl
-          ∧ tot_view.le vl v
-        )
-      ))
-    )
-  )
-  -- Highest lock (by view only)
+  -- Quorum of prepared nodes, each with a QC-backed lock. The per-member
+  -- `t : nodeset` clause mirrors respond_propose: the operator must witness
+  -- that every member's sent lock is backed by a real prevote/precommit QC.
+  -- Matches Go's validatePeerHighestQc (consensus/ics_handler.go:512), which
+  -- the operator runs over each peer's prepared response.
+  -- Outer quorum `s` lifted to an action parameter (Tendermint-style); see
+  -- `l_28(q : nset)` in tendermint.ivy.
+  require ctx.supermajority s
+  require ∀ (n : node), ctx.member n s → (prepared_node n v ∧
+    ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset),
+      sent_lock_in_prepare n v ixnl sl vl
+      ∧ locked n ixnl sl vl
+      ∧ tot_view.le vl v
+      ∧ ctx.supermajority t
+      ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
+      ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) ))
+  -- Highest lock (by view only). Argmax witness `n_max` lifted to an action
+  -- parameter; its sent lock is itself QC-backed (`t_max : nodeset`), so the
+  -- reproposed interaction comes with a stage-conditional quorum-witness
+  -- (prevoted/precommitted). Mirrors the per-member QC-backing in the prepare
+  -- quorum above; lifts (6) repropose_implies_prevote_qc into a structural
+  -- property of the action.
   let ixn_max : interaction ← pick
   let s_max : stage ← pick
   let v_max : view ← pick
-  require ∃ (n_max : node), (
-    sent_lock_in_prepare n_max v ixn_max s_max v_max
-    ∧ locked n_max ixn_max s_max v_max ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
-    )
-  )
+  require sent_lock_in_prepare n_max v ixn_max s_max v_max
+  require locked n_max ixn_max s_max v_max
+  require ∃ (t_max : nodeset), ctx.supermajority t_max
+    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
+    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
+  require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+    sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
+  -- (5) No sent_lock exists at views strictly above v_max (and below v, by
+  -- highest_lock_sent). Logically redundant with the argmax `≤ v_max` clause
+  -- above, but stated explicitly as a contrapositive in case SMT prefers
+  -- this form when discharging `repropose_max_lock_view_is_recent`-style
+  -- consequences.
+  require ∀ (vl : view), (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
+    ¬ ∃ (n : node) (i' : interaction) (s' : stage),
+          sent_lock_in_prepare n v i' s' vl
   -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
   require committed_ixn op ci
   require ancestor genesis ci
@@ -218,7 +243,8 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
 }
 
 -- Extend: all locks at or below committed_height → fresh proposal
-action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : interaction) {
+action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : interaction)
+    (s : nodeset) (n_max : node) {
   require v ≠ tot_view.zero
   require ∀ (j : interaction), ¬ (parent j ixn_propose ∨ parent ixn_propose j)
   require ∀ (j : interaction), (ixn_propose ≠ j → ¬ (ancestor j ixn_propose ∨ ancestor ixn_propose j))
@@ -226,35 +252,42 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   require cur_view op v
   require operator op v
   require prepared_operator op v
+  -- See propose_repropose: operator's own lock must seed the argmax.
+  require prepared_node op v
   require cur_stage op v propose
   require ixn_propose ≠ genesis
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
   require ¬ proposed_nil op v
-  -- Quorum of prepared nodes
-  require ∃ (s : nodeset), (
-    ctx.supermajority s ∧ (
-      ∀ (n : node), (
-        ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage), (
-          sent_lock_in_prepare n v ixnl sl vl
-          ∧ locked n ixnl sl vl
-          ∧ tot_view.le vl v
-        )
-      ))
-    )
-  )
-  -- Highest lock (by view only)
+  -- Quorum of prepared nodes, each with a QC-backed lock. See propose_repropose
+  -- for the per-member `t : nodeset` rationale (matches respond_propose and
+  -- Go's validatePeerHighestQc). Outer quorum `s` lifted to action parameter.
+  require ctx.supermajority s
+  require ∀ (n : node), ctx.member n s → (prepared_node n v ∧
+    ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset),
+      sent_lock_in_prepare n v ixnl sl vl
+      ∧ locked n ixnl sl vl
+      ∧ tot_view.le vl v
+      ∧ ctx.supermajority t
+      ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
+      ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) ))
+  -- Highest lock (by view only). Argmax witness `n_max` lifted to an action
+  -- parameter; its sent lock is QC-backed; see propose_repropose.
   let ixn_max : interaction ← pick
   let s_max : stage ← pick
   let v_max : view ← pick
-  require ∃ (n_max : node), (
-    sent_lock_in_prepare n_max v ixn_max s_max v_max
-    ∧ locked n_max ixn_max s_max v_max ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
-    )
-  )
+  require sent_lock_in_prepare n_max v ixn_max s_max v_max
+  require locked n_max ixn_max s_max v_max
+  require ∃ (t_max : nodeset), ctx.supermajority t_max
+    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
+    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
+  require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+    sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
+  -- (5) No sent_lock at views strictly above v_max (redundant with argmax;
+  -- see propose_repropose comment).
+  require ∀ (vl : view), (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
+    ¬ ∃ (n : node) (i' : interaction) (s' : stage),
+          sent_lock_in_prepare n v i' s' vl
   -- Height-based decision: heightDiff == 0 → extend
   require committed_ixn op ci
   require ancestor genesis ci
@@ -312,43 +345,37 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
 -- # Respond/Vote Actions
 -- ####################################################################
 
-action respond_propose (n : node) (v : view) (ixn : interaction) {
+action respond_propose (n : node) (v : view) (ixn : interaction)
+    (s : nodeset) (n_max : node) {
   require v ≠ tot_view.zero
   require cur_view n v
   require cur_stage n v propose
   require ∃ (op : node), operator op v ∧ (proposed_repropose op v ixn ∨ proposed_extend op v ixn)
   require ∀ (i : interaction), ¬ prevoted_node n v i
   require ixn ≠ genesis
-  require ∃ (s : nodeset), (
-    ctx.supermajority s ∧ (
-      ∀ (n : node), (
-        ctx.member n s → (prepared_node n v ∧
-        ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset), (
-          sent_lock_in_prepare n v ixnl sl vl
-          ∧ locked n ixnl sl vl
-          ∧ tot_view.le vl v
-          ∧ ctx.supermajority t
-          ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
-          ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) )
-        )
-      ))
-    )
-  )
+  -- Outer quorum `s` lifted to action parameter (Tendermint-style).
+  require ctx.supermajority s
+  require ∀ (m : node), ctx.member m s → (prepared_node m v ∧
+    ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset),
+      sent_lock_in_prepare m v ixnl sl vl
+      ∧ locked m ixnl sl vl
+      ∧ tot_view.le vl v
+      ∧ ctx.supermajority t
+      ∧ ( sl = prevote → (∀ (nt : node), (ctx.member nt t → prevoted_node nt vl ixnl)) )
+      ∧ ( sl = precommit → (∀ (nt : node), (ctx.member nt t → precommitted_node nt vl ixnl)) ))
   let ixn_max : interaction ← pick
   let s_max : stage ← pick
   let v_max : view ← pick
-  require ∃ (n_max : node), (
-    sent_lock_in_prepare n_max v ixn_max s_max v_max
-    ∧ locked n_max ixn_max s_max v_max ∧
-    ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view), (
-      sent_lock_in_prepare n_l v ixn_l s_l v_l → (
-        height ixn_l < height ixn_max
-        ∨ (height ixn_l = height ixn_max ∧ s_l = prevote ∧ s_max = precommit)
-        ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
-        ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
-      )
+  -- Argmax witness `n_max` lifted to action parameter.
+  require sent_lock_in_prepare n_max v ixn_max s_max v_max
+  require locked n_max ixn_max s_max v_max
+  require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
+    sent_lock_in_prepare n_l v ixn_l s_l v_l → (
+      height ixn_l < height ixn_max
+      ∨ (height ixn_l = height ixn_max ∧ s_l = prevote ∧ s_max = precommit)
+      ∨ (height ixn_l = height ixn_max ∧ s_l = s_max ∧ tot_view.le v_l v_max)
+      ∨ (ixn_l = ixn_max ∧ s_l = s_max ∧ v_l = v_max)
     )
-  )
   -- Valid proposal: repropose or extend
   require s_max = prevote ∨ s_max = precommit
   require (s_max = prevote) → ixn_max = ixn
@@ -359,24 +386,24 @@ action respond_propose (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = prevote)
 }
 
-action operator_prevote (op : node) (v : view) (ixn : interaction) {
+action operator_prevote (op : node) (v : view) (ixn : interaction) (s : nodeset) {
   require v ≠ tot_view.zero
   require ∀ (i : interaction), ¬ prevoted_operator op v i
   require cur_view op v
   require operator op v
   require cur_stage op v prevote
-  require ∃ (s : nodeset), ctx.supermajority s ∧
-    (∀ (n: node), ctx.member n s → prevoted_node n v ixn)
+  require ctx.supermajority s
+  require ∀ (n : node), ctx.member n s → prevoted_node n v ixn
   prevoted_operator op v ixn := true
 }
 
-action respond_prevote (n : node) (v : view) (ixn : interaction) {
+action respond_prevote (n : node) (v : view) (ixn : interaction) (s : nodeset) {
   require v ≠ tot_view.zero
   require cur_view n v
   require cur_stage n v prevote
   require ∃ (op : node), operator op v ∧ prevoted_operator op v ixn
-  require ∃ (s : nodeset), ctx.supermajority s ∧
-    ∀ (nc : node), ctx.member nc s → prevoted_node nc v ixn
+  require ctx.supermajority s
+  require ∀ (nc : node), ctx.member nc s → prevoted_node nc v ixn
   precommitted_node n v ixn := true
   if ( ¬ ∃ (u : view), (tot_view.le u v ∧ locked n ixn precommit u) ) then
     locked n ixn prevote v := true;
@@ -384,35 +411,110 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) {
   cur_stage n v S := decide $ (S = precommit)
 }
 
-action operator_precommit (op : node) (v : view) (ixn : interaction) {
+action operator_precommit (op : node) (v : view) (ixn : interaction) (s : nodeset) {
   require v ≠ tot_view.zero
   require cur_view op v
   require operator op v
   require cur_stage op v precommit
-  require ∃ (s : nodeset), ctx.supermajority s ∧
-    ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
+  require ctx.supermajority s
+  require ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   precommitted_operator op v ixn := true
   -- Ghost set: the precondition above is exactly precommit_backed's witness.
   precommit_backed v ixn := true
 }
 
-action respond_precommit (n : node) (v : view) (ixn : interaction) {
+action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset) {
   require v ≠ tot_view.zero
   require cur_view n v
   require cur_stage n v precommit
   require ∃ (op : node), operator op v ∧ precommitted_operator op v ixn
-  require ∃ (s : nodeset), ctx.supermajority s ∧
-    ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
+  require ctx.supermajority s
+  require ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   -- A node decides an interaction at most once across all views.
   require ∀ (v_old : view), ¬ decided n v_old ixn
   locked n ixn precommit v := true;
   locked_at_view n v := true;
   decided n v ixn := true
   -- Update committed interaction only if this is a newer decision
-  if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn ≥ height ci_old) then
+  if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn > height ci_old) then
     committed_ixn n I := decide $ (I = ixn);
   cur_stage n v S := decide $ (S = commit)
 }
+
+
+-- (A) Direct parent-equality lifting for repropose. When op reproposes J, the
+-- parent of J is exactly op's committed_ixn. Provable from
+--   parent_height (height J = height PI + 1)
+-- + propose_repropose's `height ixn_max = height ci + 1` and `ixn_max = J`
+-- + unique_committed_ixn (CI = ci, op's actual committed)
+-- + proposed_repropose_parent_matches_committed (equal-height ⇒ equal).
+-- Lifted to a single-step invariant so precommit_backed_repropose_link can
+-- substitute PI ↦ CI without arithmetic + uniqueness search.
+invariant [proposed_repropose_parent_is_op_committed]
+  (¬ ctx.is_byz OP ∧ proposed_repropose OP V J ∧
+   parent PI J ∧ committed_ixn OP CI ∧ cur_view OP V) → PI = CI
+
+-- (A, extend variant) Same lifting for extend: parent of the freshly-proposed
+-- interaction is op's committed_ixn. Provable from propose_extend's
+-- `parent ci ixn_propose := decide $ (ci ≠ ixn_propose)` update + uniqueness.
+invariant [proposed_extend_parent_is_op_committed]
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V J ∧
+   parent PI J ∧ committed_ixn OP CI) → PI = CI
+
+-- (I) Height-bound short-circuit for precommit_backed_repropose_link. Any
+-- earlier precommit_backed I has strictly smaller height than the reproposed J.
+-- Provable from
+--   op_committed_height_ge_precommit_backed (height I ≤ height CI, where CI
+--     is op's committed_ixn at V2 — uses cur_view OP V2 from
+--     prepared_only_at_cur_or_past_view applied to op's prepared_node V2)
+-- + propose_repropose's `height J = height ci + 1` and uniqueness CI = ci.
+-- Closes the V = v_max corner case where SMT might otherwise try to derive
+-- I = J = ixn_max via a long cross-node uniqueness chain: now `height I < height J`
+-- excludes I = J structurally.
+invariant [precommit_backed_height_lt_repropose]
+  ∀ (V V2 : view) (I J : interaction) (OP : node),
+    (¬ ctx.is_byz OP ∧ I ≠ genesis ∧
+     precommit_backed V I ∧ proposed_repropose OP V2 J ∧
+     tot_view.lt V V2) →
+    height I < height J
+
+-- (1) Operator is also prepared as a node (i.e., responded to its own prepare),
+-- per Option A's `require prepared_node op v` in the propose actions. Lifted
+-- as an invariant so downstream proofs can chain prepared_node OP V →
+-- sent_lock_in_prepare OP V _ _ _ (via prepared_node_has_lock_sent) without
+-- re-deriving from the action body.
+invariant [propose_only_if_self_prepared]
+  ((proposed_repropose OP V J ∨ proposed_extend OP V J) ∧ ¬ ctx.is_byz OP) →
+    prepared_node OP V
+
+-- (2) Op's locks (any stage) at past views are bounded by the height of the
+-- proposed interaction. Provable for the precommit case directly via
+-- precommit_lock_height_le_committed + proposed_parent_height_le_committed +
+-- parent_height. The prevote case is closed by Option A: op's prepared, so
+-- op's highest lock is in sent_lock_in_prepare and dominated by argmax view;
+-- combined with per-node lock_height_monotone and cross-node prevote-lock
+-- uniqueness at v_max, op's prevote-lock height is bounded by ixn_max's
+-- height, which equals height J for repropose (height ci + 1) and is at most
+-- height J − 1 for extend (op's locks ≤ height committed = height J − 1).
+invariant [proposed_op_lock_height_bound]
+  ((proposed_repropose OP V J ∨ proposed_extend OP V J) ∧
+   ¬ ctx.is_byz OP ∧ locked OP I S U ∧ tot_view.lt U V) →
+    height I ≤ height J
+
+-- Lifts propose_repropose's argmax-witness precondition into a state invariant:
+-- when op reproposes J at view V, the argmax witness `n_max` holds
+-- `locked n_max J prevote v_max` for some v_max < V. By
+-- prevote_lock_only_if_quorum_prevoted, that lock is itself backed by a
+-- prevote-QC for J at v_max. Since proposed_repropose and prevoted_node are
+-- both monotonic, the witness is preserved across all subsequent actions.
+-- Lock-propagation hook: feeds locks_analog_precommit by giving a quorum
+-- whose intersection with any earlier precommit_backed quorum yields an
+-- honest node who prevoted both interactions.
+invariant [repropose_implies_prevote_qc]
+  proposed_repropose OP V J →
+    ∃ (v_max : view), tot_view.lt v_max V ∧
+      ∃ (t : nodeset), ctx.supermajority t ∧
+        ∀ (nt : node), ctx.member nt t → prevoted_node nt v_max J
 
 
 -- Height-only weakening of op_committed_descends_from_precommit_backed.
@@ -653,7 +755,6 @@ invariant [precommit_backed_fwd]
   precommit_backed V I →
     (∃ (s : nodeset), ctx.supermajority s ∧
       ∀ (n : node), ctx.member n s → precommitted_node n V I)
-
 
 -- Uniqueness at a view: via precommit_backed_fwd + supermajority intersection
 -- + unique_precommit_nodes.
@@ -1168,7 +1269,7 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_precommit
+#check_action propose_repropose
 
 
 -- theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
