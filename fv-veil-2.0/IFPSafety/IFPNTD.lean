@@ -1,27 +1,22 @@
--- IFPNT: IFPN extended with Tendermint-style precommit_backed ghost +
--- locks_analog invariants. Routes safety through a lock-propagation bundle
--- mirroring the `locks` invariant in tendermint/spec/ivy-proofs/classic_safety.ivy.
+-- IFPNTD: IFPNT with locks_analog hypotheses retargeted to honest `decided`
+-- (the protocol-level commit) instead of the precommit_backed ghost. The
+-- precommit_backed relation, its init, and the operator_precommit ghost write
+-- are retained, along with all support bridges (precommit_backed_fwd,
+-- unique_precommit_backed_at_{view,height}, decided_implies_precommit_backed,
+-- precommitted_operator_implies_precommit_backed) — they may still be needed
+-- as quorum-witness suppliers inside the rewritten locks_analog proofs.
 --
--- precommit_backed is a stored ghost relation, set inside operator_precommit
--- (whose precondition guarantees a real supermajority of precommitted_node,
--- regardless of operator honesty). Only the forward direction (ghost ⇒ quorum
--- witness) is asserted; no _bwd, so SMT doesn't have to flip the ghost on
--- respond_prevote's state changes.
---
--- Delta from IFPN:
---   - relation precommit_backed : view → interaction → Bool
---   - ghost set in operator_precommit
---   - invariants: precommit_backed_fwd,
---                 precommitted_operator_implies_precommit_backed,
---                 unique_precommit_backed_at_view,
---                 decided_implies_precommit_backed,
---                 locks_analog_precommit,
---                 cur_view_global, prevoted_node_view_bound,
---                 precommitted_node_view_bound
+-- Delta from IFPNT:
+--   - locks_analog_precommit  → renamed locks_analog_decided
+--       hypothesis: precommit_backed V I ∧ precommit_backed V2 I2
+--          becomes: ¬is_byz N1 ∧ ¬is_byz N2 ∧ decided N1 V I ∧ decided N2 V2 I2
+--   - locks_analog_proposed
+--       hypothesis: precommit_backed V I
+--          becomes: ¬is_byz N ∧ decided N V I
 
 import Veil
 
-veil module IFPProtocolNT
+veil module IFPProtocolNTD
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
@@ -578,129 +573,91 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
 --      tot_view.lt V V2) →
 --     height I ≤ height I2
 
+
 -- ####################################################################
--- # New bundle (A + B + C) for locks_analog_proposed
+-- # Proposed-layer lock-propagation (Option 2)
 -- ####################################################################
+-- Every later proposal descends from every earlier precommit-backed
+-- interaction. propose_repropose closes via op_argmax_ancestor_of_precommit_backed
+-- (J = ixn_max = IM, then ancestor_refl on the I = IM disjunct). propose_extend
+-- closes by routing through the parent ci ixn_propose update, using
+-- op_argmax_ancestor_of_precommit_backed on IM = ixn_max and the height bridge
+-- height ixn_max = height ci. Once this holds, locks_analog_precommit collapses
+-- to the chain: precommit_backed v I2 (new) ⇒ ∃ honest precommitter ⇒ prevoter
+-- ⇒ ∃ op proposed_* op v I2 ⇒ ancestor I I2.
 
--- (B) Per-node lock-chain descent: an honest node's later lock descends
--- from (or equals) any earlier lock. Preserved off
--- prevote_justified_by_own_highest_lock applied to the prevote that
--- justified the new lock + unique_lock_interaction_per_view for the
--- equal-view collapse. Single-node only — strictly weaker than any
--- cross-node ancestry property, so non-circular.
-invariant [per_node_lock_descent]
-  ∀ (N : node) (I1 I2 : interaction) (S1 S2 : stage) (V1 V2 : view),
-    (¬ ctx.is_byz N ∧
-     locked N I1 S1 V1 ∧ locked N I2 S2 V2 ∧
-     I1 ≠ genesis ∧ I2 ≠ genesis ∧
-     tot_view.lt V1 V2) →
-    (I1 = I2 ∨ ancestor I1 I2)
-
--- (C.1) op_argmax's interaction is QC-backed at its claimed (view, stage).
--- Discharged directly by collect_prepares' per-member QC-backing requires;
--- preserved trivially elsewhere because op_argmax_* is set-once via
--- decide-template and prevoted_node/precommitted_node are monotonic.
-invariant [op_argmax_qc_backed]
-  ∀ (OP : node) (V VM : view) (IM : interaction) (SM : stage),
-    (op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
-    (SM = prevote → ∃ (Q : nodeset), ctx.supermajority Q ∧
-       ∀ (N : node), ctx.member N Q → prevoted_node N VM IM) ∧
-    (SM = precommit → ∃ (Q : nodeset), ctx.supermajority Q ∧
-       ∀ (N : node), ctx.member N Q → precommitted_node N VM IM)
-
--- (C.2) op_argmax is the highest sent-lock at V (existence witness + gap).
--- Discharged by collect_prepares' argmax + gap requires; preserved on
--- respond_prepare (no new sent_lock above v_max possible — the gap require
--- in respond_prepare's predecessor argmax... in fact sent_lock_in_prepare is
--- only set in respond_prepare and never higher than v_max if argmax was
--- previously fixed by collect_prepares at V).
-invariant [op_argmax_is_highest_lock]
-  ∀ (OP : node) (V VM : view) (IM : interaction) (SM : stage),
-    (op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
-    (∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM) ∧
-    (∀ (N : node) (IL : interaction) (SL : stage) (VL : view),
-       sent_lock_in_prepare N V IL SL VL → tot_view.le VL VM)
-
--- (A) Keystone: op_argmax's interaction at V2 descends from any earlier
--- precommit-backed I. Substantive case is collect_prepares. Proof chain:
---   1. precommit_backed_fwd at V × prepare-quorum at V2 → honest n* with
---      precommitted_node V I and sent_lock_in_prepare V2 ixnl sl vl.
---   2. precommit_quorum_prevoted_and_locked + highest_lock_sent: n*'s
---      lock at U ≤ V on I and at vl ≥ U on ixnl, with vl ≤ v_max from the
---      argmax dominance built into collect_prepares.
---   3. per_node_lock_descent (n*, U, vl): I = ixnl ∨ ancestor I ixnl.
---   4. Bridge ixnl ↦ ixn_max:
---        vl = v_max: cross_node_unique_lock (genesis cases excluded via
---          genesis_lock_only_at_zero + height arithmetic) ⇒ ixnl = ixn_max.
---        vl < v_max: op_argmax_qc_backed gives a QC at v_max on ixn_max;
---          intersect with precommit_backed_fwd's quorum at V ⇒ honest n**
---          with precommitted_node V I and prevoted_node v_max ixn_max.
---          prevote_justified_by_own_highest_lock on n**'s prevote at v_max
---          + per_node_lock_descent on n** closes the chain.
-invariant [op_argmax_ancestor_of_precommit_backed]
-  ∀ (V V2 : view) (I IM : interaction) (OP : node),
-    (precommit_backed V I ∧ I ≠ genesis ∧
-     op_argmax_ixn OP V2 IM ∧
+invariant [locks_analog_proposed]
+  ∀ (V V2 : view) (I J : interaction) (OP N : node),
+    (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
+     (proposed_repropose OP V2 J ∨ proposed_extend OP V2 J) ∧
      tot_view.lt V V2) →
-    (I = IM ∨ ancestor I IM)
+    ancestor I J
 
-  invariant [locks_analog_precommit]
-    ∀ (V V2 : view) (I I2 : interaction),
-      (I ≠ genesis ∧ I2 ≠ genesis ∧
-       precommit_backed V I ∧ precommit_backed V2 I2 ∧
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
+
+  invariant [locks_analog_decided]
+    ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
+      (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+       I ≠ genesis ∧ I2 ≠ genesis ∧
+       decided N1 V I ∧ decided N2 V2 I2 ∧
        tot_view.lt V V2) →
       (I = I2 ∨ ancestor I I2)
 -- ####################################################################
 -- # op_argmax cache invariants (S8 — Tendermint-style aggregation)
 -- ####################################################################
 
--- -- Functional behaviour: at most one value per (op, v) per dimension.
--- -- Discharged by collect_prepares' `decide` update templates.
--- invariant [op_argmax_ixn_unique]
---   (op_argmax_ixn OP V I1 ∧ op_argmax_ixn OP V I2) → I1 = I2
+-- Functional behaviour: at most one value per (op, v) per dimension.
+-- Discharged by collect_prepares' `decide` update templates.
+invariant [op_argmax_ixn_unique]
+  (op_argmax_ixn OP V I1 ∧ op_argmax_ixn OP V I2) → I1 = I2
 
--- invariant [op_argmax_stage_unique]
---   (op_argmax_stage OP V S1 ∧ op_argmax_stage OP V S2) → S1 = S2
+invariant [op_argmax_stage_unique]
+  (op_argmax_stage OP V S1 ∧ op_argmax_stage OP V S2) → S1 = S2
 
--- invariant [op_argmax_view_unique]
---   (op_argmax_view OP V VL1 ∧ op_argmax_view OP V VL2) → VL1 = VL2
+invariant [op_argmax_view_unique]
+  (op_argmax_view OP V VL1 ∧ op_argmax_view OP V VL2) → VL1 = VL2
 
--- -- Existence iff prepares collected, per dimension. Split forms (no ↔) for
--- -- simp tractability.
--- invariant [op_argmax_ixn_implies_collected]
---   op_argmax_ixn OP V I → prepares_collected OP V
+-- Existence iff prepares collected, per dimension. Split forms (no ↔) for
+-- simp tractability.
+invariant [op_argmax_ixn_implies_collected]
+  op_argmax_ixn OP V I → prepares_collected OP V
 
--- invariant [op_argmax_stage_implies_collected]
---   op_argmax_stage OP V S → prepares_collected OP V
+invariant [op_argmax_stage_implies_collected]
+  op_argmax_stage OP V S → prepares_collected OP V
 
--- invariant [op_argmax_view_implies_collected]
---   op_argmax_view OP V VL → prepares_collected OP V
+invariant [op_argmax_view_implies_collected]
+  op_argmax_view OP V VL → prepares_collected OP V
 
--- invariant [collected_implies_op_argmax_ixn]
---   prepares_collected OP V → ∃ (I : interaction), op_argmax_ixn OP V I
+invariant [collected_implies_op_argmax_ixn]
+  prepares_collected OP V → ∃ (I : interaction), op_argmax_ixn OP V I
 
--- invariant [collected_implies_op_argmax_stage]
---   prepares_collected OP V → ∃ (S : stage), op_argmax_stage OP V S
+invariant [collected_implies_op_argmax_stage]
+  prepares_collected OP V → ∃ (S : stage), op_argmax_stage OP V S
 
--- invariant [collected_implies_op_argmax_view]
---   prepares_collected OP V → ∃ (VL : view), op_argmax_view OP V VL
+invariant [collected_implies_op_argmax_view]
+  prepares_collected OP V → ∃ (VL : view), op_argmax_view OP V VL
 
--- -- Argmax cache faithfully reflects the highest sent-lock at v (for honest op).
--- -- Discharged by the argmax + gap requires inside collect_prepares.
--- invariant [op_argmax_is_highest_lock]
---   (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
---     (∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM) ∧
---     (∀ (N : node) (IL : interaction) (SL : stage) (VL : view),
---        sent_lock_in_prepare N V IL SL VL → tot_view.le VL VM)
+-- Argmax cache faithfully reflects the highest sent-lock at v (for honest op).
+-- Discharged by the argmax + gap requires inside collect_prepares.
+invariant [op_argmax_is_highest_lock]
+  (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
+    (∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM) ∧
+    (∀ (N : node) (IL : interaction) (SL : stage) (VL : view),
+       sent_lock_in_prepare N V IL SL VL → tot_view.le VL VM)
 
--- -- Argmax interaction is QC-backed at its claimed (view, stage) for honest op.
--- -- Discharged by the per-member QC-backing requires inside collect_prepares.
--- invariant [op_argmax_qc_backed]
---   (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
---     (SM = prevote → ∃ (Q : nodeset), ctx.supermajority Q ∧
---        ∀ (N : node), ctx.member N Q → prevoted_node N VM IM) ∧
---     (SM = precommit → ∃ (Q : nodeset), ctx.supermajority Q ∧
---        ∀ (N : node), ctx.member N Q → precommitted_node N VM IM)
+-- Argmax interaction is QC-backed at its claimed (view, stage) for honest op.
+-- Discharged by the per-member QC-backing requires inside collect_prepares.
+invariant [op_argmax_qc_backed]
+  (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
+    (SM = prevote → ∃ (Q : nodeset), ctx.supermajority Q ∧
+       ∀ (N : node), ctx.member N Q → prevoted_node N VM IM) ∧
+    (SM = precommit → ∃ (Q : nodeset), ctx.supermajority Q ∧
+       ∀ (N : node), ctx.member N Q → precommitted_node N VM IM)
 
 -- ####################################################################
 -- # Argmax → precommit_backed ancestry bridge (Option 3)
@@ -720,31 +677,9 @@ invariant [op_argmax_ancestor_of_precommit_backed]
 --      tot_view.lt V V2) →
 --     (I = IM ∨ ancestor I IM)
 
--- ####################################################################
--- # Proposed-layer lock-propagation (Option 2)
--- ####################################################################
--- Every later proposal descends from every earlier precommit-backed
--- interaction. propose_repropose closes via op_argmax_ancestor_of_precommit_backed
--- (J = ixn_max = IM, then ancestor_refl on the I = IM disjunct). propose_extend
--- closes by routing through the parent ci ixn_propose update, using
--- op_argmax_ancestor_of_precommit_backed on IM = ixn_max and the height bridge
--- height ixn_max = height ci. Once this holds, locks_analog_precommit collapses
--- to the chain: precommit_backed v I2 (new) ⇒ ∃ honest precommitter ⇒ prevoter
--- ⇒ ∃ op proposed_* op v I2 ⇒ ancestor I I2.
-invariant [locks_analog_proposed]
-  ∀ (V V2 : view) (I J : interaction) (OP : node),
-    (precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
-     (proposed_repropose OP V2 J ∨ proposed_extend OP V2 J) ∧
-     tot_view.lt V V2) →
-    ancestor I J
 
 
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
+
 
 -- ####################################################################
 -- # Ghost Consistency Invariants (proposed/decided)
@@ -1462,7 +1397,7 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action propose_extend
+#check_action respond_precommit
 
 
 -- theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
@@ -1568,4 +1503,4 @@ set_option veil.printCounterexamples true
 --         hb2 (fun hveqV2 hixneqI2 => h2new ⟨hveqV2.symm, hixneqI2.symm⟩)
 --       exact h_lap V V2 I I2 hI hI2 hb1pre hb2pre hlt
 
-end IFPProtocolNT
+end IFPProtocolNTD
