@@ -1,25 +1,27 @@
--- IFPNTD: IFPNT with locks_analog hypotheses retargeted to honest `decided`
--- (the protocol-level commit) instead of the precommit_backed ghost. The
--- precommit_backed relation, its init, and the operator_precommit ghost write
--- are retained, along with all support bridges (precommit_backed_fwd,
--- unique_precommit_backed_at_{view,height}, decided_implies_precommit_backed,
--- precommitted_operator_implies_precommit_backed) — they may still be needed
--- as quorum-witness suppliers inside the rewritten locks_analog proofs.
+-- IFPNTDP: IFPNTD with precommit_backed re-anchored to respond_precommit (the
+-- "first node has witnessed the precommit-QC from operator") and locks_analog
+-- formulated in Tendermint style:
+--   precommit_backed(V, I) ∧ V < V2 ∧ prevoted(N, V2, J)
+--     → J = I ∨ ancestor I J
+-- (the IFP-chain analog of Tendermint's `V2 = V | V2 = nil`).
 --
--- Delta from IFPNT:
---   - locks_analog_precommit  → renamed locks_analog_decided
---       hypothesis: precommit_backed V I ∧ precommit_backed V2 I2
---          becomes: ¬is_byz N1 ∧ ¬is_byz N2 ∧ decided N1 V I ∧ decided N2 V2 I2
---   - locks_analog_proposed   → renamed locks_analog_prevoted
---       hypothesis: precommit_backed V I ∧ proposed_* OP V2 J
---          becomes: ¬is_byz N ∧ ¬is_byz NP ∧ decided N V I ∧ prevoted_node NP V2 J
---       Rationale: Byzantine ops may set proposed_* for any junk; propagation
---       routes through honest prevoter's respond_propose validation, not the
---       operator's local op_argmax cache.
+-- Delta from IFPNTD:
+--   - operator_precommit no longer writes precommit_backed.
+--   - respond_precommit writes precommit_backed v ixn := true (monotonic; first
+--     honest responder flips it on; subsequent responders re-write true). All
+--     preconditions of respond_precommit (operator's precommitted_operator +
+--     supermajority of precommitted_node + node not having decided ixn before)
+--     still witness a real precommit-QC at the moment of the flip.
+--   - locks_analog_prevoted (decided-hypothesis form) is commented out and
+--     replaced by locks_analog_precommit (precommit_backed-hypothesis form,
+--     Tendermint-style).
+--   - precommitted_operator_implies_precommit_backed is commented out: it no
+--     longer holds — operator_precommit now sets precommitted_operator without
+--     touching precommit_backed.
 
 import Veil
 
-veil module IFPProtocolNTD
+veil module IFPProtocolNTDP
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
@@ -96,11 +98,13 @@ relation proposed_for_descendant : view → interaction → Bool
 -- Maintained by respond_precommit; mirrors IFPU's decided_for_descendant.
 relation decided_for_descendant : node → interaction → view → Bool
 
--- Ghost: a precommit-QC has been aggregated at (V, I).
--- Set by operator_precommit (whose precondition guarantees a real supermajority
--- of precommitted_node, regardless of operator honesty). Tied to that quorum
--- by precommit_backed_fwd. No _bwd direction (avoids SMT cost of asserting
--- the ghost flip on every supermajority change in respond_prevote).
+-- Ghost: a precommit-QC has been aggregated at (V, I) AND at least one node
+-- has witnessed it via respond_precommit. Set by respond_precommit (whose
+-- precondition guarantees a real supermajority of precommitted_node plus an
+-- operator-side precommitted_operator witness, regardless of operator honesty).
+-- Tied to that quorum by precommit_backed_fwd. No _bwd direction (avoids SMT
+-- cost of asserting the ghost flip on every supermajority change in
+-- respond_prevote).
 relation precommit_backed : view → interaction → Bool
 
 -- Operator's cached argmax over collected prepare responses. Set by
@@ -487,8 +491,6 @@ action operator_precommit (op : node) (v : view) (ixn : interaction) (s : nodese
   require ctx.supermajority s
   require ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   precommitted_operator op v ixn := true
-  -- Ghost set: the precondition above is exactly precommit_backed's witness.
-  precommit_backed v ixn := true
 }
 
 action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset) {
@@ -500,6 +502,11 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
   require ∀ (nc : node), ctx.member nc s → precommitted_node nc v ixn
   -- A node decides an interaction at most once across all views.
   require ∀ (v_old : view), ¬ decided n v_old ixn
+  -- Ghost set (monotonic): first responding node flips it on; subsequent
+  -- responders re-write `true`. The precommitted_operator/supermajority
+  -- preconditions above are exactly precommit_backed's witness — equivalent
+  -- to operator_precommit's old write, just deferred to the first witnessing.
+  precommit_backed v ixn := true
   locked n ixn precommit v := true;
   locked_at_view n v := true;
   decided n v ixn := true
@@ -640,6 +647,124 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
 --      tot_view.lt V V2) →
 --     height I ≤ height I2
 
+
+-- ####################################################################
+-- # Top-level safety invariants (most likely to fail, sited with main_safety)
+-- ####################################################################
+
+-- Legacy single-invariant form (commented out, replaced by Steps 1-3 below).
+-- The combined ancestry+view-floor goal timed out at collect_recvd_locks because
+-- SMT had to instantiate cross-quorum at V + cross-quorum at V_max + lock-view
+-- case split + IH in a single proof obligation.
+-- invariant [argmax_recvd_ixn_descends_from_precommit_backed]
+--   ∀ (V V_act : view) (I IM : interaction) (N : node),
+--     (¬ ctx.is_byz N ∧
+--      precommit_backed V I ∧ I ≠ genesis ∧
+--      argmax_recvd_ixn N V_act IM ∧
+--      tot_view.lt V V_act) →
+--     (I = IM ∨ ancestor I IM)
+
+-- Step 1 — Lift collect_recvd_locks's action quorum into a state invariant.
+-- Trivially provable at collect_recvd_locks (the action's `s` parameter is the
+-- witness); preserved elsewhere by monotonicity of recvd_collected and
+-- sent_lock_in_prepare. Makes the prepare-quorum directly visible to SMT in
+-- downstream proofs so they don't have to re-derive it from the action body.
+invariant [recvd_collected_implies_prepare_quorum]
+  recvd_collected N V_act →
+    ∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (m : node), ctx.member m s →
+        prepared_node m V_act ∧
+        ∃ (IL : interaction) (SL : stage) (VL : view),
+          sent_lock_in_prepare m V_act IL SL VL ∧ locked m IL SL VL
+
+-- Step 2 — Argmax view dominates any honest preparer's pre-existing lock view.
+-- Whenever an honest M has sent a prepare-response at V_act (so its sent_lock
+-- exists at V_act) and M holds any lock at U < V_act, highest_lock_sent gives
+-- M's sent_lock view ≥ U, and argmax_recvd_is_highest_lock then gives
+-- V_max ≥ U. Substantive at collect_recvd_locks (instance application of the
+-- two existing cache invariants); trivial elsewhere (argmax_recvd_view set
+-- only by collect_recvd_locks; locked and sent_lock_in_prepare monotonic).
+invariant [argmax_recvd_view_ge_honest_lock_view]
+  ∀ (V_act V_max U : view) (I IL_M : interaction) (S SL_M : stage) (VL_M : view) (M N : node),
+    (¬ ctx.is_byz M ∧ locked M I S U ∧ I ≠ genesis ∧
+     argmax_recvd_view N V_act V_max ∧
+     tot_view.lt U V_act ∧
+     sent_lock_in_prepare M V_act IL_M SL_M VL_M) →
+    tot_view.le U V_max
+
+-- Step 3 — Conditional ancestry: argmax_recvd_ixn descends from precommit_backed
+-- WHEN the argmax view already dominates the precommit_backed view U.
+-- The bounded hypothesis `tot_view.le U V_max` structurally excludes the
+-- V_max < U case — Step 2 supplies that bound at the call-site. Substantive at
+-- collect_recvd_locks: cross argmax_recvd_qc_backed's quorum at V_max with
+-- precommit_backed_fwd's quorum at U → honest m*; for V_max > U apply IH
+-- locks_analog_precommit on (U, V_max, I, IM); for V_max = U close via INV1 +
+-- precommit_nodes_only_if_prevoted_for_same_ixn.
+invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
+  ∀ (U V_act V_max : view) (I IM : interaction) (N : node),
+    (¬ ctx.is_byz N ∧
+     precommit_backed U I ∧ I ≠ genesis ∧
+     argmax_recvd_ixn N V_act IM ∧ argmax_recvd_view N V_act V_max ∧
+     tot_view.lt U V_act ∧ tot_view.le U V_max) →
+    (I = IM ∨ ancestor I IM)
+
+-- Step 3.5 — Bridge: bake the cross-quorum work into a single existential
+-- view-floor invariant, so locks_analog_precommit's discharge collapses to a
+-- two-line application (Step 3.5 + Step 3) instead of a 4-step in-line stitch.
+-- The existential U is one of {V, U_lock} from the cross-quorum case split —
+-- bounded, Skolemizable.
+-- Substantive at collect_recvd_locks: Step 1's prepare-quorum `s` intersects
+-- precommit_backed_fwd V I's quorum at an honest n*; precommit_node_locked_at_same_view
+-- gives n*'s lock at U ≤ V (Case A: U = V from premise; Case B: U < V with
+-- precommit_lock_implies_precommit_backed ⇒ precommit_backed U I);
+-- Step 2 applied to n* at U gives V_max ≥ U.
+-- Trivial preservation: precommit_backed and argmax_recvd_view are monotonic
+-- in their respective actions; this bridge's truth is preserved by the same
+-- witnesses (or any honest member in the unchanged quorum).
+invariant [argmax_recvd_view_dominates_precommit_backed_chain]
+  ∀ (V V_act V_max : view) (I : interaction) (N : node),
+    (¬ ctx.is_byz N ∧
+     precommit_backed V I ∧ I ≠ genesis ∧
+     argmax_recvd_view N V_act V_max ∧
+     tot_view.lt V V_act) →
+    ∃ (U : view),
+      precommit_backed U I ∧ tot_view.le U V ∧ tot_view.le U V_max
+
+-- Tendermint-style lock propagation, in IFP chain-extension form. Adapted from
+--   classic_bft.quorum_intersection & V ≠ value.nil & precommitted(N,R,V) &
+--     choosable(R,V) → locked(N,R,V) &
+--       ∀ R2 V2. R < R2 & prevoted(N,R2,V2) → V2 = V | V2 = value.nil
+-- to the IFP setting:
+--   precommit_backed V I  (some honest node has witnessed a precommit-QC for I at V)
+--     → any later honest prevote at V2 > V is on I or a descendant of I
+-- The "V2 = nil" tendermint disjunct is replaced by "ancestor I J" since IFP
+-- proposals extend rather than carry a nil value: a prevote at a later view
+-- either re-votes the same I (J = I) or extends I's chain (ancestor I J).
+-- Discharged at respond_propose_repropose / _extend as a 2-step stitch:
+--   (a) prevoted_node NP v J + prevoted_node_implies_recvd_collected ⇒
+--       recvd_collected NP v ⇒ collected_implies_argmax_recvd_view ⇒ ∃ V_max,
+--       argmax_recvd_view NP v V_max; argmax_recvd_ixn NP v ixn_max from action precondition.
+--   (b) Step 3.5 (argmax_recvd_view_dominates_precommit_backed_chain) supplies
+--       ∃ U with precommit_backed U I, U ≤ V, U ≤ V_max; Step 3
+--       (argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view) with
+--       this U yields I = ixn_max ∨ ancestor I ixn_max. For _extend,
+--       parent ixn_max J + ancestor_from_parent + ancestor_trans gives ancestor I J.
+invariant [locks_analog_precommit]
+  ∀ (V V2 : view) (I J : interaction) (NP : node),
+    (¬ ctx.is_byz NP ∧
+     precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
+     prevoted_node NP V2 J ∧
+     tot_view.lt V V2) →
+    (J = I ∨ ancestor I J)
+
+
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
+
 -- Bridge: any honest non-genesis prevote at non-zero V routes through the cache,
 -- so downstream invariants (e.g. locks_analog_prevoted) can lift argmax facts
 -- out of the prevote action body and into a cache lookup.
@@ -651,88 +776,20 @@ invariant [prevoted_node_implies_recvd_collected]
 -- Discharged at collect_recvd_locks via its `require cur_view n v` precondition;
 -- combined with cur_view_global this pins V = cur_view at firing. Preserved by
 -- set_view (cur_view only advances via tot_view.next) and trivially elsewhere.
--- Closes the trivial-preservation cases of argmax_recvd_view_ge_prior_decision
--- on respond_precommit (new decision view V_dec = cur_view, so V_dec < V2 is
--- ruled out by V2 ≤ cur_view = V_dec) and on set_view (advance).
+-- Closes the trivial-preservation cases of argmax_recvd_ixn_descends_from_precommit_backed
+-- on respond_precommit (new precommit_backed view V_pre = cur_view, so V_pre < V_act
+-- is ruled out by V_act ≤ cur_view = V_pre) and on set_view (advance).
 invariant [recvd_collected_at_past_view]
   (recvd_collected N V ∧ cur_view N1 VC) → tot_view.le V VC
 
 
 
--- ####################################################################
--- # sent_lock-layer lock-propagation (Approach C lift)
--- ####################################################################
--- Lifts locks_analog to the sent_lock_in_prepare layer: every prepare-response
--- at V2 > V carries a lock whose interaction descends from any prior honest
--- decision at V. With this in hand:
---   - argmax_recvd_descends_from_decided  follows via argmax_recvd_is_highest_lock
---     (argmax is one of the sent_locks at V2).
---   - locks_analog_prevoted on respond_propose_repropose / _extend collapses to
---     a cache lookup + parent-transitivity, with no quorum reasoning in the
---     action body.
--- The substantive obligation lands on respond_prepare (which writes
--- sent_lock_in_prepare): cross-quorum intersection between the preparer's
--- sent lock and the precommit-QC backing the prior decision yields ancestry.
--- Cached argmax view is bounded below by any prior honest decision view.
--- Discharged at collect_recvd_locks: cross-quorum intersection of the prepare-
--- quorum `s` with the precommit-QC backing the prior decision (via
--- decide_only_if_quorum_precommit + precommit_quorum_prevoted_and_locked) yields
--- an honest n* in s with a precommit-lock at V; n*'s sent_lock at V_action then
--- has VL ≥ V (highest_lock_sent), so argmax dominance forces v_max ≥ V.
--- All other actions preserve trivially: argmax_recvd entries only appear with
--- V2 = cur_view at firing, and cur_view_global + decided's view ≤ cur_view
--- bound exclude V2 > V_decided for new entries.
-invariant [argmax_recvd_view_ge_prior_decision]
-  ∀ (V V2 : view) (I : interaction) (VM : view) (N NP : node),
-    (¬ ctx.is_byz N ∧ ¬ ctx.is_byz NP ∧
-     decided NP V I ∧ I ≠ genesis ∧
-     argmax_recvd_view N V2 VM ∧ tot_view.lt V V2) →
-    tot_view.le V VM
+-- Legacy: prior approach lifted locks_analog to the sent_lock_in_prepare
+-- layer (argmax_recvd_view_ge_prior_decision + sent_lock_descends_from_decided),
+-- with substantive obligation on respond_prepare. Removed: now routed via
+-- argmax_recvd_ixn_descends_from_precommit_backed above, which discharges at
+-- collect_recvd_locks instead.
 
-invariant [sent_lock_descends_from_decided]
-  ∀ (V V2 : view) (I IL : interaction) (SL : stage) (VL : view) (N M : node),
-    (¬ ctx.is_byz N ∧ ¬ ctx.is_byz M ∧
-     decided N V I ∧ I ≠ genesis ∧
-     sent_lock_in_prepare M V2 IL SL VL ∧
-     tot_view.lt V V2 ∧
-     tot_view.le V VL) →
-    (I = IL ∨ ancestor I IL)
-
--- ####################################################################
--- # Prevoted-layer lock-propagation (honest-prevoter trigger)
--- ####################################################################
--- Every honest prevote in a later view descends from every earlier honest
--- decision. Robust to future Byzantine ops setting proposed_*/op_argmax_*
--- arbitrarily: triggers only on honest prevoted_node, whose respond_propose
--- validation brings its own argmax witness (n_max, ixn_max, s_max, v_max)
--- with the full per-quorum sent-lock requirement.
--- Substantive discharge on respond_propose: cross-quorum intersection with
--- INV3's prevote-lock supermajority for I at V yields an honest cross-witness;
--- 2-chain case split on s_max + lock_height_monotone + ancestor descent gives
--- ancestor I J.
--- Once this holds, locks_analog_decided collapses to the chain:
--- decided N2 V2 I2 (honest) ⇒ INV3 ⇒ ∃ honest precommitter NC ⇒ NC prevoted_node V2 I2
--- ⇒ apply locks_analog_prevoted ⇒ ancestor I I2.
-
--- Trigger on honest acceptance, not on (possibly Byzantine) proposal.
--- Byzantine ops may set proposed_repropose / proposed_extend for any junk J,
--- but propagation only needs to hold for J that an honest validator actually
--- prevoted on. respond_propose's argmax validation (the honest prevoter's
--- recompute, not the operator's cache) is the real protocol enforcement point.
-invariant [locks_analog_prevoted]
-  ∀ (V V2 : view) (I J : interaction) (N NP : node),
-    (¬ ctx.is_byz N ∧ ¬ ctx.is_byz NP ∧
-     decided N V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
-     prevoted_node NP V2 J ∧
-     tot_view.lt V V2) →
-    ancestor I J
-
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
 
   invariant [locks_analog_decided]
     ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
@@ -901,15 +958,14 @@ invariant [precommitted_node_implies_prevote_qc]
   invariant [decided_implies_precommit_backed]
     (¬ ctx.is_byz N ∧ decided N V I ∧ I ≠ genesis) → precommit_backed V I
 
--- Bridge: precommitted_operator entails precommit_backed at the same (V, I).
--- precommitted_operator is only written by operator_precommit, which sets
--- precommit_backed at the same call. So at the moment precommitted_operator
--- becomes true, precommit_backed becomes true too. Both monotonic.
--- Required so that decided_implies_precommit_backed can chain through
--- respond_precommit's `∃ op. operator op v ∧ precommitted_operator op v ixn`
--- precondition to derive precommit_backed.
-invariant [precommitted_operator_implies_precommit_backed]
-  precommitted_operator OP V I → precommit_backed V I
+-- (IFPNTDP) Removed: precommitted_operator no longer implies precommit_backed.
+-- operator_precommit sets precommitted_operator but not precommit_backed; only
+-- the subsequent respond_precommit fires precommit_backed. The
+-- decided_implies_precommit_backed bridge now holds trivially because both
+-- updates happen atomically in respond_precommit, so this intermediate bridge
+-- is no longer needed.
+-- invariant [precommitted_operator_implies_precommit_backed]
+--   precommitted_operator OP V I → precommit_backed V I
 
 -- Honest non-genesis prevote at non-zero view is justified by some pre-existing
 -- lock (monotonic witness). The dominance / argmax clause was dropped: it fails
@@ -1600,9 +1656,10 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action collect_recvd_locks
+#check_action respond_prepare
 -- #check_action respond_propose_repropose
 -- #check_action respond_prepare
+-- #check_action respond_precommit
 
 
 -- theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
