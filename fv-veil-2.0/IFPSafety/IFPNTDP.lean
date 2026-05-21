@@ -670,27 +670,24 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
 -- sent_lock_in_prepare. Makes the prepare-quorum directly visible to SMT in
 -- downstream proofs so they don't have to re-derive it from the action body.
 invariant [recvd_collected_implies_prepare_quorum]
-  recvd_collected N V_act →
+  recvd_collected N VACT →
     ∃ (s : nodeset), ctx.supermajority s ∧
       ∀ (m : node), ctx.member m s →
-        prepared_node m V_act ∧
+        prepared_node m VACT ∧
         ∃ (IL : interaction) (SL : stage) (VL : view),
-          sent_lock_in_prepare m V_act IL SL VL ∧ locked m IL SL VL
+          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL
 
--- Step 2 — Argmax view dominates any honest preparer's pre-existing lock view.
--- Whenever an honest M has sent a prepare-response at V_act (so its sent_lock
--- exists at V_act) and M holds any lock at U < V_act, highest_lock_sent gives
--- M's sent_lock view ≥ U, and argmax_recvd_is_highest_lock then gives
--- V_max ≥ U. Substantive at collect_recvd_locks (instance application of the
--- two existing cache invariants); trivial elsewhere (argmax_recvd_view set
--- only by collect_recvd_locks; locked and sent_lock_in_prepare monotonic).
-invariant [argmax_recvd_view_ge_honest_lock_view]
-  ∀ (V_act V_max U : view) (I IL_M : interaction) (S SL_M : stage) (VL_M : view) (M N : node),
-    (¬ ctx.is_byz M ∧ locked M I S U ∧ I ≠ genesis ∧
-     argmax_recvd_view N V_act V_max ∧
-     tot_view.lt U V_act ∧
-     sent_lock_in_prepare M V_act IL_M SL_M VL_M) →
-    tot_view.le U V_max
+-- Step 2 (REMOVED — structurally unprovable at respond_prepare).
+-- The invariant
+--   ∀ M honest, locked M I S U → sent_lock_in_prepare M V_act _ _ _
+--     → argmax_recvd_view N V_act V_max → tot_view.le U V_max
+-- universally quantifies over `sent_lock_in_prepare`, which respond_prepare
+-- extends. A late preparer (not in N's collect-time prepare-quorum) with
+-- a lock at U > V_max creates a post-respond_prepare instance the cache
+-- cannot dominate. The chain "n* in s → n*'s sent_lock at v_act → VL ≥ U_lock
+-- → argmax dominance → V_max ≥ U_lock" is now inlined into Step 3.5's
+-- substantive proof at collect_recvd_locks, where `s` is action-local and
+-- the cache is being set (snapshot-consistent).
 
 -- Step 3 — Conditional ancestry: argmax_recvd_ixn descends from precommit_backed
 -- WHEN the argmax view already dominates the precommit_backed view U.
@@ -708,19 +705,24 @@ invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
      tot_view.lt U V_act ∧ tot_view.le U V_max) →
     (I = IM ∨ ancestor I IM)
 
--- Step 3.5 — Bridge: bake the cross-quorum work into a single existential
--- view-floor invariant, so locks_analog_precommit's discharge collapses to a
--- two-line application (Step 3.5 + Step 3) instead of a 4-step in-line stitch.
--- The existential U is one of {V, U_lock} from the cross-quorum case split —
--- bounded, Skolemizable.
--- Substantive at collect_recvd_locks: Step 1's prepare-quorum `s` intersects
--- precommit_backed_fwd V I's quorum at an honest n*; precommit_node_locked_at_same_view
--- gives n*'s lock at U ≤ V (Case A: U = V from premise; Case B: U < V with
--- precommit_lock_implies_precommit_backed ⇒ precommit_backed U I);
--- Step 2 applied to n* at U gives V_max ≥ U.
--- Trivial preservation: precommit_backed and argmax_recvd_view are monotonic
--- in their respective actions; this bridge's truth is preserved by the same
--- witnesses (or any honest member in the unchanged quorum).
+-- Step 3.5 — Bridge: cross-quorum work consolidated into a single existential
+-- view-floor invariant. locks_analog_precommit's discharge collapses to a
+-- two-line application (Step 3.5 + Step 3) at the prevote actions.
+-- Hypothesis/conclusion reference only argmax_recvd_view and precommit_backed
+-- (both monotonic-or-untouched at all non-substantive actions), so
+-- preservation is trivial at respond_prepare and every other non-substantive
+-- transition.
+-- Substantive at collect_recvd_locks (the only place argmax_recvd_view is
+-- set): the action's local prepare-quorum `s` intersects precommit_backed_fwd V I's
+-- supermajority at an honest n*. precommit_node_locked_at_same_view gives n*'s
+-- lock at U_lock ≤ V (Case A: prevote at exactly V; Case B: precommit at
+-- U_lock < V). Case B uses precommit_lock_implies_precommit_backed ⇒
+-- precommit_backed U_lock I; Case A uses the premise precommit_backed V I
+-- directly. n* is in s so action body gives sent_lock_in_prepare n* v_act _ _ VL_n;
+-- highest_lock_sent ⇒ VL_n ≥ U_lock; the action's own argmax-dominance require
+-- ⇒ v_max ≥ VL_n ≥ U_lock. Witness U := U_lock closes the existential.
+-- (No reliance on a separate "argmax dominates honest lock view" state invariant —
+-- that derivation is local to this action body, where the cache is snapshot-consistent.)
 invariant [argmax_recvd_view_dominates_precommit_backed_chain]
   ∀ (V V_act V_max : view) (I : interaction) (N : node),
     (¬ ctx.is_byz N ∧
@@ -740,15 +742,16 @@ invariant [argmax_recvd_view_dominates_precommit_backed_chain]
 -- The "V2 = nil" tendermint disjunct is replaced by "ancestor I J" since IFP
 -- proposals extend rather than carry a nil value: a prevote at a later view
 -- either re-votes the same I (J = I) or extends I's chain (ancestor I J).
--- Discharged at respond_propose_repropose / _extend as a 2-step stitch:
---   (a) prevoted_node NP v J + prevoted_node_implies_recvd_collected ⇒
---       recvd_collected NP v ⇒ collected_implies_argmax_recvd_view ⇒ ∃ V_max,
---       argmax_recvd_view NP v V_max; argmax_recvd_ixn NP v ixn_max from action precondition.
---   (b) Step 3.5 (argmax_recvd_view_dominates_precommit_backed_chain) supplies
---       ∃ U with precommit_backed U I, U ≤ V, U ≤ V_max; Step 3
---       (argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view) with
---       this U yields I = ixn_max ∨ ancestor I ixn_max. For _extend,
---       parent ixn_max J + ancestor_from_parent + ancestor_trans gives ancestor I J.
+-- Discharged at respond_propose_repropose / _extend as a 2-step stitch
+-- (no quorum reasoning at the prevote action body — all of that is inside
+-- Step 3.5's substantive proof at collect_recvd_locks):
+--   (a) From action precondition `argmax_recvd_ixn NP v ixn_max` +
+--       prevoted_node_implies_recvd_collected + collected_implies_argmax_recvd_view,
+--       obtain V_max with argmax_recvd_view NP v V_max.
+--   (b) Step 3.5 supplies ∃ U: precommit_backed U I ∧ U ≤ V ∧ U ≤ V_max;
+--       Step 3 with this U yields I = ixn_max ∨ ancestor I ixn_max. For
+--       _extend, parent ixn_max J + ancestor_from_parent + ancestor_trans
+--       gives ancestor I J.
 invariant [locks_analog_precommit]
   ∀ (V V2 : view) (I J : interaction) (NP : node),
     (¬ ctx.is_byz NP ∧
@@ -833,13 +836,13 @@ invariant [collected_implies_op_argmax_stage]
 invariant [collected_implies_op_argmax_view]
   prepares_collected OP V → ∃ (VL : view), op_argmax_view OP V VL
 
--- Argmax cache faithfully reflects the highest sent-lock at v (for honest op).
--- Discharged by the argmax + gap requires inside collect_prepares.
+-- Existence witness: cached (IM, SM, VM) came from some actual sent_lock at V.
+-- The OLD universal-dominance clause was dropped for the same reason as
+-- argmax_recvd_is_highest_lock — respond_prepare can extend sent_lock_in_prepare
+-- with a VL > VM, making the universal structurally unprovable.
 invariant [op_argmax_is_highest_lock]
   (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
-    (∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM) ∧
-    (∀ (N : node) (IL : interaction) (SL : stage) (VL : view),
-       sent_lock_in_prepare N V IL SL VL → tot_view.le VL VM)
+    ∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM
 
 -- Argmax interaction is QC-backed at its claimed (view, stage) for honest op.
 -- Discharged by the per-member QC-backing requires inside collect_prepares.
@@ -884,13 +887,20 @@ invariant [collected_implies_argmax_recvd_stage]
 invariant [collected_implies_argmax_recvd_view]
   recvd_collected N V → ∃ (VL : view), argmax_recvd_view N V VL
 
--- Cache faithfully reflects the highest sent-lock at v (for honest validator).
--- Discharged by the argmax + gap requires inside collect_recvd_locks.
+-- Cache existence witness: the cached (IM, SM, VM) tuple came from some
+-- actual sent_lock at V. Preserved monotonically (sent_lock_in_prepare and
+-- locked never shrink).
+-- The OLD universal-dominance clause
+--   ∀ N' IL SL VL, sent_lock_in_prepare N' V IL SL VL → tot_view.le VL VM
+-- was structurally unprovable at respond_prepare: late preparers can extend
+-- `sent_lock_in_prepare` with a VL > VM (the holder had a lock above VM that
+-- wasn't yet a sent_lock at V when collect_recvd_locks fired). Dropped.
+-- The substantive use of "argmax dominates" is inlined into Step 3.5's proof
+-- at collect_recvd_locks, where the action's prepare-quorum `s` and the
+-- action's own argmax-dominance require make the snapshot reasoning local.
 invariant [argmax_recvd_is_highest_lock]
   (¬ ctx.is_byz N ∧ argmax_recvd_ixn N V IM ∧ argmax_recvd_stage N V SM ∧ argmax_recvd_view N V VM) →
-    (∃ (M : node), sent_lock_in_prepare M V IM SM VM ∧ locked M IM SM VM) ∧
-    (∀ (N' : node) (IL : interaction) (SL : stage) (VL : view),
-       sent_lock_in_prepare N' V IL SL VL → tot_view.le VL VM)
+    ∃ (M : node), sent_lock_in_prepare M V IM SM VM ∧ locked M IM SM VM
 
 -- Cached argmax interaction is QC-backed at its claimed (view, stage) for honest validator.
 invariant [argmax_recvd_qc_backed]
@@ -1656,8 +1666,8 @@ set_option veil.smt.timeout 13000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_prepare
--- #check_action respond_propose_repropose
+-- #check_action collect_recvd_locks
+#check_action respond_propose_repropose
 -- #check_action respond_prepare
 -- #check_action respond_precommit
 
