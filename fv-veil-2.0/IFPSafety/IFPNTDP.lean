@@ -1739,7 +1739,139 @@ set_option maxHeartbeats 4000000
 set_option veil.printCounterexamples true
 
 -- #check_action collect_recvd_locks
--- #check_action respond_propose_repropose
+-- #check_action respond_propose_extend
+
+
+theorem respond_propose_extend_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
+    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+    [χ_rep :
+      ∀ __veil_f,
+        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+    [χ_rep_lawful :
+      ∀ __veil_f,
+        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+    [respond_propose_extend_dec_0 :
+      delta% @IFPProtocolNTDP._veil_dec_type_1476320 view interaction χ node nodeset stage χ_rep]
+    [respond_propose_extend_dec_1 :
+      delta% @IFPProtocolNTDP._veil_dec_type_1476391 node view χ interaction nodeset stage χ_rep] :
+    ∀ (n : node) (v : view) (ixn : interaction),
+      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+        (@respond_propose_extend.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_propose_extend_dec_0
+          respond_propose_extend_dec_1 n v ixn)
+        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          ρ_sub)
+        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+        (@locks_analog_precommit ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+  by
+  veil_human
+  intro hv_nz hcv hcs op_w hop hpr h_no_prev hixn_ng hrc t t_1 t_2
+    hari has hav h_stage_eq h_ixn_neq h_parent h_height V V2 I J NP hnbyz hpb hI_ng hJ_ng h_prev_post hlt
+  -- Destructure hinv (positions 1, 2, 3, 40, 55, 67, 71 as in repropose, plus h_afp=80
+  -- and h_atrans=81 to bridge `parent ixn_max ixn` into ancestor I ixn).
+  obtain ⟨h_rcibpq, h_lap, h_step3,
+          _, _, _, _, _,
+          _,
+          _, _, _,
+          _, _, _, _, _, _, _, _, _,
+          _,
+          _, _, _, _, _, _, _, _, _,
+          _,
+          _, _, _, _,
+          _, _, _,
+          h_pcnlsv,
+          _, _,
+          _, _, _, _, _, _, _, _, _,
+          _, _, _,
+          h_pbf,
+          _, _,
+          _, _, _,
+          _,
+          _, _, _, _, _,
+          h_plipb,
+          _, _, _,
+          h_hls,
+          _, _, _, _, _, _, _, _,
+          h_afp, h_atrans,
+          _⟩ := hinv
+  -- No `subst` — extend has `ixn ≠ ixn_max`, so t (= ixn_max) and ixn stay distinct.
+  by_cases h_match : NP = n ∧ V2 = v ∧ J = ixn
+  · -- New-write case
+    obtain ⟨hNPeq, hV2eq, hJeq⟩ := h_match
+    subst NP; subst V2; subst J
+    -- Goal: ixn = I ∨ st.ancestor I ixn = true
+    by_cases h_le : TotalOrderWithMinimum.le V t_2
+    · -- Case 2(a): V ≤ v_max. h_step3 gives `I = t ∨ ancestor I t`; bridge via parent.
+      have h := h_step3 V v t_2 I t n hnbyz hpb hI_ng hari hav hlt h_le
+      cases h with
+      | inl heq => rw [heq]; exact Or.inr (h_afp t ixn h_parent)
+      | inr hanc => exact Or.inr (h_atrans I t ixn hanc (h_afp t ixn h_parent))
+    · -- Case 2(b): V > v_max. Cross-quorum chain (mirrors repropose, with parent bridge).
+      have le_lt_trans : ∀ {a b c : view},
+          TotalOrderWithMinimum.le a b → TotalOrderWithMinimum.lt b c →
+          TotalOrderWithMinimum.lt a c := by
+        intros a b c hab hbc
+        have ⟨hbc_le, hbc_ne⟩ := (tot_view.le_lt _ _).mp hbc
+        refine (tot_view.le_lt _ _).mpr ⟨tot_view.le_trans _ _ _ hab hbc_le, ?_⟩
+        rintro rfl
+        exact hbc_ne (tot_view.le_antisymm _ _ hab hbc_le).symm
+      have h_t2_lt_V : TotalOrderWithMinimum.lt t_2 V := by
+        rcases tot_view.le_total V t_2 with hVT | hTV
+        · exact absurd hVT h_le
+        · refine (tot_view.le_lt _ _).mpr ⟨hTV, ?_⟩
+          rintro rfl
+          exact h_le (tot_view.le_refl _)
+      obtain ⟨t_set, ht_sm, ht_mem⟩ := h_pbf V I hpb
+      obtain ⟨s_set, hs_sm, hs_mem⟩ := h_rcibpq n v t_2 hrc hav
+      obtain ⟨mstar, hm_s, hm_t, hm_honest⟩ :=
+        ctx.supermajorities_intersect_in_honest s_set t_set ⟨hs_sm, ht_sm⟩
+      have hpc_m : st.precommitted_node mstar V I = true := ht_mem mstar hm_t
+      obtain ⟨_, IL, SL, VL, h_slip, _, h_VL_le⟩ := hs_mem mstar hm_s
+      obtain ⟨_, _, h_no_lock_btw, _⟩ := h_hls mstar v IL SL VL h_slip
+      have h_VL_lt_V : TotalOrderWithMinimum.lt VL V := le_lt_trans h_VL_le h_t2_lt_V
+      have h_lock_choice := h_pcnlsv mstar V I hm_honest hpc_m hI_ng
+      cases h_lock_choice with
+      | inl h_prev_V =>
+        have h_no := h_no_lock_btw I th.prevote V h_VL_lt_V hlt
+        exact absurd h_prev_V (fun h => by rw [h] at h_no; exact Bool.noConfusion h_no)
+      | inr h_pre_exists =>
+        obtain ⟨U, h_U_le_V, h_loc_U⟩ := h_pre_exists
+        by_cases h_U_le_t2 : TotalOrderWithMinimum.le U t_2
+        · have h_pb_U : st.precommit_backed U I = true := h_plipb mstar I U h_loc_U hI_ng
+          have h_U_lt_v : TotalOrderWithMinimum.lt U v := le_lt_trans h_U_le_V hlt
+          have h := h_step3 U v t_2 I t n hnbyz h_pb_U hI_ng hari hav h_U_lt_v h_U_le_t2
+          cases h with
+          | inl heq => rw [heq]; exact Or.inr (h_afp t ixn h_parent)
+          | inr hanc => exact Or.inr (h_atrans I t ixn hanc (h_afp t ixn h_parent))
+        · have h_t2_lt_U : TotalOrderWithMinimum.lt t_2 U := by
+            rcases tot_view.le_total U t_2 with hUT | hTU
+            · exact absurd hUT h_U_le_t2
+            · refine (tot_view.le_lt _ _).mpr ⟨hTU, ?_⟩
+              rintro rfl
+              exact h_U_le_t2 (tot_view.le_refl _)
+          have h_VL_lt_U : TotalOrderWithMinimum.lt VL U := le_lt_trans h_VL_le h_t2_lt_U
+          have h_U_lt_v : TotalOrderWithMinimum.lt U v := le_lt_trans h_U_le_V hlt
+          have h_no := h_no_lock_btw I th.precommit U h_VL_lt_U h_U_lt_v
+          exact absurd h_loc_U (fun h => by rw [h] at h_no; exact Bool.noConfusion h_no)
+  · -- Pre-state case: identical to repropose.
+    have h_neq : n = NP → v = V2 → ¬ixn = J := by
+      intro hnNP hvV2 hixnJ
+      exact h_match ⟨hnNP.symm, hvV2.symm, hixnJ.symm⟩
+    exact h_lap V V2 I J NP hnbyz hpb hI_ng hJ_ng (h_prev_post h_neq) hlt
 
 
 theorem respond_propose_repropose_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
@@ -1898,6 +2030,7 @@ theorem respond_propose_repropose_locks_analog_precommit (ρ : Type) (σ : Type)
       exact h_match ⟨hnNP.symm, hvV2.symm, hixnJ.symm⟩
     exact h_lap V V2 I J NP hnbyz hpb hI_ng hJ_ng (h_prev_post h_neq) hlt
 -- #check_action operator_precommit
+
 
 
 -- theorem operator_precommit_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
