@@ -546,188 +546,6 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
 }
 
 
--- B7 (GOAL, single self-referential invariant): every certificate at V2 > V is
--- I or a descendant of I. cert_qc = prevote_qc ∨ precommit_qc, inlined.
--- invariant [qc_descent]
---   (precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧ tot_view.lt V V2 ∧
---    ((∃ (s : nodeset), ctx.supermajority s ∧
---        ∀ (m : node), ctx.member m s → prevoted_node m V2 J) ∨
---     (∃ (s : nodeset), ctx.supermajority s ∧
---        ∀ (m : node), ctx.member m s → precommitted_node m V2 J))) →
---     (J = I ∨ ancestor I J)
-
--- [RISK 4 — unbounded feeder; should be unchanged but verify]
--- Step 1 — Lift collect_recvd_locks's action quorum into a state invariant.
--- Trivially provable at collect_recvd_locks (the action's `s` parameter is the
--- witness); preserved elsewhere by monotonicity of recvd_collected and
--- sent_lock_in_prepare. Makes the prepare-quorum directly visible to SMT in
--- downstream proofs so they don't have to re-derive it from the action body.
-invariant [recvd_collected_implies_prepare_quorum]
-  recvd_collected N VACT →
-    ∃ (s : nodeset), ctx.supermajority s ∧
-      ∀ (m : node), ctx.member m s →
-        prepared_node m VACT ∧
-        ∃ (IL : interaction) (SL : stage) (VL : view),
-          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL
-
--- ----- existing top-level invariants (already passing pre-edit) -----
-
--- Relocated from the freshness section (was failing at propose_repropose,
--- ~60s timeout). At propose_repropose the post-state `proposed_repropose op v
--- ixn_max := true` requires `∃ J. parent J ixn_max` in pre-state. The chain
--- routes through op_argmax_is_highest_lock → locked → no_lock_without_parent;
--- placing it above the cache-existence invariant keeps the chain visible.
-invariant [no_proposal_without_parent]
-  (¬ ctx.is_byz OP ∧ (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
-
--- Relocated from the genesis-ancestry section (was failing at propose_repropose,
--- ~61s timeout). Chain: op_argmax_is_highest_lock → locked →
--- locked_descends_from_genesis → ancestor genesis ixn_max.
-invariant [proposed_descends_from_genesis]
-  (¬ ctx.is_byz OP ∧ (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ancestor genesis I
-
--- Existence witness: cached (IM, SM, VM) came from some actual sent_lock at V.
--- Existential-only form (no universal-dominance clause). Preservation at
--- respond_prepare hinges on the unrestricted `sent_lock_only_if_prepare`
--- (no ¬is_byz guard): combined with respond_prepare's `require ¬ prepared_node n v`,
--- the case `N_pre = n_action ∧ V = v_action` becomes unreachable, so the
--- pre-state witness survives in the unchanged slice.
-invariant [op_argmax_is_highest_lock]
-  (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
-    ∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM
-
--- Validator-side mirror of op_argmax_is_highest_lock. Same preservation
--- argument at respond_prepare (unrestricted sent_lock_only_if_prepare + action
--- precondition contradict the substantive case).
-invariant [argmax_recvd_is_highest_lock]
-  (¬ ctx.is_byz N ∧ argmax_recvd_ixn N V IM ∧ argmax_recvd_stage N V SM ∧ argmax_recvd_view N V VM) →
-    ∃ (M : node), sent_lock_in_prepare M V IM SM VM ∧ locked M IM SM VM
-
-
-safety [main_safety]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧
-     decided n2 v2 i2) →
-    (ancestor i1 i2 ∨ ancestor i2 i1)
-
--- Fork-location lemma: if two honest decisions are incomparable (main_safety
--- violated), the divergence is witnessed by a concrete fork — a common
--- interaction A with two DISTINCT children c1, c2, one an ancestor of each
--- decided interaction. Structural (tree-only): A := LCA(i1,i2), c1/c2 := the
--- first step off A toward i1 / i2, via ancestor_def_fwd + unique_parent.
--- NOT a safety proof on its own — it only extracts the fork witness. It reduces
--- main_safety to the local "no honest sibling-fork" consensus obligation
--- (no interaction has two distinct children each backing an honest decision).
-invariant [safety_violation_locates_fork]
-  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
-    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
-     decided n1 v1 i1 ∧ decided n2 v2 i2 ∧
-     ¬ ancestor i1 i2 ∧ ¬ ancestor i2 i1) →
-    ∃ (A c1 c2 : interaction),
-      parent A c1 ∧ parent A c2 ∧ c1 ≠ c2 ∧
-      ancestor c1 i1 ∧ ancestor c2 i2
-
--- Bridge: any honest non-genesis prevote at non-zero V routes through the cache,
--- so downstream invariants (e.g. locks_analog_prevoted) can lift argmax facts
--- out of the prevote action body and into a cache lookup.
-invariant [prevoted_node_implies_recvd_collected]
-  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧ V ≠ tot_view.zero) →
-    recvd_collected N V
-
--- recvd_collected at V exists only after global cur_view has reached V.
--- Discharged at collect_recvd_locks via its `require cur_view n v` precondition;
--- combined with cur_view_global this pins V = cur_view at firing. Preserved by
--- set_view (cur_view only advances via tot_view.next) and trivially elsewhere.
--- Closes the trivial-preservation cases of argmax_recvd_ixn_descends_from_precommit_backed
--- on respond_precommit (new precommit_backed view V_pre = cur_view, so V_pre < V_act
--- is ruled out by V_act ≤ cur_view = V_pre) and on set_view (advance).
-invariant [recvd_collected_at_past_view]
-  (recvd_collected N V ∧ cur_view N1 VC) → tot_view.le V VC
-
-  invariant [locks_analog_decided]
-    ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
-      (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-       I ≠ genesis ∧ I2 ≠ genesis ∧
-       decided N1 V I ∧ decided N2 V2 I2 ∧
-       tot_view.lt V V2) →
-      (I = I2 ∨ ancestor I I2)
-
-
--- ####################################################################
--- # Top-level safety invariants (most likely to fail, sited with main_safety)
--- # Ordered: highest-risk-with-current-edit first.
--- ####################################################################
-
--- [RISK 1 — NEW (Approach 1)] The prepare-quorum members captured by
--- recvd_collected all have sent-lock views bounded by the cached argmax view
--- V_max. Strictly stronger than recvd_collected_implies_prepare_quorum — kept
--- as a separate invariant so existing consumers of the unbounded form don't
--- churn.
---
--- Discharge expected at collect_recvd_locks: the action-local supermajority
--- `s` and its per-member sent_lock_in_prepare existential combine with the
--- action's own argmax-dominance require
---   `∀ n_l ixn_l s_l v_l, sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max`
--- to give VL ≤ v_max per member. Preserved trivially elsewhere because
--- recvd_collected/argmax_recvd_view are only set by collect_recvd_locks, and the
--- per-member sent_lock_in_prepare/locked entries are monotonic.
---
--- Pruned-from-stack: RISK 1a (intersection witness) and the prior RISK 1
--- (precommit_backed_drops_below_argmax_view) were both removed in this pass —
--- their discharges at collect_recvd_locks were timing out together with this
--- invariant under Veil's WP/simp budget. With them gone, this is the only
--- new existentially-quantified invariant at collect_recvd_locks, which should
--- let it fit within the heartbeat budget. If it still times out, it gets a
--- manual proof (via /manual-prove). Once available as a state-level premise,
--- it can feed an upcoming manual proof of
--- (locks_analog_precommit × respond_propose_repropose), inlining the
--- cross-quorum + trichotomy chain there.
--- invariant [recvd_collected_implies_bounded_prepare_quorum]
---   (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
---     ∃ (s : nodeset), ctx.supermajority s ∧
---       ∀ (m : node), ctx.member m s →
---         prepared_node m VACT ∧
---         ∃ (IL : interaction) (SL : stage) (VL : view),
---           sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
---           tot_view.le VL VMAX
-
--- [RISK 2 — target, times out on respond_propose_repropose]
--- Tendermint-style lock propagation, in IFP chain-extension form.
---   precommit_backed V I  (some honest node has witnessed a precommit-QC for I at V)
---     → any later honest prevote at V2 > V is on I or a descendant of I
--- The "V2 = nil" Tendermint disjunct is replaced by "ancestor I J" since IFP
--- proposals extend rather than carry a nil value.
---
--- Discharge plan (manual proof, /manual-prove):
--- At respond_propose_repropose, the post-state asserts prevoted_node n v ixn
--- with ixn = ixn_max from action. For any precommit_backed V I with V < v:
---   (a) Pull V_max from argmax_recvd_view n v V_max (action precondition).
---   (b) Case V ≤ V_max: apply Step 3 (argmax_recvd_ixn_descends_from_
---       precommit_backed_at_bounded_view) with U := V → I = ixn_max
---       ∨ ancestor I ixn_max; conclude.
---   (c) Case V > V_max:
---       - precommit_backed_fwd V → precommit-quorum t.
---       - RISK 1 (recvd_collected_implies_bounded_prepare_quorum) → prepare-
---         quorum s with VL ≤ V_max per member.
---       - supermajorities_intersect_in_honest s t → honest m* in s ∩ t.
---       - m* ∈ t ⇒ precommitted_node m* V I; precommit_node_locked_at_same_view
---         gives prevote-at-V or precommit-at-U′≤V.
---       - m* ∈ s ⇒ sent_lock m* v _ _ VL ∧ locked m* _ _ VL ∧ VL ≤ V_max;
---         highest_lock_sent kills the prevote-at-V and precommit-at-U′>V_max
---         branches. Remaining branch: locked m* I precommit U′ with U′≤V_max.
---       - precommit_lock_implies_precommit_backed → precommit_backed U′ I.
---       - Apply Step 3 with U := U′ → I = ixn_max ∨ ancestor I ixn_max.
---   For _extend, parent ixn_max ixn + ancestor_from_parent + ancestor_trans
---   gives ancestor I ixn (rather than I = ixn).
-
--- invariant [locks_analog_precommit]
---   ∀ (V V2 : view) (I J : interaction) (NP : node),
---     (¬ ctx.is_byz NP ∧
---      precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
---      prevoted_node NP V2 J ∧
---      tot_view.lt V V2) →
---     (J = I ∨ ancestor I J)
 
 -- [RISK 3 — feeder for RISK 2 (locks_analog_precommit); mutually inductive with it]
 -- Step 3 — Conditional ancestry: the validator-side cached argmax interaction IM
@@ -745,40 +563,6 @@ invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
      tot_view.lt U V_act ∧ tot_view.le U V_max) →
     (I = IM ∨ ancestor I IM)
 
--- ####################################################################
--- # Decoupled qc_descent invariant set (replaces the LAP <-> F1 cycle)
--- # Design: IFPSafety/locks_analog_precommit_decoupling.md
--- # qc_descent (B7) is the single self-referential goal (self-loop on the
--- # J-side certificate view V2); B1-B6 are descent-free leaves. cert_qc /
--- # prevote_qc / precommit_qc are inlined as exists-supermajority predicates.
--- # NB: the design doc's certificate view "W" is written V2 here (a bare `W`
--- # collides with a global identifier in scope, so it does not auto-bind).
--- # NOTE: LAP (locks_analog_precommit) and F1 are intentionally KEPT for now;
--- # delete them + re-route locks_analog_decided only AFTER qc_descent verifies.
--- # qc_descent (B7) and precommit_floats_down_to_argmax (B6) are expected to
--- # need /manual-prove (the gap is this file's documented timeout point).
--- ####################################################################
-
--- B1: a witnessed precommit-QC sits strictly above the initial view.
-invariant [precommit_backed_above_zero]
-  precommit_backed V I → V ≠ tot_view.zero
-
--- B2: an honest prevote agrees with the prevoter's cached argmax (prevote-stage
--- ⇒ J is the argmax; precommit-stage ⇒ J's parent is the argmax). Descent-free.
-invariant [prevote_matches_argmax]
-  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero) →
-    ∃ (IM : interaction), argmax_recvd_ixn N V2 IM ∧
-      ((argmax_recvd_stage N V2 prevote ∧ J = IM) ∨
-       (argmax_recvd_stage N V2 precommit ∧ parent IM J))
-
--- B3 (carrier, descent-FREE): every honest prevote extends a certificate at the
--- prevoter's cached argmax view VM < V2. Exposes argmax_recvd_view so the gap
--- leaf (B6) reuses the SAME VM. Split by the cached argmax stage (B2's
--- discriminator): prevote-stage ⇒ repropose anchor (J prevote-certified at VM),
--- precommit-stage ⇒ extend anchor (J's parent precommit-certified at VM). The two
--- guards partition realizable states (argmax_recvd_stage is set once at
--- collect_recvd_locks to the single s_max ∈ {prevote, precommit}), so together they
--- reconstitute the original disjunction; a consumer reads the stage off B2.
 
 -- B3a (repropose carrier): prevote-stage argmax ⇒ J itself prevote-certified at VM.
 invariant [qc_anchored_repropose]
@@ -887,6 +671,228 @@ invariant [op_argmax_qc_backed]
        ∀ (N : node), ctx.member N Q → prevoted_node N VM IM) ∧
     (SM = precommit → ∃ (Q : nodeset), ctx.supermajority Q ∧
        ∀ (N : node), ctx.member N Q → precommitted_node N VM IM)
+
+
+-- %%%%%%%%% TESTED ALL BELOW HERE
+
+-- B7 (GOAL, single self-referential invariant): every certificate at V2 > V is
+-- I or a descendant of I. cert_qc = prevote_qc ∨ precommit_qc, inlined.
+-- invariant [qc_descent]
+--   (precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧ tot_view.lt V V2 ∧
+--    ((∃ (s : nodeset), ctx.supermajority s ∧
+--        ∀ (m : node), ctx.member m s → prevoted_node m V2 J) ∨
+--     (∃ (s : nodeset), ctx.supermajority s ∧
+--        ∀ (m : node), ctx.member m s → precommitted_node m V2 J))) →
+--     (J = I ∨ ancestor I J)
+
+-- [RISK 4 — unbounded feeder; should be unchanged but verify]
+-- Step 1 — Lift collect_recvd_locks's action quorum into a state invariant.
+-- Trivially provable at collect_recvd_locks (the action's `s` parameter is the
+-- witness); preserved elsewhere by monotonicity of recvd_collected and
+-- sent_lock_in_prepare. Makes the prepare-quorum directly visible to SMT in
+-- downstream proofs so they don't have to re-derive it from the action body.
+invariant [recvd_collected_implies_prepare_quorum]
+  recvd_collected N VACT →
+    ∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (m : node), ctx.member m s →
+        prepared_node m VACT ∧
+        ∃ (IL : interaction) (SL : stage) (VL : view),
+          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL
+
+-- ----- existing top-level invariants (already passing pre-edit) -----
+
+-- Relocated from the freshness section (was failing at propose_repropose,
+-- ~60s timeout). At propose_repropose the post-state `proposed_repropose op v
+-- ixn_max := true` requires `∃ J. parent J ixn_max` in pre-state. The chain
+-- routes through op_argmax_is_highest_lock → locked → no_lock_without_parent;
+-- placing it above the cache-existence invariant keeps the chain visible.
+invariant [no_proposal_without_parent]
+  (¬ ctx.is_byz OP ∧ (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ∃ (J : interaction), parent J I
+
+-- Relocated from the genesis-ancestry section (was failing at propose_repropose,
+-- ~61s timeout). Chain: op_argmax_is_highest_lock → locked →
+-- locked_descends_from_genesis → ancestor genesis ixn_max.
+invariant [proposed_descends_from_genesis]
+  (¬ ctx.is_byz OP ∧ (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ I ≠ genesis) → ancestor genesis I
+
+-- Existence witness: cached (IM, SM, VM) came from some actual sent_lock at V.
+-- Existential-only form (no universal-dominance clause). Preservation at
+-- respond_prepare hinges on the unrestricted `sent_lock_only_if_prepare`
+-- (no ¬is_byz guard): combined with respond_prepare's `require ¬ prepared_node n v`,
+-- the case `N_pre = n_action ∧ V = v_action` becomes unreachable, so the
+-- pre-state witness survives in the unchanged slice.
+invariant [op_argmax_is_highest_lock]
+  (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
+    ∃ (N : node), sent_lock_in_prepare N V IM SM VM ∧ locked N IM SM VM
+
+-- Validator-side mirror of op_argmax_is_highest_lock. Same preservation
+-- argument at respond_prepare (unrestricted sent_lock_only_if_prepare + action
+-- precondition contradict the substantive case).
+invariant [argmax_recvd_is_highest_lock]
+  (¬ ctx.is_byz N ∧ argmax_recvd_ixn N V IM ∧ argmax_recvd_stage N V SM ∧ argmax_recvd_view N V VM) →
+    ∃ (M : node), sent_lock_in_prepare M V IM SM VM ∧ locked M IM SM VM
+
+
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
+
+-- Fork-location lemma: if two honest decisions are incomparable (main_safety
+-- violated), the divergence is witnessed by a concrete fork — a common
+-- interaction A with two DISTINCT children c1, c2, one an ancestor of each
+-- decided interaction. Structural (tree-only): A := LCA(i1,i2), c1/c2 := the
+-- first step off A toward i1 / i2, via ancestor_def_fwd + unique_parent.
+-- NOT a safety proof on its own — it only extracts the fork witness. It reduces
+-- main_safety to the local "no honest sibling-fork" consensus obligation
+-- (no interaction has two distinct children each backing an honest decision).
+invariant [safety_violation_locates_fork]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧ decided n2 v2 i2 ∧
+     ¬ ancestor i1 i2 ∧ ¬ ancestor i2 i1) →
+    ∃ (A c1 c2 : interaction),
+      parent A c1 ∧ parent A c2 ∧ c1 ≠ c2 ∧
+      ancestor c1 i1 ∧ ancestor c2 i2
+
+-- ####################################################################
+-- # Decoupled qc_descent invariant set (replaces the LAP <-> F1 cycle)
+-- # Design: IFPSafety/locks_analog_precommit_decoupling.md
+-- # qc_descent (B7) is the single self-referential goal (self-loop on the
+-- # J-side certificate view V2); B1-B6 are descent-free leaves. cert_qc /
+-- # prevote_qc / precommit_qc are inlined as exists-supermajority predicates.
+-- # NB: the design doc's certificate view "W" is written V2 here (a bare `W`
+-- # collides with a global identifier in scope, so it does not auto-bind).
+-- # NOTE: LAP (locks_analog_precommit) and F1 are intentionally KEPT for now;
+-- # delete them + re-route locks_analog_decided only AFTER qc_descent verifies.
+-- # qc_descent (B7) and precommit_floats_down_to_argmax (B6) are expected to
+-- # need /manual-prove (the gap is this file's documented timeout point).
+-- ####################################################################
+
+-- B1: a witnessed precommit-QC sits strictly above the initial view.
+invariant [precommit_backed_above_zero]
+  precommit_backed V I → V ≠ tot_view.zero
+
+-- B2: an honest prevote agrees with the prevoter's cached argmax (prevote-stage
+-- ⇒ J is the argmax; precommit-stage ⇒ J's parent is the argmax). Descent-free.
+invariant [prevote_matches_argmax]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero) →
+    ∃ (IM : interaction), argmax_recvd_ixn N V2 IM ∧
+      ((argmax_recvd_stage N V2 prevote ∧ J = IM) ∨
+       (argmax_recvd_stage N V2 precommit ∧ parent IM J))
+
+-- B3 (carrier, descent-FREE): every honest prevote extends a certificate at the
+-- prevoter's cached argmax view VM < V2. Exposes argmax_recvd_view so the gap
+-- leaf (B6) reuses the SAME VM. Split by the cached argmax stage (B2's
+-- discriminator): prevote-stage ⇒ repropose anchor (J prevote-certified at VM),
+-- precommit-stage ⇒ extend anchor (J's parent precommit-certified at VM). The two
+-- guards partition realizable states (argmax_recvd_stage is set once at
+-- collect_recvd_locks to the single s_max ∈ {prevote, precommit}), so together they
+-- reconstitute the original disjunction; a consumer reads the stage off B2.
+
+
+-- Bridge: any honest non-genesis prevote at non-zero V routes through the cache,
+-- so downstream invariants (e.g. locks_analog_prevoted) can lift argmax facts
+-- out of the prevote action body and into a cache lookup.
+invariant [prevoted_node_implies_recvd_collected]
+  (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis ∧ V ≠ tot_view.zero) →
+    recvd_collected N V
+
+-- recvd_collected at V exists only after global cur_view has reached V.
+-- Discharged at collect_recvd_locks via its `require cur_view n v` precondition;
+-- combined with cur_view_global this pins V = cur_view at firing. Preserved by
+-- set_view (cur_view only advances via tot_view.next) and trivially elsewhere.
+-- Closes the trivial-preservation cases of argmax_recvd_ixn_descends_from_precommit_backed
+-- on respond_precommit (new precommit_backed view V_pre = cur_view, so V_pre < V_act
+-- is ruled out by V_act ≤ cur_view = V_pre) and on set_view (advance).
+invariant [recvd_collected_at_past_view]
+  (recvd_collected N V ∧ cur_view N1 VC) → tot_view.le V VC
+
+  invariant [locks_analog_decided]
+    ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
+      (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+       I ≠ genesis ∧ I2 ≠ genesis ∧
+       decided N1 V I ∧ decided N2 V2 I2 ∧
+       tot_view.lt V V2) →
+      (I = I2 ∨ ancestor I I2)
+
+
+-- ####################################################################
+-- # Top-level safety invariants (most likely to fail, sited with main_safety)
+-- # Ordered: highest-risk-with-current-edit first.
+-- ####################################################################
+
+-- [RISK 1 — NEW (Approach 1)] The prepare-quorum members captured by
+-- recvd_collected all have sent-lock views bounded by the cached argmax view
+-- V_max. Strictly stronger than recvd_collected_implies_prepare_quorum — kept
+-- as a separate invariant so existing consumers of the unbounded form don't
+-- churn.
+--
+-- Discharge expected at collect_recvd_locks: the action-local supermajority
+-- `s` and its per-member sent_lock_in_prepare existential combine with the
+-- action's own argmax-dominance require
+--   `∀ n_l ixn_l s_l v_l, sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max`
+-- to give VL ≤ v_max per member. Preserved trivially elsewhere because
+-- recvd_collected/argmax_recvd_view are only set by collect_recvd_locks, and the
+-- per-member sent_lock_in_prepare/locked entries are monotonic.
+--
+-- Pruned-from-stack: RISK 1a (intersection witness) and the prior RISK 1
+-- (precommit_backed_drops_below_argmax_view) were both removed in this pass —
+-- their discharges at collect_recvd_locks were timing out together with this
+-- invariant under Veil's WP/simp budget. With them gone, this is the only
+-- new existentially-quantified invariant at collect_recvd_locks, which should
+-- let it fit within the heartbeat budget. If it still times out, it gets a
+-- manual proof (via /manual-prove). Once available as a state-level premise,
+-- it can feed an upcoming manual proof of
+-- (locks_analog_precommit × respond_propose_repropose), inlining the
+-- cross-quorum + trichotomy chain there.
+-- invariant [recvd_collected_implies_bounded_prepare_quorum]
+--   (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
+--     ∃ (s : nodeset), ctx.supermajority s ∧
+--       ∀ (m : node), ctx.member m s →
+--         prepared_node m VACT ∧
+--         ∃ (IL : interaction) (SL : stage) (VL : view),
+--           sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
+--           tot_view.le VL VMAX
+
+-- [RISK 2 — target, times out on respond_propose_repropose]
+-- Tendermint-style lock propagation, in IFP chain-extension form.
+--   precommit_backed V I  (some honest node has witnessed a precommit-QC for I at V)
+--     → any later honest prevote at V2 > V is on I or a descendant of I
+-- The "V2 = nil" Tendermint disjunct is replaced by "ancestor I J" since IFP
+-- proposals extend rather than carry a nil value.
+--
+-- Discharge plan (manual proof, /manual-prove):
+-- At respond_propose_repropose, the post-state asserts prevoted_node n v ixn
+-- with ixn = ixn_max from action. For any precommit_backed V I with V < v:
+--   (a) Pull V_max from argmax_recvd_view n v V_max (action precondition).
+--   (b) Case V ≤ V_max: apply Step 3 (argmax_recvd_ixn_descends_from_
+--       precommit_backed_at_bounded_view) with U := V → I = ixn_max
+--       ∨ ancestor I ixn_max; conclude.
+--   (c) Case V > V_max:
+--       - precommit_backed_fwd V → precommit-quorum t.
+--       - RISK 1 (recvd_collected_implies_bounded_prepare_quorum) → prepare-
+--         quorum s with VL ≤ V_max per member.
+--       - supermajorities_intersect_in_honest s t → honest m* in s ∩ t.
+--       - m* ∈ t ⇒ precommitted_node m* V I; precommit_node_locked_at_same_view
+--         gives prevote-at-V or precommit-at-U′≤V.
+--       - m* ∈ s ⇒ sent_lock m* v _ _ VL ∧ locked m* _ _ VL ∧ VL ≤ V_max;
+--         highest_lock_sent kills the prevote-at-V and precommit-at-U′>V_max
+--         branches. Remaining branch: locked m* I precommit U′ with U′≤V_max.
+--       - precommit_lock_implies_precommit_backed → precommit_backed U′ I.
+--       - Apply Step 3 with U := U′ → I = ixn_max ∨ ancestor I ixn_max.
+--   For _extend, parent ixn_max ixn + ancestor_from_parent + ancestor_trans
+--   gives ancestor I ixn (rather than I = ixn).
+
+-- invariant [locks_analog_precommit]
+--   ∀ (V V2 : view) (I J : interaction) (NP : node),
+--     (¬ ctx.is_byz NP ∧
+--      precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
+--      prevoted_node NP V2 J ∧
+--      tot_view.lt V V2) →
+--     (J = I ∨ ancestor I J)
 
 -- ####################################################################
 -- # argmax_recvd cache invariants (validator-side mirror of op_argmax_*)
@@ -1558,13 +1564,13 @@ invariant [prevoted_height_positive]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) → height I ≥ 1
 
 
-set_option veil.smt.timeout 13000
+set_option veil.smt.timeout 15000
 set_option maxHeartbeats 4000000
 #gen_spec
 
 set_option veil.printCounterexamples true
 
-#check_action propose_repropose
+#check_action respond_propose_extend
 -- #check_action respond_propose_extend
 -- #check_invariants
 
