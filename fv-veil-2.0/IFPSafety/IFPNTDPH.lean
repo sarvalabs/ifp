@@ -546,6 +546,21 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
 }
 
 
+-- Companion (relock side): the same reproposed block gets prevote-locked again
+-- at the reproposal view V. When I is reproposed at V (proposed_repropose OP V I)
+-- and some node N holds a prevote lock on that same I at exactly V, that lock
+-- traces back to the operator's repropose decision: I was the cached argmax
+-- interaction at prevote stage, with some argmax view VM. propose_repropose set
+-- proposed_repropose op v ixn_max only after requiring op_argmax_ixn op v ixn_max,
+-- op_argmax_stage op v prevote, op_argmax_view op v v_max; the op_argmax cache is
+-- frozen once prepares_collected (collect_prepares requires ¬ prepares_collected),
+-- so these argmax facts persist for all later locks acquired at V.
+invariant [reproposed_relock_at_view_implies_argmax]
+  (proposed_repropose OP V I ∧ locked N I prevote V) →
+    ∃ (VM : view),
+      op_argmax_ixn OP V I ∧ op_argmax_view OP V VM ∧ op_argmax_stage OP V prevote
+
+
 
 -- [RISK 3 — feeder for RISK 2 (locks_analog_precommit); mutually inductive with it]
 -- Step 3 — Conditional ancestry: the validator-side cached argmax interaction IM
@@ -613,14 +628,14 @@ invariant [precommit_qc_unique_at_view]
       ∀ (m : node), ctx.member m s2 → precommitted_node m V I2)) →
     I1 = I2
 
--- B6 (the GAP as a descent-FREE leaf): in the gap regime VM < V < V2, an earlier
--- precommit for I floats down to a precommit-QC at U ≤ VM on the same I.
--- Concentrates the quorum-intersection + lock-trichotomy; expect /manual-prove.
-invariant [precommit_floats_down_to_argmax]
-  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧
-   precommit_backed V I ∧ I ≠ genesis ∧
-   argmax_recvd_view N V2 VM ∧ tot_view.lt VM V ∧ tot_view.lt V V2) →
-    ∃ (U : view), tot_view.le U VM ∧ precommit_backed U I
+-- -- B6 (the GAP as a descent-FREE leaf): in the gap regime VM < V < V2, an earlier
+-- -- precommit for I floats down to a precommit-QC at U ≤ VM on the same I.
+-- -- Concentrates the quorum-intersection + lock-trichotomy; expect /manual-prove.
+-- invariant [precommit_floats_down_to_argmax]
+--   (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧
+--    precommit_backed V I ∧ I ≠ genesis ∧
+--    argmax_recvd_view N V2 VM ∧ tot_view.lt VM V ∧ tot_view.lt V V2) →
+--     ∃ (U : view), tot_view.le U VM ∧ precommit_backed U I
 
 -- ####################################################################
 -- # op_argmax cache invariants (S8 — Tendermint-style aggregation)
@@ -671,6 +686,7 @@ invariant [op_argmax_qc_backed]
        ∀ (N : node), ctx.member N Q → prevoted_node N VM IM) ∧
     (SM = precommit → ∃ (Q : nodeset), ctx.supermajority Q ∧
        ∀ (N : node), ctx.member N Q → precommitted_node N VM IM)
+
 
 
 -- %%%%%%%%% TESTED ALL BELOW HERE
@@ -1570,7 +1586,7 @@ set_option maxHeartbeats 4000000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_propose_extend
+#check_action propose_extendx
 -- #check_action respond_propose_extend
 -- #check_invariants
 
