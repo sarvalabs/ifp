@@ -87,27 +87,15 @@ relation committed_ixn : node → interaction → Bool
 -- # Ghost Relations
 -- ####################################################################
 
-relation locked_at_view : node → view → Bool
-
--- "At view V, some operator proposed an interaction I (via repropose or extend)
--- such that A is an ancestor of I". Maintained by propose_repropose and
--- propose_extend; mirrors IFPU's proposed_for_descendant.
-relation proposed_for_descendant : view → interaction → Bool
-
--- "Node N decided an interaction I at view V such that A is an ancestor of I".
--- Maintained by respond_precommit; mirrors IFPU's decided_for_descendant.
-relation decided_for_descendant : node → interaction → view → Bool
-
--- Height-indexed ghosts (view-free; one accumulating set per node). No
--- invariants reference these yet — write-only ghost state, maintained alongside
--- the real `locked`/`decided` updates. Signatures drop the participant param
--- (cf. IFPJ) and the view index (not needed).
--- "Node N holds a lock on some interaction of height H."  ≡ ∃ I S V, locked N I S V ∧ height I = H
-relation locked_at_height : node → Nat → Bool
+-- Height-indexed descendant ghosts (view-free; one accumulating set per node).
+-- Write-only ghost state, maintained alongside the real `locked`/`decided`
+-- updates. Signatures drop the participant param (cf. IFPJ) and the view index
+-- (not needed). Only the descendant-indexed forms are kept; the plain
+-- `locked_at_height`/`committed_at_height` were the A = genesis instance of
+-- these, and the view-indexed `locked_at_view` / `proposed_for_descendant` /
+-- `decided_for_descendant` ghosts were removed as redundant write-only state.
 -- "Node N holds a lock on a descendant of A of height H."  ≡ ∃ I S V, locked N I S V ∧ ancestor A I ∧ height I = H
 relation locked_descendant_at_height : node → interaction → Nat → Bool
--- "Node N decided some interaction of height H."  ≡ ∃ V I, decided N V I ∧ height I = H
-relation committed_at_height : node → Nat → Bool
 -- "Node N decided a descendant of A of height H."  ≡ ∃ V I, decided N V I ∧ ancestor A I ∧ height I = H
 relation committed_descendant_at_height : node → interaction → Nat → Bool
 
@@ -173,12 +161,7 @@ after_init {
   prevoted_node N V I := false;
   precommitted_node N V I := false;
   committed_ixn N I := decide $ (I = genesis);
-  locked_at_view N V := decide $ (V = tot_view.zero);
-  proposed_for_descendant V A := false;
-  decided_for_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
-  locked_at_height N H := decide $ (H = 0);
   locked_descendant_at_height N A H := decide $ (A = genesis ∧ H = 0);
-  committed_at_height N H := decide $ (H = 0);
   committed_descendant_at_height N A H := decide $ (A = genesis ∧ H = 0);
   precommit_backed V I := false;
   prepares_collected N V := false;
@@ -314,8 +297,6 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
   require height ixn_max = height ci + 1
   require s_max = prevote
   proposed_repropose op v ixn_max := true;
-  -- GHOST: proposed interaction at v is a descendant of A iff A is an ancestor of ixn_max.
-  proposed_for_descendant v A := decide $ (proposed_for_descendant v A ∨ ancestor A ixn_max);
 }
 
 -- Extend: all locks at committed_height → fresh proposal
@@ -351,10 +332,6 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
   proposed_extend op v ixn_propose := true;
   height ixn_propose := height ci + 1;
-  -- GHOST: parallel-safe — expand ancestor post-state for ixn_propose, matching
-  -- the `ancestor A ixn_propose := ...` update template above.
-  proposed_for_descendant v A := decide $ (proposed_for_descendant v A
-    ∨ ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
 }
 
 -- Nil: highest lock too far ahead, or precommit at committed_height + 1
@@ -398,29 +375,29 @@ action collect_recvd_locks (n : node) (v : view) (s : nodeset) (n_max : node)
   require prepared_node n v
   require ¬ recvd_collected n v
 
-  -- Prepare-quorum witness (per-member QC-backed lock).
+  -- Prepare-quorum witness: a quorum of nodes each sent a genuine (locked)
+  -- prepare-response. NO per-member QC check here — only the highest lock's QC
+  -- is verified, in the argmax witness below (step 3).
   require ctx.supermajority s
   require ∀ (m : node), ctx.member m s → (prepared_node m v ∧
-    ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset),
+    ∃ (vl : view) (ixnl : interaction) (sl : stage),
       sent_lock_in_prepare m v ixnl sl vl
       ∧ locked m ixnl sl vl
-      ∧ tot_view.le vl v
-      ∧ ctx.supermajority t
-      ∧ (sl = prevote   → ∀ (nt : node), ctx.member nt t → prevoted_node    nt vl ixnl)
-      ∧ (sl = precommit → ∀ (nt : node), ctx.member nt t → precommitted_node nt vl ixnl))
+      ∧ tot_view.le vl v)
 
-  -- Argmax witness: n_max identifies the highest-view sent lock at v.
+  -- Argmax witness: n_max identifies the highest-view sent lock at v, and
+  -- (step 3) that highest lock is verified QC-backed (`t_max` supermajority).
   require sent_lock_in_prepare n_max v ixn_max s_max v_max
   require locked n_max ixn_max s_max v_max
-  require ∃ (t_max : nodeset), ctx.supermajority t_max
-    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
-    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
   require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
     sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
   -- No sent_lock at views strictly above v_max (pure ∀ form, EPR).
   require ∀ (vl : view) (n' : node) (i' : interaction) (s' : stage),
     (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
       ¬ sent_lock_in_prepare n' v i' s' vl
+  require ∃ (t_max : nodeset), ctx.supermajority t_max
+    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
+    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
 
   -- Cache the result. Functional-by-construction via `decide`.
   recvd_collected n v := true
@@ -497,9 +474,7 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) (s : nodeset) {
   precommitted_node n v ixn := true
   if ( ¬ ∃ (u : view), (tot_view.le u v ∧ locked n ixn precommit u) ) then
     locked n ixn prevote v := true;
-    locked_at_view n v := true;
     -- GHOST: new prevote lock at height (height ixn), on every ancestor A of ixn.
-    locked_at_height n H := decide $ (locked_at_height n H ∨ H = height ixn);
     locked_descendant_at_height n A H := decide $ (locked_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
   cur_stage n v S := decide $ (S = precommit)
 }
@@ -529,21 +504,171 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
   -- to operator_precommit's old write, just deferred to the first witnessing.
   precommit_backed v ixn := true
   locked n ixn precommit v := true;
-  locked_at_view n v := true;
   -- GHOST: new precommit lock at height (height ixn), on every ancestor A of ixn.
-  locked_at_height n H := decide $ (locked_at_height n H ∨ H = height ixn);
   locked_descendant_at_height n A H := decide $ (locked_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
   decided n v ixn := true
-  -- GHOST: node decided a descendant of A at view v.
-  decided_for_descendant n A v := decide $ (decided_for_descendant n A v ∨ ancestor A ixn);
-  -- GHOST: node decided at height (height ixn), on every ancestor A of ixn.
-  committed_at_height n H := decide $ (committed_at_height n H ∨ H = height ixn);
+  -- GHOST: node decided a descendant of A at height (height ixn), on every ancestor A of ixn.
   committed_descendant_at_height n A H := decide $ (committed_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
   -- Update committed interaction only if this is a newer decision
   if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn > height ci_old) then
     committed_ixn n I := decide $ (I = ixn);
   cur_stage n v S := decide $ (S = commit)
 }
+
+
+-- ####################################################################
+-- # ===== ACTIVE FRONTIER — VERIFY FIRST (this session) =====
+-- # Invariants under active check after restoring RISK1 + dropping the false
+-- # reproposal block(B). Front-loaded so #check_invariants reports their status
+-- # before the heartbeat/SMT budget is spent on the stable base below. The
+-- # qc_descent cluster (reproposed_relock, RISK3, qc_anchored_*, reproposal,
+-- # B4/B5) follows immediately, so the whole verify-set is contiguous here.
+-- # NOTE: locks_analog_decided stays RED until locks_analog_precommit (LAP,
+-- # still commented further down) is restored — that is the next step, expected.
+-- ####################################################################
+
+
+-- B3a (repropose carrier): prevote-stage argmax ⇒ J itself prevote-certified at VM.
+invariant [qc_anchored_repropose]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
+   argmax_recvd_stage N V2 prevote) →
+    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
+      (∃ (s : nodeset), ctx.supermajority s ∧
+          ∀ (m : node), ctx.member m s → prevoted_node m VM J)
+
+-- B3b (extend carrier): precommit-stage argmax ⇒ J's parent P precommit-certified at VM.
+invariant [qc_anchored_extend]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
+   argmax_recvd_stage N V2 precommit) →
+    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
+      (∃ (P : interaction) (s : nodeset), ctx.supermajority s ∧ parent P J ∧
+          ∀ (m : node), ctx.member m s → precommitted_node m VM P)
+
+
+-- ####################################################################
+-- # Argmax ↔ committed-frontier anchoring (proposal side)
+-- # ----------------------------------------------------------------
+-- # The operator's cached argmax, when it drives a proposal, is anchored at the
+-- # committed frontier by the height-based decision logic:
+-- #   repropose (height argmax = committed+1): argmax I is a CHILD of committed,
+-- #     so I's parent J was committed (precommit-QC witnessed). Near-leaf via
+-- #     no_proposal_without_parent + parent_height +
+-- #     proposed_repropose_parent_matches_committed + decided_implies_precommit_backed.
+-- #   extend (height argmax = committed): argmax I IS the committed interaction.
+-- #     Guarded to precommit-stage argmax (matches respond_propose_extend's
+-- #     `require s_max = precommit`) so it discharges via op_argmax_qc_backed +
+-- #     op_argmax_is_highest_lock + precommit_lock_implies_precommit_backed +
+-- #     unique_precommit_backed_at_height — WITHOUT entangling LAP (the prevote-
+-- #     stage sub-case would restate no-fork).
+-- # "committed" = precommit_backed (monotone). committed_ixn OP is deliberately
+-- # NOT used: it is overwritten when OP later decides higher, which would break
+-- # preservation at respond_precommit.
+-- ####################################################################
+
+-- repropose: argmax I (prevote-stage at argmax view U) sits one height above
+-- committed ⇒ I's parent J was committed at some W strictly below U.
+invariant [reproposed_argmax_parent_committed]
+  (¬ ctx.is_byz OP ∧ proposed_repropose OP V I ∧
+   op_argmax_ixn OP V I ∧ op_argmax_stage OP V prevote ∧
+   op_argmax_view OP V U ∧ I ≠ genesis) →
+    ∃ (J : interaction) (W : view), parent J I ∧ tot_view.lt W U ∧ precommit_backed W J
+
+-- extend: precommit-stage argmax I sits at committed height ⇒ I itself committed.
+invariant [extended_argmax_committed]
+  (¬ ctx.is_byz OP ∧ proposed_extend OP V IX ∧
+   op_argmax_ixn OP V I ∧ op_argmax_stage OP V precommit ∧
+   op_argmax_view OP V U ∧ I ≠ genesis) →
+    precommit_backed U I
+
+-- ####################################################################
+-- # Single-step lock propagation (IFP analog of paper Lemma 3)
+-- # ----------------------------------------------------------------
+-- # When I is committed at V (precommit-QC witnessed), the validator M that
+-- # collects prepares in the immediately-next view VN = next(V) discovers it as
+-- # its cached highest lock. The two branches are NOT symmetric in soundness:
+-- #
+-- #  extend: I is a FRESH child (propose_extend creates it with height 0 / no
+-- #    parent), so it was never committed before V (extended_ixn_not_committed_before).
+-- #    Then every honest member of V's precommit-quorum holds its I-lock at exactly
+-- #    V (a precommit lock below V is impossible), forcing VM = V EXACTLY.
+-- #
+-- #  repropose: I is an EXISTING interaction that may already have been committed
+-- #    at some U < V (a lagging/Byzantine operator can repropose it). The honest
+-- #    quorum members then kept their OLD precommit lock at U and report U, so
+-- #    VM = V can FAIL. Conclusion weakened: the argmax discovers I at SOME
+-- #    committed view VM ≤ V.  RESIDUAL RISK — even IM = I / precommit_backed VM I
+-- #    are only sound if a higher-view QC on a different/descendant interaction at
+-- #    an intermediate U<W<V is excluded; that exclusion leans on the honest-N
+-- #    prevote-stage-argmax premise via lock-propagation (circular under Veil's
+-- #    frame). If the build reds on IM = I, fall back to descent (≈ RISK3).
+-- #
+-- # DISCHARGE: collect_recvd_locks, via precommit_backed_fwd × the action's
+-- # prepare-quorum → honest m*. NOT leaves — expect /manual-prove. Extend also
+-- # consumes extended_ixn_not_committed_before to kill the below-V re-precommit.
+-- ####################################################################
+
+-- Fresh-child leaf: an extended interaction is brand new at its proposal view, so
+-- it was never proposed (hence never committed) at any earlier view. Substantive
+-- at propose_extend (fresh preconditions: no parent ⇒ never proposed ⇒ never
+-- precommit_backed); preserved at respond_precommit because precommit_backed is
+-- only written at cur_view ≥ V (proposed_extend_view_bound).
+invariant [extended_ixn_not_committed_before]
+  proposed_extend OP V I → ∀ (U : view), tot_view.lt U V → ¬ precommit_backed U I
+
+-- repropose branch: I (existing) re-proposed at V. VM = V can fail when I was
+-- already committed at U < V (re-precommitters report U) ⇒ weakened to VM ≤ V.
+-- invariant [reproposed_committed_propagates_to_next_argmax]
+--   (¬ ctx.is_byz N ∧ ¬ ctx.is_byz M ∧
+--    argmax_recvd_stage N V prevote ∧
+--    prevoted_node N V I ∧
+--    proposed_repropose OP V I ∧
+--    precommit_backed V I ∧ I ≠ genesis ∧
+--    tot_view.next V VN ∧
+--    argmax_recvd_ixn M VN IM ∧ argmax_recvd_view M VN VM) →
+--     (IM = I ∧ VM = V ∧ precommit_backed VM I)
+
+
+-- -- extend branch: I is a FRESH child ⇒ never committed before V ⇒ VM = V exact.
+-- invariant [extended_committed_propagates_to_next_argmax]
+--   (¬ ctx.is_byz N ∧ ¬ ctx.is_byz M ∧
+--    argmax_recvd_stage N V precommit ∧
+--    prevoted_node N V I ∧
+--    proposed_extend OP V I ∧
+--    precommit_backed V I ∧ I ≠ genesis ∧
+--    tot_view.next V VN ∧
+--    argmax_recvd_ixn M VN IM ∧ argmax_recvd_view M VN VM) →
+--     (IM = I ∧ VM = V)
+
+-- B2: an honest prevote agrees with the prevoter's cached argmax (prevote-stage
+-- ⇒ J is the argmax; precommit-stage ⇒ J's parent is the argmax). Descent-free.
+invariant [prevote_matches_argmax]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero) →
+    ∃ (IM : interaction), argmax_recvd_ixn N V2 IM ∧
+      ((argmax_recvd_stage N V2 prevote ∧ J = IM) ∨
+       (argmax_recvd_stage N V2 precommit ∧ parent IM J))
+
+-- Strict-view feeder of main_safety. Expected RED until LAP is restored (no live
+-- supplier for the ancestor step at respond_precommit) — kept at top to surface it.
+invariant [locks_analog_decided]
+  ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
+    (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
+     I ≠ genesis ∧ I2 ≠ genesis ∧
+     decided N1 V I ∧ decided N2 V2 I2 ∧
+     tot_view.lt V V2) →
+    (I = I2 ∨ ancestor I I2)
+
+-- [RISK 1] prepare-quorum members captured by recvd_collected have sent-lock views
+-- bounded by the cached argmax view VMAX. Discharged at collect_recvd_locks (its
+-- supermajority s + per-member sent_lock + the argmax-dominance require give
+-- VL ≤ VMAX); monotone elsewhere. Feeds the gap case of locks_analog_precommit.
+invariant [recvd_collected_implies_bounded_prepare_quorum]
+  (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
+    ∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (m : node), ctx.member m s →
+        prepared_node m VACT ∧
+        ∃ (IL : interaction) (SL : stage) (VL : view),
+          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
+          tot_view.le VL VMAX
 
 
 -- Companion (relock side): the same reproposed block gets prevote-locked again
@@ -579,38 +704,22 @@ invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
     (I = IM ∨ ancestor I IM)
 
 
--- B3a (repropose carrier): prevote-stage argmax ⇒ J itself prevote-certified at VM.
-invariant [qc_anchored_repropose]
-  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
-   argmax_recvd_stage N V2 prevote) →
-    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
-      (∃ (s : nodeset), ctx.supermajority s ∧
-          ∀ (m : node), ctx.member m s → prevoted_node m VM J)
-
--- B3b (extend carrier): precommit-stage argmax ⇒ J's parent P precommit-certified at VM.
-invariant [qc_anchored_extend]
-  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
-   argmax_recvd_stage N V2 precommit) →
-    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
-      (∃ (P : interaction) (s : nodeset), ctx.supermajority s ∧ parent P J ∧
-          ∀ (m : node), ctx.member m s → precommitted_node m VM P)
-
--- B3a+ (reproposal 2-chain): strengthens qc_anchored_repropose. When an honest N
--- prevotes J in the repropose branch (cached argmax is prevote-stage), J is not
--- only prevote-QC'd at an earlier view VM < V, its parent P is precommit-QC'd
--- (precommit_backed, unfolds to a supermajority via precommit_backed_fwd) AND has
--- been decided. The 2-chain commit shape: a reproposed interaction sits directly
--- on a committed (precommit-certified) parent. "committed" = decided _ _ P
--- (monotone), NOT committed_ixn, which is superseded as the chain grows.
+-- B3a+ (reproposal prevote-QC anchor): when an honest N prevotes J in the repropose
+-- branch (cached argmax is prevote-stage), J is prevote-QC'd at an earlier view VM < V.
+-- The former block (B) (parent P precommit_backed AND decided) was REMOVED as FALSE:
+--   (i) Byzantine operator — pick_operator/propose_repropose carry no ¬is_byz op
+--       guard, so a Byzantine op reproposes a real-QC'd ixn whose parent (unique) was
+--       never decided/precommit_backed (the ties are all ¬is_byz OP-guarded).
+--   (ii) Genesis parent — an honest height-1 repropose has parent = genesis, and
+--        precommit_backed VP genesis is unsatisfiable (precommit_backed needs v ≠ zero).
+-- What remains is strictly weaker than qc_anchored_repropose (lacks the
+-- argmax_recvd_view conjunct), hence REDUNDANT — safe to delete wholesale once green.
 invariant [reproposal_extends_decided_parent]
   (¬ ctx.is_byz N ∧ prevoted_node N V J ∧ J ≠ genesis ∧ V ≠ tot_view.zero ∧
    argmax_recvd_stage N V prevote) →
     (∃ (VM : view), tot_view.lt VM V ∧
        ∃ (s : nodeset), ctx.supermajority s ∧
-         ∀ (m : node), ctx.member m s → prevoted_node m VM J) ∧
-    (∃ (P : interaction), parent P J ∧
-       (∃ (VP : view), precommit_backed VP P) ∧
-       (∃ (M : node) (W : view), decided M W P))
+         ∀ (m : node), ctx.member m s → prevoted_node m VM J)
 
 
 -- B4: same-view precommit-QC and prevote-QC agree (two honest intersectors).
@@ -791,13 +900,7 @@ invariant [safety_violation_locates_fork]
 invariant [precommit_backed_above_zero]
   precommit_backed V I → V ≠ tot_view.zero
 
--- B2: an honest prevote agrees with the prevoter's cached argmax (prevote-stage
--- ⇒ J is the argmax; precommit-stage ⇒ J's parent is the argmax). Descent-free.
-invariant [prevote_matches_argmax]
-  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero) →
-    ∃ (IM : interaction), argmax_recvd_ixn N V2 IM ∧
-      ((argmax_recvd_stage N V2 prevote ∧ J = IM) ∨
-       (argmax_recvd_stage N V2 precommit ∧ parent IM J))
+-- [prevote_matches_argmax (B2) relocated to the ACTIVE FRONTIER block at top of invariant list]
 
 -- B3 (carrier, descent-FREE): every honest prevote extends a certificate at the
 -- prevoter's cached argmax view VM < V2. Exposes argmax_recvd_view so the gap
@@ -826,13 +929,7 @@ invariant [prevoted_node_implies_recvd_collected]
 invariant [recvd_collected_at_past_view]
   (recvd_collected N V ∧ cur_view N1 VC) → tot_view.le V VC
 
-  invariant [locks_analog_decided]
-    ∀ (V V2 : view) (I I2 : interaction) (N1 N2 : node),
-      (¬ ctx.is_byz N1 ∧ ¬ ctx.is_byz N2 ∧
-       I ≠ genesis ∧ I2 ≠ genesis ∧
-       decided N1 V I ∧ decided N2 V2 I2 ∧
-       tot_view.lt V V2) →
-      (I = I2 ∨ ancestor I I2)
+  -- [locks_analog_decided relocated to the ACTIVE FRONTIER block at top of invariant list]
 
 
 -- ####################################################################
@@ -840,38 +937,7 @@ invariant [recvd_collected_at_past_view]
 -- # Ordered: highest-risk-with-current-edit first.
 -- ####################################################################
 
--- [RISK 1 — NEW (Approach 1)] The prepare-quorum members captured by
--- recvd_collected all have sent-lock views bounded by the cached argmax view
--- V_max. Strictly stronger than recvd_collected_implies_prepare_quorum — kept
--- as a separate invariant so existing consumers of the unbounded form don't
--- churn.
---
--- Discharge expected at collect_recvd_locks: the action-local supermajority
--- `s` and its per-member sent_lock_in_prepare existential combine with the
--- action's own argmax-dominance require
---   `∀ n_l ixn_l s_l v_l, sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max`
--- to give VL ≤ v_max per member. Preserved trivially elsewhere because
--- recvd_collected/argmax_recvd_view are only set by collect_recvd_locks, and the
--- per-member sent_lock_in_prepare/locked entries are monotonic.
---
--- Pruned-from-stack: RISK 1a (intersection witness) and the prior RISK 1
--- (precommit_backed_drops_below_argmax_view) were both removed in this pass —
--- their discharges at collect_recvd_locks were timing out together with this
--- invariant under Veil's WP/simp budget. With them gone, this is the only
--- new existentially-quantified invariant at collect_recvd_locks, which should
--- let it fit within the heartbeat budget. If it still times out, it gets a
--- manual proof (via /manual-prove). Once available as a state-level premise,
--- it can feed an upcoming manual proof of
--- (locks_analog_precommit × respond_propose_repropose), inlining the
--- cross-quorum + trichotomy chain there.
--- invariant [recvd_collected_implies_bounded_prepare_quorum]
---   (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
---     ∃ (s : nodeset), ctx.supermajority s ∧
---       ∀ (m : node), ctx.member m s →
---         prepared_node m VACT ∧
---         ∃ (IL : interaction) (SL : stage) (VL : view),
---           sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
---           tot_view.le VL VMAX
+-- [RISK 1 (recvd_collected_implies_bounded_prepare_quorum) relocated to the ACTIVE FRONTIER block at top of invariant list]
 
 -- [RISK 2 — target, times out on respond_propose_repropose]
 -- Tendermint-style lock propagation, in IFP chain-extension form.
@@ -989,29 +1055,6 @@ invariant [argmax_recvd_qc_backed]
 
 
 
--- ####################################################################
--- # Ghost Consistency Invariants (proposed/decided)
--- ####################################################################
-
--- proposed_for_descendant forward: proposed (repropose or extend) + ancestry → ghost
-invariant [proposed_for_descendant_fwd]
-  ((proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ ancestor A I) →
-    proposed_for_descendant V A
-
--- proposed_for_descendant backward: ghost → ∃ proposed descendant
-invariant [proposed_for_descendant_bwd]
-  proposed_for_descendant V A →
-    ∃ (OP : node) (I : interaction),
-      (proposed_repropose OP V I ∨ proposed_extend OP V I) ∧ ancestor A I
-
--- decided_for_descendant forward: decided + ancestry → ghost
-invariant [decided_for_descendant_fwd]
-  (decided N V I ∧ ancestor A I) → decided_for_descendant N A V
-
--- decided_for_descendant backward (honest only): ghost → ∃ decided descendant
-invariant [decided_for_descendant_bwd]
-  (¬ ctx.is_byz N ∧ decided_for_descendant N A V) →
-    ∃ (I : interaction), decided N V I ∧ ancestor A I
 
 -- Bridge: precommitted_node directly implies a prevote-QC was aggregated
 -- (mirrors respond_prevote's `∃ op. operator op v ∧ prevoted_operator op v ixn`
@@ -1267,16 +1310,72 @@ invariant [no_decide_without_parent]
 invariant [locked_descends_from_genesis]
   (locked N I S V ∧ I ≠ genesis) → ancestor genesis I
 
+
 -- ####################################################################
--- # Ghost Consistency Invariants (locked)
+-- # Height-Indexed Ghost Invariants
+-- # ----------------------------------------------------------------
+-- # Wires up the two VIEW-FREE, PARTICIPANT-FREE descendant height ghosts
+-- # (locked_descendant_at_height, committed_descendant_at_height). Every bit is
+-- # set in lockstep with the matching real `locked`/`decided` write (init,
+-- # respond_prevote inside the new-prevote-lock `if`, respond_precommit
+-- # unconditional) and the sets only ever grow, so all of these are LEAVES —
+-- # preserved by construction. The plain locked_at_height/committed_at_height
+-- # ghosts (the A = genesis instance of these, via locked_descends_from_genesis
+-- # + ancestor_refl) and the view-indexed locked_at_view / proposed_for_descendant
+-- # / decided_for_descendant ghosts were removed as redundant write-only state.
+-- #
+-- # VIEW-ERASURE (cf. IFPJ, whose ghosts carry P and V): dropping the view index
+-- # makes IFPJ's per-view family (lock_height_monotone, unique_lock_height,
+-- # locked_descendant_height_monotone) UNSTATABLE — a node legitimately
+-- # accumulates lock-heights from many views into one set. What survives is:
+-- # fwd/bwd consistency, the descendant height-bound, genesis/zero anchors, and
+-- # the cross-ghost containment below. The no-fork UNIQUENESS crux is NOT here:
+-- # it lives over the real relation in unique_decided_at_height; these ghosts
+-- # only carry the ancestry+height bookkeeping a height-descent argument needs.
 -- ####################################################################
 
-invariant [locked_at_view_fwd]
-  locked N I S V → locked_at_view N V
+-- --- Forward: every real lock/decision is recorded in the height ghost ---
+invariant [locked_descendant_at_height_fwd]
+  (locked N I S V ∧ ancestor A I) → locked_descendant_at_height N A (height I)
 
-invariant [locked_at_view_bwd]
-  (¬ ctx.is_byz N ∧ locked_at_view N V) →
-    ∃ (I : interaction) (S : stage), locked N I S V
+invariant [committed_descendant_at_height_fwd]
+  (decided N V I ∧ ancestor A I) → committed_descendant_at_height N A (height I)
+
+-- --- Backward: an honest height-ghost bit witnesses a real lock/decision. The
+-- view is existentialized (the view-free ghost no longer records which view).
+-- ¬is_byz is the conventional guard on _bwd directions; not strictly required.
+invariant [locked_descendant_at_height_bwd]
+  (¬ ctx.is_byz N ∧ locked_descendant_at_height N A H) →
+    ∃ (I : interaction) (S : stage) (V : view),
+      locked N I S V ∧ ancestor A I ∧ height I = H
+
+invariant [committed_descendant_at_height_bwd]
+  (¬ ctx.is_byz N ∧ committed_descendant_at_height N A H) →
+    ∃ (V : view) (I : interaction), decided N V I ∧ ancestor A I ∧ height I = H
+
+-- --- Height bound: a descendant marker sits at or above its ancestor's height.
+-- The one safety-relevant height fact that survives view-erasure (Go enforces
+-- child.height = parent.height+1, krama_engine.go:987). Each writer sets
+-- H = height ixn together with ancestor A ixn, and ancestor_height_strict +
+-- ancestor_refl give height A ≤ height ixn = H.
+invariant [locked_descendant_height_bound]
+  (¬ ctx.is_byz N ∧ locked_descendant_at_height N A H) → height A ≤ H
+
+invariant [committed_descendant_height_bound]
+  (¬ ctx.is_byz N ∧ committed_descendant_at_height N A H) → height A ≤ H
+
+-- --- Cross-ghost containment (markers set in lockstep ⇒ subset holds).
+-- decision marker ⇒ lock marker (every decide co-fires a precommit lock)
+invariant [committed_descendant_at_height_implies_locked_descendant]
+  committed_descendant_at_height N A H → locked_descendant_at_height N A H
+
+-- --- Genesis / height-0 anchors (init-persistent; ghosts only grow). The
+-- height-0 floor a height-descent argument terminates at.
+invariant [genesis_locked_descendant_at_height_zero]
+  ∀ (n : node), locked_descendant_at_height n genesis 0
+
+invariant [genesis_committed_descendant_at_height_zero]
+  ∀ (n : node), committed_descendant_at_height n genesis 0
 
 -- ####################################################################
 -- # Ancestor Parent Structural Invariants
@@ -1586,7 +1685,7 @@ set_option maxHeartbeats 4000000
 
 set_option veil.printCounterexamples true
 
-#check_action propose_extendx
+#check_action respond_propose_extend
 -- #check_action respond_propose_extend
 -- #check_invariants
 
