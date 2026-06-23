@@ -1,0 +1,106 @@
+#lang ivy1.7
+
+#TODO: Model certificates
+
+include order
+
+module total_order(t) = {
+    property [Transitivity] X:t < Y & Y < Z -> X < Z  
+    property [antisymmetry] ~(X:t < Y & Y < X)
+    property [totality] X:t < Y | X=Y | Y < X
+}
+
+instance heights:unbounded_sequence
+
+# isolate heights = {
+#     type t
+#     # individual min:t
+
+#     specification {
+#         instantiate total_order(t)
+#         property [minimum] 0 < H:t | 0 = H:t
+#     }
+#     implementation {
+#         interpret t -> nat
+#     }
+# }
+
+isolate tree = {
+    type block
+
+    individual genesis:block
+
+    #assign to every block its block height
+    function block_height(B:block):heights.t
+    #assign to every block a predecessor
+    relation prev(B:block,C:block)
+    relation proposed(B:block)
+
+    relation ancestor(B:block, C:block)
+
+    #init
+    after init {
+        prev(B,C) := false;
+        prev(genesis,genesis) := true;
+        proposed(B) := B = genesis;
+        block_height(B) := 0;
+        ancestor(B,C) := B=C;
+    }
+
+    action propose(b_new:block,b_prev:block,h:heights.t) = {
+        #these are assume, not require, to avoid repeting them in hotstuff
+        require ~proposed(b_new);
+        require proposed(b_prev);
+        require block_height(b_prev) < h;
+
+        #create tree
+        prev(b_new,b_prev) := true;
+        block_height(b_new) := h;
+
+        #mark as proposed
+        proposed(b_new) := true;
+
+        ancestor(B,b_new) := ancestor(B,b_prev) | B=b_prev | B = b_new;
+    }
+
+    #export propose
+
+    specification {
+        invariant prev(genesis,genesis)
+        invariant prev(B,C) -> ancestor(C,B)
+        invariant prev(D,C) & ancestor(B,C) -> ancestor(B,D)
+        invariant ~proposed(B) -> ~prev(B,C)
+        invariant ~proposed(B) -> block_height(B) = 0
+        invariant prev(B,C) & prev(B,D) -> C=D
+        invariant prev(B,C) & prev(C,B) -> C=tree.genesis
+        invariant prev(B,C) & B ~= C -> block_height(C) < block_height(B)
+        invariant prev(B,C) -> proposed(C)
+        invariant proposed(B) -> ancestor(genesis,B)
+        invariant prev(B,C) -> ancestor(C,B)
+        invariant ancestor(B,C) & B ~= C -> block_height(B) < block_height(C)
+        invariant ancestor(B,C) & ~proposed(B) -> B=C
+        invariant ancestor(B,B)
+        invariant ancestor(B,C) & ancestor(C,B) -> B=C
+        invariant ancestor(B,C) & ancestor(C,D) -> ancestor(B,D)
+        invariant ancestor(B,D) & ancestor(C,D) -> ancestor(B,C) | ancestor(C,B)
+        invariant ancestor(B,D) & ancestor(C,D) &  ancestor(B,C) & B ~= C & C ~= D -> ~prev(D,B)
+
+        #invariant proposed(B) -> exists D. prev(B,D)
+        #invariant prev(B,C) -> exists D. prev(B,D)
+        #invariant ancestor(B,C) & B~=C -> exists D. prev(C,D) & ancestor(B,D)
+    }
+
+} with heights
+
+isolate base = {
+    type node
+    type quorum
+
+    relation member(N:node, Q:quorum)
+
+    relation is_good(N:node) # should be used only in the proof!
+    axiom forall Q. exists N. is_good(N) & member(N,Q)
+    axiom forall Q1,Q2. exists N. is_good(N) & member(N, Q1) & member(N, Q2)
+}
+
+

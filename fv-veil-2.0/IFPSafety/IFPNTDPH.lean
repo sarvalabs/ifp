@@ -227,6 +227,7 @@ action respond_prepare (n : node) (v : view) {
 -- `op_argmax`.
 action collect_prepares (op : node) (v : view) (s : nodeset) (n_max : node)
     (ixn_max : interaction) (s_max : stage) (v_max : view) {
+  -- (0) Sanity checks.
   require v ≠ tot_view.zero
   require cur_view op v
   require operator op v
@@ -235,32 +236,32 @@ action collect_prepares (op : node) (v : view) (s : nodeset) (n_max : node)
   require prepared_node op v
   require ¬ prepares_collected op v
 
-  -- Prepare-quorum witness (per-member QC-backed lock; matches Go's
-  -- validatePeerHighestQc, consensus/ics_handler.go:512).
+  -- (1) Prepare-quorum witness: a quorum of nodes each sent a genuine (locked)
+  -- prepare-response. NO per-member QC check here — only the highest lock's QC
+  -- is verified, in the argmax witness below (step 3).
   require ctx.supermajority s
   require ∀ (n : node), ctx.member n s → (prepared_node n v ∧
-    ∃ (vl : view) (ixnl : interaction) (sl : stage) (t : nodeset),
+    ∃ (vl : view) (ixnl : interaction) (sl : stage),
       sent_lock_in_prepare n v ixnl sl vl
       ∧ locked n ixnl sl vl
-      ∧ tot_view.le vl v
-      ∧ ctx.supermajority t
-      ∧ (sl = prevote   → ∀ (nt : node), ctx.member nt t → prevoted_node    nt vl ixnl)
-      ∧ (sl = precommit → ∀ (nt : node), ctx.member nt t → precommitted_node nt vl ixnl))
+      ∧ tot_view.le vl v)
 
-  -- Argmax witness: n_max identifies the highest-view sent lock at v.
+  -- (2) Argmax witness: n_max identifies the highest-view sent lock at v.
   require sent_lock_in_prepare n_max v ixn_max s_max v_max
   require locked n_max ixn_max s_max v_max
-  require ∃ (t_max : nodeset), ctx.supermajority t_max
-    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
-    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
   require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
     sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
-  -- (5) No sent_lock at views strictly above v_max (pure ∀ form, EPR).
+  -- No sent_lock at views strictly above v_max (pure ∀ form, EPR).
   require ∀ (vl : view) (n : node) (i' : interaction) (s' : stage),
     (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
       ¬ sent_lock_in_prepare n v i' s' vl
 
-  -- Cache the result. Each decide-template assigns true on the chosen value
+  -- (3) Verify the QC backing the highest lock (`t_max` supermajority).
+  require ∃ (t_max : nodeset), ctx.supermajority t_max
+    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
+    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
+
+  -- (4) Cache the result. Each decide-template assigns true on the chosen value
   -- only, so each op_argmax_* is functional-by-construction.
   prepares_collected op v := true
   op_argmax_ixn   op v I  := decide $ (I = ixn_max)
@@ -788,7 +789,8 @@ invariant [collected_implies_op_argmax_view]
 -- with a VL > VM, making the universal structurally unprovable.
 
 -- Argmax interaction is QC-backed at its claimed (view, stage) for honest op.
--- Discharged by the per-member QC-backing requires inside collect_prepares.
+-- Discharged by the argmax `t_max` QC-backing require (step 3) inside
+-- collect_prepares.
 invariant [op_argmax_qc_backed]
   (¬ ctx.is_byz OP ∧ op_argmax_ixn OP V IM ∧ op_argmax_stage OP V SM ∧ op_argmax_view OP V VM) →
     (SM = prevote → ∃ (Q : nodeset), ctx.supermajority Q ∧
@@ -1685,7 +1687,7 @@ set_option maxHeartbeats 4000000
 
 set_option veil.printCounterexamples true
 
-#check_action respond_propose_extend
+#check_action propose_repropose
 -- #check_action respond_propose_extend
 -- #check_invariants
 
