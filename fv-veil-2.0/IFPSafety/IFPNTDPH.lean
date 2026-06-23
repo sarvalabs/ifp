@@ -66,7 +66,6 @@ relation operator: node → view → Bool
 relation prepared_operator : node → view → Bool
 relation proposed_repropose : node → view → interaction → Bool
 relation proposed_extend : node → view → interaction → Bool
-relation proposed_nil : node → view → Bool
 relation prevoted_operator : node → view → interaction → Bool
 relation precommitted_operator : node → view → interaction → Bool
 
@@ -154,7 +153,6 @@ after_init {
   sent_lock_in_prepare N U L S V := false;
   proposed_repropose N V I := false;
   proposed_extend N V I := false;
-  proposed_nil N V := false;
   prevoted_operator N V I := false;
   precommitted_operator N V I := false;
   prepared_node N V := false;
@@ -283,7 +281,6 @@ action propose_repropose (op : node) (v : view) (ci : interaction) {
   require cur_stage op v propose
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
   -- Consume operator's cached argmax. Argmax fields picked locally (rather
   -- than as action parameters) to keep action arity low for #gen_spec.
   let ixn_max : interaction ← pick
@@ -314,7 +311,6 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   require ixn_propose ≠ genesis
   require ∀ (ix : interaction), ¬ proposed_repropose op v ix
   require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
   -- Consume operator's cached argmax (set by collect_prepares). Argmax fields
   -- picked locally to keep action arity low for #gen_spec.
   let ixn_max : interaction ← pick
@@ -333,31 +329,6 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
   ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
   proposed_extend op v ixn_propose := true;
   height ixn_propose := height ci + 1;
-}
-
--- Nil: highest lock too far ahead, or precommit at committed_height + 1
-action propose_nil (op : node) (v : view) (ci : interaction) {
-  require v ≠ tot_view.zero
-  require cur_view op v
-  require operator op v
-  require prepared_operator op v
-  require prepares_collected op v
-  require cur_stage op v propose
-  require ∀ (ix : interaction), ¬ proposed_repropose op v ix
-  require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  require ¬ proposed_nil op v
-  -- Consume operator's cached argmax (picked locally for low action arity).
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
-  let v_max : view ← pick
-  require op_argmax_ixn   op v ixn_max
-  require op_argmax_stage op v s_max
-  require op_argmax_view  op v v_max
-  -- Height-based decision: heightDiff > 1 OR (heightDiff == 1 && PRECOMMIT) → nil
-  require committed_ixn op ci
-  require (height ixn_max > height ci + 1)
-        ∨ (height ixn_max = height ci + 1 ∧ s_max = precommit)
-  proposed_nil op v := true;
 }
 
 -- ####################################################################
@@ -1531,7 +1502,7 @@ invariant [decide_only_if_precommit_operator]
 
 invariant [stage_2]
   (cur_stage N V prevote ∧ ¬ ctx.is_byz N)
-  → (∃ (i : interaction), ((∃ (op : node), proposed_repropose op V i ∨ proposed_extend op V i) ∧ prevoted_node N V i) ∨ (∃ (op : node), proposed_nil op V))
+  → (∃ (i : interaction), ((∃ (op : node), proposed_repropose op V i ∨ proposed_extend op V i) ∧ prevoted_node N V i))
 
 invariant [unique_proposal]
   ¬ (ctx.is_byz N1 ∨ ctx.is_byz N2) → ( ((proposed_repropose N1 V I1 ∨ proposed_extend N1 V I1) ∧ (proposed_repropose N2 V I2 ∨ proposed_extend N2 V I2)) → (I1 = I2 ∧ N1 = N2) )
