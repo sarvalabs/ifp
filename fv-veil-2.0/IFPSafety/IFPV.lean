@@ -21,7 +21,7 @@
 
 import Veil
 
-veil module IFPProtocolNTDPH
+veil module IFPProtocolV
 
 
 class IFPByzQuorum (node : Type) (nset : Type) where
@@ -64,8 +64,8 @@ relation locked : node → interaction → stage → view → Bool
 -- Operator relations
 relation operator: node → view → Bool
 relation prepared_operator : node → view → Bool
-relation proposed_repropose : node → view → interaction → Bool
-relation proposed_extend : node → view → interaction → Bool
+-- Unified proposal relation (IFPV): replaces proposed_repropose + proposed_extend.
+relation proposed : node → view → interaction → Bool
 relation prevoted_operator : node → view → interaction → Bool
 relation precommitted_operator : node → view → interaction → Bool
 
@@ -78,7 +78,9 @@ relation precommitted_node : node → view → interaction → Bool
 -- Interaction relations
 relation parent : interaction → interaction → Bool
 relation ancestor : interaction → interaction → Bool
-function height : interaction → Nat
+-- HEIGHT ERASED (IFPV): VIEW is the monotone index; `ancestor` carries chain
+-- structure. Acyclicity moves to `ancestor_antisymm` (preserved at `propose` via
+-- the B ≠ A fresh-leaf guards), replacing height's free strictness witness.
 
 -- (Commented out by Claude — references the `height` FUNCTION (above) as a
 -- type, which does not elaborate and blocks the whole build. Restore as
@@ -107,34 +109,27 @@ function height : interaction → Nat
 -- ∃ over a sort is allowed inside a `decide` update.
 relation born_at : interaction → view → Bool
 
--- "Interaction C's PARENT was extended (born) at view VP." Together with
--- born_at C VC this is the minimal birth-view linkage — the parent identity P is
--- recoverable via `parent P C` and the height via `height C`, so this 2-ary
--- relation replaces the 5-ary extend_bridge. The half-open span (VP, VC] is the
--- parent's reproposal run plus the view its commit was discovered.
-relation parent_born_at : interaction → view → Bool
+-- (parent_born_at ERASED in IFPV — a height/run-contiguity artifact; ancestor
+-- descent needs only born_at + parent.)
 
 
 
 
--- Committed state
-relation committed_ixn : node → interaction → Bool
+-- (committed_ixn ERASED in IFPV — the per-node height-baseline frontier the
+-- heightDiff test read; the unified ancestor `propose` reads op_argmax directly.)
 
 -- ####################################################################
 -- # Ghost Relations
 -- ####################################################################
 
--- Height-indexed descendant ghosts (view-free; one accumulating set per node).
--- Write-only ghost state, maintained alongside the real `locked`/`decided`
--- updates. Signatures drop the participant param (cf. IFPJ) and the view index
--- (not needed). Only the descendant-indexed forms are kept; the plain
--- `locked_at_height`/`committed_at_height` were the A = genesis instance of
--- these, and the view-indexed `locked_at_view` / `proposed_for_descendant` /
--- `decided_for_descendant` ghosts were removed as redundant write-only state.
--- "Node N holds a lock on a descendant of A of height H."  ≡ ∃ I S V, locked N I S V ∧ ancestor A I ∧ height I = H
-relation locked_descendant_at_height : node → interaction → Nat → Bool
--- "Node N decided a descendant of A of height H."  ≡ ∃ V I, decided N V I ∧ ancestor A I ∧ height I = H
-relation committed_descendant_at_height : node → interaction → Nat → Bool
+-- VIEW-indexed descendant ghosts (Ivy votedb / committed analog; view is the
+-- monotone index). Write-only, maintained alongside `locked`/`decided`. Drop the
+-- participant param (cf. IFPJ) AND the HEIGHT index IFPJ used — keeping
+-- height-as-rank under reproposal was the IFPJ failure; view is the right axis.
+-- "Node N holds a lock on a descendant of A at view V."  ≡ ∃ I S, locked N I S V ∧ ancestor A I
+relation locked_descendant : node → interaction → view → Bool
+-- "Node N decided a descendant of A at view V."  ≡ ∃ I, decided N V I ∧ ancestor A I
+relation committed_descendant : node → interaction → view → Bool
 
 -- Ghost: a precommit-QC has been aggregated at (V, I) AND at least one node
 -- has witnessed it via respond_precommit. Set by respond_precommit (whose
@@ -153,7 +148,6 @@ relation precommit_backed : view → interaction → Bool
 -- one 5-ary) to keep #gen_spec's simp normalization tractable.
 relation prepares_collected : node → view → Bool
 relation op_argmax_ixn   : node → view → interaction → Bool
-relation op_argmax_stage : node → view → stage → Bool
 relation op_argmax_view  : node → view → view → Bool
 
 -- Validator's cached argmax over received prepare responses (mirror of
@@ -163,7 +157,6 @@ relation op_argmax_view  : node → view → view → Bool
 -- prevote-action) proofs no longer have to re-derive the argmax.
 relation recvd_collected   : node → view → Bool
 relation argmax_recvd_ixn   : node → view → interaction → Bool
-relation argmax_recvd_stage : node → view → stage → Bool
 relation argmax_recvd_view  : node → view → view → Bool
 
 
@@ -184,32 +177,26 @@ after_init {
   ancestor I J := decide $ (I = J);
   locked N I S V := decide $ (I = genesis ∧ S = precommit ∧ V = tot_view.zero);
   decided N V I := decide $ (I = genesis ∧ V = tot_view.zero)
-  height I := 0;
   cur_stage N V S := decide $ (S = prepare);
   operator N V := false;
   cur_view N V := decide $ (V = tot_view.zero);
   prepared_operator N V := false;
   sent_lock_in_prepare N U L S V := false;
-  proposed_repropose N V I := false;
-  proposed_extend N V I := false;
+  proposed N V I := false;
   prevoted_operator N V I := false;
   precommitted_operator N V I := false;
   prepared_node N V := false;
   prevoted_node N V I := false;
   precommitted_node N V I := false;
-  committed_ixn N I := decide $ (I = genesis);
-  locked_descendant_at_height N A H := decide $ (A = genesis ∧ H = 0);
-  committed_descendant_at_height N A H := decide $ (A = genesis ∧ H = 0);
+  locked_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
+  committed_descendant N A V := decide $ (A = genesis ∧ V = tot_view.zero);
   born_at I V := decide $ (I = genesis ∧ V = tot_view.zero);
-  parent_born_at C VP := false;
   precommit_backed V I := false;
   prepares_collected N V := false;
   op_argmax_ixn   N V I := false;
-  op_argmax_stage N V S := false;
   op_argmax_view  N V VL := false;
   recvd_collected   N V := false;
   argmax_recvd_ixn   N V I := false;
-  argmax_recvd_stage N V S := false;
   argmax_recvd_view  N V VL := false;
 }
 
@@ -265,7 +252,7 @@ action respond_prepare (n : node) (v : view) {
 -- check live in this single action; the propose_* actions then just consume
 -- `op_argmax`.
 action collect_prepares (op : node) (v : view) (s : nodeset) (n_max : node)
-    (ixn_max : interaction) (s_max : stage) (v_max : view) {
+    (ixn_max : interaction) (v_max : view) {
   -- (0) Sanity checks.
   require v ≠ tot_view.zero
   require cur_view op v
@@ -285,9 +272,9 @@ action collect_prepares (op : node) (v : view) (s : nodeset) (n_max : node)
       ∧ locked n ixnl sl vl
       ∧ tot_view.le vl v)
 
-  -- (2) Argmax witness: n_max identifies the highest-view sent lock at v.
-  require sent_lock_in_prepare n_max v ixn_max s_max v_max
-  require locked n_max ixn_max s_max v_max
+  -- (2) Argmax witness: n_max identifies the highest-VIEW sent lock at v. STAGE
+  -- erased (IFPV) — existentially witnessed, not cached.
+  require ∃ (s_max : stage), sent_lock_in_prepare n_max v ixn_max s_max v_max ∧ locked n_max ixn_max s_max v_max
   require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
     sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
   -- No sent_lock at views strictly above v_max (pure ∀ form, EPR).
@@ -295,89 +282,56 @@ action collect_prepares (op : node) (v : view) (s : nodeset) (n_max : node)
     (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
       ¬ sent_lock_in_prepare n v i' s' vl
 
-  -- (3) Verify the QC backing the highest lock (`t_max` supermajority).
-  require ∃ (t_max : nodeset), ctx.supermajority t_max
-    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
-    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
+  -- (3) Stage-agnostic QC backing the highest lock (rejects a fake highest lock:
+  -- SOME honest QC — prevote OR precommit — is required at v_max for ixn_max).
+  require ∃ (t_max : nodeset), ctx.supermajority t_max ∧
+    ∀ (nt : node), ctx.member nt t_max → (prevoted_node nt v_max ixn_max ∨ precommitted_node nt v_max ixn_max)
 
-  -- (4) Cache the result. Each decide-template assigns true on the chosen value
-  -- only, so each op_argmax_* is functional-by-construction.
+  -- (4) Cache (ixn, view) only — STAGE dropped.
   prepares_collected op v := true
   op_argmax_ixn   op v I  := decide $ (I = ixn_max)
-  op_argmax_stage op v S  := decide $ (S = s_max)
   op_argmax_view  op v VL := decide $ (VL = v_max)
 }
 
 -- ####################################################################
--- # Proposal Actions (Height-Based, matching Go implementation)
+-- # Unified Proposal Action (ancestor-based — replaces repropose + extend)
+-- # ----------------------------------------------------------------
+-- # B extends-or-equals the highest-VIEW lock A (= op_argmax). B = A is the
+-- # former REPROPOSE; `ancestor A B` (proper descendant) is the former EXTEND.
+-- # Sound OVER-APPROXIMATION of IFP: admits ≥ what repropose+extend admit
+-- # (multi-height jumps included) — the +1/heightDiff guard was liveness, not
+-- # safety (paper Thm 3 uses "descendant", never "+1"). STAGE and HEIGHT are
+-- # erased; VIEW is the monotone index. NOTE: this widens the reachable set, so
+-- # main_safety must be proved on the larger set (the LAP/RISK3 cross-view
+-- # induction is unchanged — see project_ifpv_abstract_rebuild_analysis).
 -- ####################################################################
-
--- Repropose: highest lock is at committed_height + 1 with prevote stage
-action propose_repropose (op : node) (v : view) (ci : interaction) {
+action propose (op : node) (v : view) (B : interaction) {
   require v ≠ tot_view.zero
   require cur_view op v
   require operator op v
   require prepared_operator op v
   require prepares_collected op v
   require cur_stage op v propose
-  require ∀ (ix : interaction), ¬ proposed_repropose op v ix
-  require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  -- Consume operator's cached argmax. Argmax fields picked locally (rather
-  -- than as action parameters) to keep action arity low for #gen_spec.
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
+  require ∀ (ix : interaction), ¬ proposed op v ix          -- one proposal per view
+  -- Consume operator's cached argmax (ixn + VIEW only; STAGE erased).
+  let A : interaction ← pick
   let v_max : view ← pick
-  require op_argmax_ixn   op v ixn_max
-  require op_argmax_stage op v s_max
-  require op_argmax_view  op v v_max
-  -- Height-based decision: heightDiff == 1 && PREVOTE → repropose
-  require committed_ixn op ci
-  require ancestor genesis ci
-  require height ixn_max = height ci + 1
-  require s_max = prevote
-  proposed_repropose op v ixn_max := true;
-}
-
--- Extend: all locks at committed_height → fresh proposal
-action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : interaction) {
-  require v ≠ tot_view.zero
-  require ∀ (j : interaction), ¬ (parent j ixn_propose ∨ parent ixn_propose j)
-  require ∀ (j : interaction), (ixn_propose ≠ j → ¬ (ancestor j ixn_propose ∨ ancestor ixn_propose j))
-  require height ixn_propose = 0
-  require cur_view op v
-  require operator op v
-  require prepared_operator op v
-  require prepares_collected op v
-  require cur_stage op v propose
-  require ixn_propose ≠ genesis
-  require ∀ (ix : interaction), ¬ proposed_repropose op v ix
-  require ∀ (ix : interaction), ¬ proposed_extend op v ix
-  -- Consume operator's cached argmax (set by collect_prepares). Argmax fields
-  -- picked locally to keep action arity low for #gen_spec.
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
-  let v_max : view ← pick
-  require op_argmax_ixn   op v ixn_max
-  require op_argmax_stage op v s_max
-  require op_argmax_view  op v v_max
-  -- Height-based decision: heightDiff == 0 → extend
-  require committed_ixn op ci
-  require ancestor genesis ci
-  require height ixn_max = height ci
-  require ci ≠ ixn_propose
-  require ¬ (ancestor ci ixn_propose ∨ ancestor ixn_propose ci)
-  parent ci ixn_propose := decide $ (ci ≠ ixn_propose);
-  ancestor A ixn_propose := decide $ (ancestor A ixn_propose ∨ ancestor A ci ∨ A = ci ∨ A = ixn_propose);
-  proposed_extend op v ixn_propose := true;
-  height ixn_propose := height ci + 1;
-  -- GHOST (reproposal-run): record I's birth + the parent→child extend bridge.
-  -- `born_at ci VP` is a Bool lookup of the parent's birth view, so the bridge
-  -- threads it without an existential. ci ≠ ixn_propose (required above), so the
-  -- born_at write does not perturb the ci lookup; H = height ci + 1 avoids any
-  -- dependence on the height update above.
-  born_at I V := decide $ (born_at I V ∨ (I = ixn_propose ∧ V = v));
-  -- C's parent is ci; ci was born at the VP for which born_at ci VP holds.
-  parent_born_at C VP := decide $ (parent_born_at C VP ∨ (C = ixn_propose ∧ born_at ci VP));
+  require op_argmax_ixn  op v A
+  require op_argmax_view op v v_max
+  require ancestor genesis A
+  -- UNIFIED ANCESTOR GUARD: B extends-or-equals the highest-view lock.
+  require A = B ∨ ancestor A B
+  -- Fresh-leaf guards (fire only when B ≠ A): B is a brand-new node, no cycle.
+  -- These preserve ancestor antisymmetry WITHOUT height.
+  require (B ≠ A) → (∀ (j : interaction), ¬ (parent j B ∨ parent B j))
+  require (B ≠ A) → (∀ (j : interaction), B ≠ j → ¬ (ancestor j B ∨ ancestor B j))
+  require (B ≠ A) → B ≠ genesis
+  -- Updates. Extend (B ≠ A) mints child B off A; repropose (B = A) is a tree no-op.
+  parent A B := decide $ (B ≠ A);
+  ancestor X B := decide $ (ancestor X B ∨ ancestor X A ∨ X = A ∨ X = B);
+  proposed op v B := true;
+  -- GHOST: a freshly-minted (extend) B is born at view v.
+  born_at I V := decide $ (born_at I V ∨ (I = B ∧ B ≠ A ∧ V = v));
 }
 
 -- ####################################################################
@@ -389,7 +343,7 @@ action propose_extend (op : node) (v : view) (ixn_propose : interaction) (ci : i
 -- (n, v) rather than once per prevote attempt. Result is cached in
 -- argmax_recvd_*; the two respond_propose_* actions consume the cache.
 action collect_recvd_locks (n : node) (v : view) (s : nodeset) (n_max : node)
-    (ixn_max : interaction) (s_max : stage) (v_max : view) {
+    (ixn_max : interaction) (v_max : view) {
   require v ≠ tot_view.zero
   require cur_view n v
   require cur_stage n v propose
@@ -406,71 +360,44 @@ action collect_recvd_locks (n : node) (v : view) (s : nodeset) (n_max : node)
       ∧ locked m ixnl sl vl
       ∧ tot_view.le vl v)
 
-  -- Argmax witness: n_max identifies the highest-view sent lock at v, and
-  -- (step 3) that highest lock is verified QC-backed (`t_max` supermajority).
-  require sent_lock_in_prepare n_max v ixn_max s_max v_max
-  require locked n_max ixn_max s_max v_max
+  -- Argmax witness: n_max identifies the highest-VIEW sent lock at v. STAGE
+  -- erased (IFPV) — existentially witnessed, not cached.
+  require ∃ (s_max : stage), sent_lock_in_prepare n_max v ixn_max s_max v_max ∧ locked n_max ixn_max s_max v_max
   require ∀ (n_l : node) (ixn_l : interaction) (s_l : stage) (v_l : view),
     sent_lock_in_prepare n_l v ixn_l s_l v_l → tot_view.le v_l v_max
   -- No sent_lock at views strictly above v_max (pure ∀ form, EPR).
   require ∀ (vl : view) (n' : node) (i' : interaction) (s' : stage),
     (tot_view.lt v_max vl ∧ tot_view.lt vl v) →
       ¬ sent_lock_in_prepare n' v i' s' vl
-  require ∃ (t_max : nodeset), ctx.supermajority t_max
-    ∧ (s_max = prevote   → ∀ (nt : node), ctx.member nt t_max → prevoted_node    nt v_max ixn_max)
-    ∧ (s_max = precommit → ∀ (nt : node), ctx.member nt t_max → precommitted_node nt v_max ixn_max)
+  -- Stage-agnostic QC backing the highest lock.
+  require ∃ (t_max : nodeset), ctx.supermajority t_max ∧
+    ∀ (nt : node), ctx.member nt t_max → (prevoted_node nt v_max ixn_max ∨ precommitted_node nt v_max ixn_max)
 
-  -- Cache the result. Functional-by-construction via `decide`.
+  -- Cache (ixn, view) only — STAGE dropped.
   recvd_collected n v := true
   argmax_recvd_ixn   n v I  := decide $ (I = ixn_max)
-  argmax_recvd_stage n v S  := decide $ (S = s_max)
   argmax_recvd_view  n v VL := decide $ (VL = v_max)
 }
 
--- Repropose branch: argmax is a prevote-stage lock at the same interaction
--- the operator is reproposing.
-action respond_propose_repropose (n : node) (v : view) (ixn : interaction) {
+-- ####################################################################
+-- # Unified validator vote (ancestor-based — replaces both respond_propose_*)
+-- # SAME guard as `propose` (symmetric — asymmetry would break the
+-- # over-approximation: validators must accept every operator move IFP allows).
+-- ####################################################################
+action respond_propose (n : node) (v : view) (B : interaction) {
   require v ≠ tot_view.zero
   require cur_view n v
   require cur_stage n v propose
-  require ∃ (op : node), operator op v ∧ proposed_repropose op v ixn
-  require ∀ (i : interaction), ¬ prevoted_node n v i
-  require ixn ≠ genesis
+  require ∃ (op : node), operator op v ∧ proposed op v B
+  require ∀ (i : interaction), ¬ prevoted_node n v i        -- INV-1 source (one prevote/view)
+  require B ≠ genesis
   require recvd_collected n v
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
+  let A : interaction ← pick
   let v_max : view ← pick
-  require argmax_recvd_ixn   n v ixn_max
-  require argmax_recvd_stage n v s_max
-  require argmax_recvd_view  n v v_max
-  require s_max = prevote
-  require ixn = ixn_max
-  require height ixn = height ixn_max
-  prevoted_node n v ixn := true
-  cur_stage n v S := decide $ (S = prevote)
-}
-
--- Extend branch: argmax is a precommit-stage lock and the operator is
--- proposing a fresh child of the locked interaction.
-action respond_propose_extend (n : node) (v : view) (ixn : interaction) {
-  require v ≠ tot_view.zero
-  require cur_view n v
-  require cur_stage n v propose
-  require ∃ (op : node), operator op v ∧ proposed_extend op v ixn
-  require ∀ (i : interaction), ¬ prevoted_node n v i
-  require ixn ≠ genesis
-  require recvd_collected n v
-  let ixn_max : interaction ← pick
-  let s_max : stage ← pick
-  let v_max : view ← pick
-  require argmax_recvd_ixn   n v ixn_max
-  require argmax_recvd_stage n v s_max
-  require argmax_recvd_view  n v v_max
-  require s_max = precommit
-  require ixn ≠ ixn_max
-  require parent ixn_max ixn
-  require height ixn = height ixn_max + 1
-  prevoted_node n v ixn := true
+  require argmax_recvd_ixn  n v A
+  require argmax_recvd_view n v v_max
+  require A = B ∨ ancestor A B                               -- SAME ancestor vote rule
+  prevoted_node n v B := true
   cur_stage n v S := decide $ (S = prevote)
 }
 
@@ -495,8 +422,8 @@ action respond_prevote (n : node) (v : view) (ixn : interaction) (s : nodeset) {
   precommitted_node n v ixn := true
   if ( ¬ ∃ (u : view), (tot_view.le u v ∧ locked n ixn precommit u) ) then
     locked n ixn prevote v := true;
-    -- GHOST: new prevote lock at height (height ixn), on every ancestor A of ixn.
-    locked_descendant_at_height n A H := decide $ (locked_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
+    -- GHOST (view-indexed): N now holds a lock on every ancestor A of ixn, at view v.
+    locked_descendant n A V := decide $ (locked_descendant n A V ∨ (ancestor A ixn ∧ V = v));
   cur_stage n v S := decide $ (S = precommit)
 }
 
@@ -525,86 +452,22 @@ action respond_precommit (n : node) (v : view) (ixn : interaction) (s : nodeset)
   -- to operator_precommit's old write, just deferred to the first witnessing.
   precommit_backed v ixn := true
   locked n ixn precommit v := true;
-  -- GHOST: new precommit lock at height (height ixn), on every ancestor A of ixn.
-  locked_descendant_at_height n A H := decide $ (locked_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
+  -- GHOST (view-indexed): N now holds a lock on every ancestor A of ixn, at view v.
+  locked_descendant n A V := decide $ (locked_descendant n A V ∨ (ancestor A ixn ∧ V = v));
   decided n v ixn := true
-  -- GHOST: node decided a descendant of A at height (height ixn), on every ancestor A of ixn.
-  committed_descendant_at_height n A H := decide $ (committed_descendant_at_height n A H ∨ (ancestor A ixn ∧ H = height ixn));
-  -- Update committed interaction only if this is a newer decision
-  if (∃ (ci_old : interaction), committed_ixn n ci_old ∧ height ixn > height ci_old) then
-    committed_ixn n I := decide $ (I = ixn);
+  -- GHOST (view-indexed): N decided a descendant of every ancestor A of ixn, at view v.
+  committed_descendant n A V := decide $ (committed_descendant n A V ∨ (ancestor A ixn ∧ V = v));
   cur_stage n v S := decide $ (S = commit)
 }
 
 
--- [RISK 2 — target, times out on respond_propose_repropose]
--- Tendermint-style lock propagation, in IFP chain-extension form.
---   precommit_backed V I  (some honest node has witnessed a precommit-QC for I at V)
---     → any later honest prevote at V2 > V is on I or a descendant of I
--- The "V2 = nil" Tendermint disjunct is replaced by "ancestor I J" since IFP
--- proposals extend rather than carry a nil value.
---
--- Discharge plan (manual proof, /manual-prove):
--- At respond_propose_repropose, the post-state asserts prevoted_node n v ixn
--- with ixn = ixn_max from action. For any precommit_backed V I with V < v:
---   (a) Pull V_max from argmax_recvd_view n v V_max (action precondition).
---   (b) Case V ≤ V_max: apply Step 3 (argmax_recvd_ixn_descends_from_
---       precommit_backed_at_bounded_view) with U := V → I = ixn_max
---       ∨ ancestor I ixn_max; conclude.
---   (c) Case V > V_max:
---       - precommit_backed_fwd V → precommit-quorum t.
---       - RISK 1 (recvd_collected_implies_bounded_prepare_quorum) → prepare-
---         quorum s with VL ≤ V_max per member.
---       - supermajorities_intersect_in_honest s t → honest m* in s ∩ t.
---       - m* ∈ t ⇒ precommitted_node m* V I; precommit_node_locked_at_same_view
---         gives prevote-at-V or precommit-at-U′≤V.
---       - m* ∈ s ⇒ sent_lock m* v _ _ VL ∧ locked m* _ _ VL ∧ VL ≤ V_max;
---         highest_lock_sent kills the prevote-at-V and precommit-at-U′>V_max
---         branches. Remaining branch: locked m* I precommit U′ with U′≤V_max.
---       - precommit_lock_implies_precommit_backed → precommit_backed U′ I.
---       - Apply Step 3 with U := U′ → I = ixn_max ∨ ancestor I ixn_max.
---   For _extend, parent ixn_max ixn + ancestor_from_parent + ancestor_trans
---   gives ancestor I ixn (rather than I = ixn).
-
-invariant [locks_analog_precommit]
-  ∀ (V V2 : view) (I J : interaction) (NP : node),
-    (¬ ctx.is_byz NP ∧
-     precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
-     prevoted_node NP V2 J ∧
-     tot_view.lt V V2) →
-    (J = I ∨ ancestor I J)
-
-
--- [RISK 3 — feeder for RISK 2 (locks_analog_precommit); mutually inductive with it]
--- Step 3 — Conditional ancestry: the validator-side cached argmax interaction IM
--- descends from any precommit_backed I WHEN the argmax view V_max already dominates
--- the precommit view U (tot_view.le U V_max). Discharged at collect_recvd_locks by
--- crossing argmax_recvd_qc_backed's quorum at V_max with precommit_backed_fwd's
--- quorum at U to an honest m*; for V_max > U apply the IH locks_analog_precommit on
--- (U, V_max); for V_max = U close via unique_prevote_nodes (INV1) +
--- precommit_nodes_only_if_prevoted_for_same_ixn.
-invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
-  ∀ (U V_act V_max : view) (I IM : interaction) (N : node),
-    (¬ ctx.is_byz N ∧
-     precommit_backed U I ∧ I ≠ genesis ∧
-     argmax_recvd_ixn N V_act IM ∧ argmax_recvd_view N V_act V_max ∧
-     tot_view.lt U V_act ∧ tot_view.le U V_max) →
-    (I = IM ∨ ancestor I IM)
-
--- [RISK 1] prepare-quorum members captured by recvd_collected have sent-lock views
--- bounded by the cached argmax view VMAX. Discharged at collect_recvd_locks (its
--- supermajority s + per-member sent_lock + the argmax-dominance require give
--- VL ≤ VMAX); monotone elsewhere. Feeds the gap case of locks_analog_precommit.
-invariant [recvd_collected_implies_bounded_prepare_quorum]
-  (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
-    ∃ (s : nodeset), ctx.supermajority s ∧
-      ∀ (m : node), ctx.member m s →
-        prepared_node m VACT ∧
-        ∃ (IL : interaction) (SL : stage) (VL : view),
-          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
-          tot_view.le VL VMAX
-
-
+-- ════════════════════════════════════════════════════════════════════
+-- IFPV MIGRATION CHECKPOINT (Step 1-2): invariant region commented out
+-- wholesale to verify STATE + ACTIONS elaborate. Restore tier by tier per
+-- project_ifpv_abstract_rebuild_analysis: Tier 0 tree/ancestor leaves →
+-- INV-1 → ghosts → same-view → qc_anchored/RISK1/RISK3 → LAP/B6 → safety.
+-- ════════════════════════════════════════════════════════════════════
+/-
 -- ####################################################################
 -- # ===== ACTIVE FRONTIER — VERIFY FIRST (this session) =====
 -- # Invariants under active check after restoring RISK1 + dropping the false
@@ -617,21 +480,21 @@ invariant [recvd_collected_implies_bounded_prepare_quorum]
 -- ####################################################################
 
 
--- -- B3a (repropose carrier): prevote-stage argmax ⇒ J itself prevote-certified at VM.
--- invariant [qc_anchored_repropose]
---   (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
---    argmax_recvd_stage N V2 prevote) →
---     ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
---       (∃ (s : nodeset), ctx.supermajority s ∧
---           ∀ (m : node), ctx.member m s → prevoted_node m VM J)
+-- B3a (repropose carrier): prevote-stage argmax ⇒ J itself prevote-certified at VM.
+invariant [qc_anchored_repropose]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
+   argmax_recvd_stage N V2 prevote) →
+    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
+      (∃ (s : nodeset), ctx.supermajority s ∧
+          ∀ (m : node), ctx.member m s → prevoted_node m VM J)
 
--- -- B3b (extend carrier): precommit-stage argmax ⇒ J's parent P precommit-certified at VM.
--- invariant [qc_anchored_extend]
---   (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
---    argmax_recvd_stage N V2 precommit) →
---     ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
---       (∃ (P : interaction) (s : nodeset), ctx.supermajority s ∧ parent P J ∧
---           ∀ (m : node), ctx.member m s → precommitted_node m VM P)
+-- B3b (extend carrier): precommit-stage argmax ⇒ J's parent P precommit-certified at VM.
+invariant [qc_anchored_extend]
+  (¬ ctx.is_byz N ∧ prevoted_node N V2 J ∧ J ≠ genesis ∧ V2 ≠ tot_view.zero ∧
+   argmax_recvd_stage N V2 precommit) →
+    ∃ (VM : view), argmax_recvd_view N V2 VM ∧ tot_view.lt VM V2 ∧
+      (∃ (P : interaction) (s : nodeset), ctx.supermajority s ∧ parent P J ∧
+          ∀ (m : node), ctx.member m s → precommitted_node m VM P)
 
 
 -- ####################################################################
@@ -747,7 +610,18 @@ invariant [locks_analog_decided]
      tot_view.lt V V2) →
     (I = I2 ∨ ancestor I I2)
 
-
+-- [RISK 1] prepare-quorum members captured by recvd_collected have sent-lock views
+-- bounded by the cached argmax view VMAX. Discharged at collect_recvd_locks (its
+-- supermajority s + per-member sent_lock + the argmax-dominance require give
+-- VL ≤ VMAX); monotone elsewhere. Feeds the gap case of locks_analog_precommit.
+invariant [recvd_collected_implies_bounded_prepare_quorum]
+  (recvd_collected N VACT ∧ argmax_recvd_view N VACT VMAX) →
+    ∃ (s : nodeset), ctx.supermajority s ∧
+      ∀ (m : node), ctx.member m s →
+        prepared_node m VACT ∧
+        ∃ (IL : interaction) (SL : stage) (VL : view),
+          sent_lock_in_prepare m VACT IL SL VL ∧ locked m IL SL VL ∧
+          tot_view.le VL VMAX
 
 
 -- Companion (relock side): the same reproposed block gets prevote-locked again
@@ -766,6 +640,21 @@ invariant [reproposed_relock_at_view_implies_argmax]
 
 
 
+-- [RISK 3 — feeder for RISK 2 (locks_analog_precommit); mutually inductive with it]
+-- Step 3 — Conditional ancestry: the validator-side cached argmax interaction IM
+-- descends from any precommit_backed I WHEN the argmax view V_max already dominates
+-- the precommit view U (tot_view.le U V_max). Discharged at collect_recvd_locks by
+-- crossing argmax_recvd_qc_backed's quorum at V_max with precommit_backed_fwd's
+-- quorum at U to an honest m*; for V_max > U apply the IH locks_analog_precommit on
+-- (U, V_max); for V_max = U close via unique_prevote_nodes (INV1) +
+-- precommit_nodes_only_if_prevoted_for_same_ixn.
+invariant [argmax_recvd_ixn_descends_from_precommit_backed_at_bounded_view]
+  ∀ (U V_act V_max : view) (I IM : interaction) (N : node),
+    (¬ ctx.is_byz N ∧
+     precommit_backed U I ∧ I ≠ genesis ∧
+     argmax_recvd_ixn N V_act IM ∧ argmax_recvd_view N V_act V_max ∧
+     tot_view.lt U V_act ∧ tot_view.le U V_max) →
+    (I = IM ∨ ancestor I IM)
 
 
 -- B3a+ (reproposal prevote-QC anchor): when an honest N prevotes J in the repropose
@@ -993,6 +882,53 @@ invariant [prevoted_node_implies_recvd_collected]
 -- is ruled out by V_act ≤ cur_view = V_pre) and on set_view (advance).
 invariant [recvd_collected_at_past_view]
   (recvd_collected N V ∧ cur_view N1 VC) → tot_view.le V VC
+
+  -- [locks_analog_decided relocated to the ACTIVE FRONTIER block at top of invariant list]
+
+
+-- ####################################################################
+-- # Top-level safety invariants (most likely to fail, sited with main_safety)
+-- # Ordered: highest-risk-with-current-edit first.
+-- ####################################################################
+
+-- [RISK 1 (recvd_collected_implies_bounded_prepare_quorum) relocated to the ACTIVE FRONTIER block at top of invariant list]
+
+-- [RISK 2 — target, times out on respond_propose_repropose]
+-- Tendermint-style lock propagation, in IFP chain-extension form.
+--   precommit_backed V I  (some honest node has witnessed a precommit-QC for I at V)
+--     → any later honest prevote at V2 > V is on I or a descendant of I
+-- The "V2 = nil" Tendermint disjunct is replaced by "ancestor I J" since IFP
+-- proposals extend rather than carry a nil value.
+--
+-- Discharge plan (manual proof, /manual-prove):
+-- At respond_propose_repropose, the post-state asserts prevoted_node n v ixn
+-- with ixn = ixn_max from action. For any precommit_backed V I with V < v:
+--   (a) Pull V_max from argmax_recvd_view n v V_max (action precondition).
+--   (b) Case V ≤ V_max: apply Step 3 (argmax_recvd_ixn_descends_from_
+--       precommit_backed_at_bounded_view) with U := V → I = ixn_max
+--       ∨ ancestor I ixn_max; conclude.
+--   (c) Case V > V_max:
+--       - precommit_backed_fwd V → precommit-quorum t.
+--       - RISK 1 (recvd_collected_implies_bounded_prepare_quorum) → prepare-
+--         quorum s with VL ≤ V_max per member.
+--       - supermajorities_intersect_in_honest s t → honest m* in s ∩ t.
+--       - m* ∈ t ⇒ precommitted_node m* V I; precommit_node_locked_at_same_view
+--         gives prevote-at-V or precommit-at-U′≤V.
+--       - m* ∈ s ⇒ sent_lock m* v _ _ VL ∧ locked m* _ _ VL ∧ VL ≤ V_max;
+--         highest_lock_sent kills the prevote-at-V and precommit-at-U′>V_max
+--         branches. Remaining branch: locked m* I precommit U′ with U′≤V_max.
+--       - precommit_lock_implies_precommit_backed → precommit_backed U′ I.
+--       - Apply Step 3 with U := U′ → I = ixn_max ∨ ancestor I ixn_max.
+--   For _extend, parent ixn_max ixn + ancestor_from_parent + ancestor_trans
+--   gives ancestor I ixn (rather than I = ixn).
+
+-- invariant [locks_analog_precommit]
+--   ∀ (V V2 : view) (I J : interaction) (NP : node),
+--     (¬ ctx.is_byz NP ∧
+--      precommit_backed V I ∧ I ≠ genesis ∧ J ≠ genesis ∧
+--      prevoted_node NP V2 J ∧
+--      tot_view.lt V V2) →
+--     (J = I ∨ ancestor I J)
 
 -- ####################################################################
 -- # argmax_recvd cache invariants (validator-side mirror of op_argmax_*)
@@ -1737,212 +1673,25 @@ invariant [prevoted_height_positive]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) → height I ≥ 1
 
 
+-/
+
+-- IFPV: single active safety — ancestor-comparability of honest decisions
+-- (branch agreement). Supporting invariants restored tier by tier above.
+safety [main_safety]
+  ∀ (n1 n2 : node) (v1 v2 : view) (i1 i2 : interaction),
+    (¬ ctx.is_byz n1 ∧ ¬ ctx.is_byz n2 ∧
+     decided n1 v1 i1 ∧
+     decided n2 v2 i2) →
+    (ancestor i1 i2 ∨ ancestor i2 i1)
+
 set_option veil.smt.timeout 15000
 set_option maxHeartbeats 4000000
 #gen_spec
 
 set_option veil.printCounterexamples true
 
--- #check_action respond_precommit
-
--- -- Successfully Proven.
--- theorem collect_recvd_locks_recvd_collected_implies_bounded_prepare_quorum (ρ : Type) (σ : Type) (view : Type)
---     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
---     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
---     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
---     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
---     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
---     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
---     [χ_rep :
---       ∀ __veil_f,
---         Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
---     [χ_rep_lawful :
---       ∀ __veil_f,
---         Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
---           (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
---     [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
---     [collect_recvd_locks_dec_0 : delta% @IFPProtocolNTDPH._veil_dec_type_1167942 nodeset node ctx]
---     [collect_recvd_locks_dec_1 :
---       delta% @IFPProtocolNTDPH._veil_dec_type_1168068 view nodeset χ node ctx interaction stage χ_rep tot_view]
---     [collect_recvd_locks_dec_2 :
---       delta% @IFPProtocolNTDPH._veil_dec_type_1168172 view χ node interaction stage nodeset χ_rep tot_view]
---     [collect_recvd_locks_dec_3 :
---       delta% @IFPProtocolNTDPH._veil_dec_type_1168284 view χ node interaction stage tot_view nodeset χ_rep]
---     [collect_recvd_locks_dec_4 :
---       delta% @IFPProtocolNTDPH._veil_dec_type_1168414 interaction stage view χ node nodeset ctx χ_rep] :
---     ∀ (n : node) (v : view) (s : nodeset) (n_max : node) (ixn_max : interaction) (s_max : stage) (v_max : view),
---       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
---         (@collect_recvd_locks.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
---           interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
---           stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub collect_recvd_locks_dec_0
---           collect_recvd_locks_dec_1 collect_recvd_locks_dec_2 collect_recvd_locks_dec_3 collect_recvd_locks_dec_4 n v s
---           n_max ixn_max s_max v_max)
---         (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
---           interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
---           ρ_sub)
---         (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
---           interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
---           χ χ_rep χ_rep_lawful σ_sub ρ_sub)
---         (@recvd_collected_implies_bounded_prepare_quorum ρ σ view view_dec_eq view_inhabited node node_dec_eq
---           node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited
---           stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
---   by
---   veil_human
---   intro hv_nz hcv hcs hpn hnrc hsm hmem hsl_max hlk_max hdom hgap tmax htmax_sm htmax_pv
---     htmax_pc N VACT VMAX h_rc h_av
---   by_cases h_match : N = n ∧ VACT = v
---   · -- New write at (n, v): the action's own prepare-quorum `s` witnesses RISK1, and
---     -- VMAX = v_max via the argmax_recvd_view decide-update. VL ≤ VMAX comes from the
---     -- argmax-dominance precondition `hdom`, NOT the per-member `vl ≤ v`.
---     obtain ⟨hN, hV⟩ := h_match
---     subst N
---     subst VACT
---     refine ⟨s, hsm, fun m hm => ?_⟩
---     obtain ⟨h_prep, vl, ixnl, sl, h_sent, h_lock, _⟩ := hmem m hm
---     refine ⟨h_prep, ixnl, sl, vl, h_sent, h_lock, ?_⟩
---     have h_dom : tot_view.le vl v_max := hdom m ixnl sl vl h_sent
---     rw [if_pos (And.intro rfl rfl)] at h_av
---     rw [h_av]
---     exact h_dom
---   · -- Pre-state: (N, VACT) ≠ (n, v). collect_recvd_locks only writes recvd_collected /
---     -- argmax_recvd_*, leaving sent_lock_in_prepare / locked / prepared_node untouched, so
---     -- RISK1's pre-state instance (h_risk1 from hinv, declaration position 3) applies.
---     obtain ⟨_, _, h_risk1, _⟩ := hinv
---     have h_rc_pre : st.recvd_collected N VACT = true :=
---       h_rc (fun hn hv => h_match ⟨hn.symm, hv.symm⟩)
---     have h_match' : ¬(n = N ∧ v = VACT) := fun h => h_match ⟨h.1.symm, h.2.symm⟩
---     rw [if_neg h_match'] at h_av
---     exact h_risk1 N VACT VMAX h_rc_pre h_av
-
-theorem respond_propose_repropose_locks_analog_precommit (ρ : Type) (σ : Type) (view : Type)
-    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
-    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
-    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
-    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
-    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
-    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
-    [χ_rep :
-      ∀ __veil_f,
-        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
-          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
-    [χ_rep_lawful :
-      ∀ __veil_f,
-        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
-          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
-    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
-    [respond_propose_repropose_dec_0 :
-      delta% @IFPProtocolNTDPH._veil_dec_type_1292099 view interaction χ node nodeset stage χ_rep]
-    [respond_propose_repropose_dec_1 :
-      delta% @IFPProtocolNTDPH._veil_dec_type_1292170 node view χ interaction nodeset stage χ_rep] :
-    ∀ (n : node) (v : view) (ixn : interaction),
-      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
-        (@respond_propose_repropose.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
-          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
-          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_propose_repropose_dec_0
-          respond_propose_repropose_dec_1 n v ixn)
-        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
-          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
-          ρ_sub)
-        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
-          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
-          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
-        (@locks_analog_precommit ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
-          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
-          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
-  by
-  veil_human
-  intro hv_nz hcv hcs op_w hop hpr h_no_prev hixn_ng hrc t t_1 t_2
-    hari has hav h_stage_eq h_ixn_eq h_height_eq V V2 I J NP hnbyz hpb hI_ng hJ_ng h_prev_post hlt
-  -- PORTED from IFPNTDP.lean L2004-2159 (working). hinv positions for IFPNTDPH's
-  -- CURRENT declaration order (main_safety + indented invariants counted):
-  -- locks_analog_precommit=1, argmax_recvd_ixn_descends...=2,
-  -- recvd_collected_implies_bounded_prepare_quorum=3, precommit_node_locked_at_same_view=46,
-  -- precommit_backed_fwd=60, precommit_lock_implies_precommit_backed=72, highest_lock_sent=76.
-  obtain ⟨h_lap,
-          h_step3,
-          h_rcibpq,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _,
-          h_pcnlsv,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _,
-          h_pbf,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _,
-          h_plipb,
-          _, _, _,
-          h_hls,
-          _⟩ := hinv
-  subst h_ixn_eq
-  by_cases h_match : NP = n ∧ V2 = v ∧ J = ixn
-  · obtain ⟨hNPeq, hV2eq, hJeq⟩ := h_match
-    subst NP; subst V2; subst J
-    by_cases h_le : TotalOrderWithMinimum.le V t_2
-    · have h := h_step3 V v t_2 I ixn n hnbyz hpb hI_ng hari hav hlt h_le
-      cases h with
-      | inl heq => exact Or.inl heq.symm
-      | inr hanc => exact Or.inr hanc
-    · have le_lt_trans : ∀ {a b c : view},
-          TotalOrderWithMinimum.le a b → TotalOrderWithMinimum.lt b c →
-          TotalOrderWithMinimum.lt a c := by
-        intros a b c hab hbc
-        have ⟨hbc_le, hbc_ne⟩ := (tot_view.le_lt _ _).mp hbc
-        refine (tot_view.le_lt _ _).mpr ⟨tot_view.le_trans _ _ _ hab hbc_le, ?_⟩
-        rintro rfl
-        exact hbc_ne (tot_view.le_antisymm _ _ hab hbc_le).symm
-      have h_t2_lt_V : TotalOrderWithMinimum.lt t_2 V := by
-        rcases tot_view.le_total V t_2 with hVT | hTV
-        · exact absurd hVT h_le
-        · refine (tot_view.le_lt _ _).mpr ⟨hTV, ?_⟩
-          rintro rfl
-          exact h_le (tot_view.le_refl _)
-      obtain ⟨t_set, ht_sm, ht_mem⟩ := h_pbf V I hpb
-      obtain ⟨s_set, hs_sm, hs_mem⟩ := h_rcibpq n v t_2 hrc hav
-      obtain ⟨mstar, hm_s, hm_t, hm_honest⟩ :=
-        ctx.supermajorities_intersect_in_honest s_set t_set ⟨hs_sm, ht_sm⟩
-      have hpc_m : st.precommitted_node mstar V I = true := ht_mem mstar hm_t
-      obtain ⟨_, IL, SL, VL, h_slip, _, h_VL_le⟩ := hs_mem mstar hm_s
-      obtain ⟨_, _, h_no_lock_btw, _⟩ := h_hls mstar v IL SL VL h_slip
-      have h_VL_lt_V : TotalOrderWithMinimum.lt VL V := le_lt_trans h_VL_le h_t2_lt_V
-      have h_lock_choice := h_pcnlsv mstar V I hm_honest hpc_m hI_ng
-      cases h_lock_choice with
-      | inl h_prev_V =>
-        have h_no := h_no_lock_btw I th.prevote V h_VL_lt_V hlt
-        exact absurd h_prev_V (fun h => by rw [h] at h_no; exact Bool.noConfusion h_no)
-      | inr h_pre_exists =>
-        obtain ⟨U, h_U_le_V, h_loc_U⟩ := h_pre_exists
-        by_cases h_U_le_t2 : TotalOrderWithMinimum.le U t_2
-        · have h_pb_U : st.precommit_backed U I = true := h_plipb mstar I U h_loc_U hI_ng
-          have h_U_lt_v : TotalOrderWithMinimum.lt U v := le_lt_trans h_U_le_V hlt
-          have h := h_step3 U v t_2 I ixn n hnbyz h_pb_U hI_ng hari hav h_U_lt_v h_U_le_t2
-          cases h with
-          | inl heq => exact Or.inl heq.symm
-          | inr hanc => exact Or.inr hanc
-        · have h_t2_lt_U : TotalOrderWithMinimum.lt t_2 U := by
-            rcases tot_view.le_total U t_2 with hUT | hTU
-            · exact absurd hUT h_U_le_t2
-            · refine (tot_view.le_lt _ _).mpr ⟨hTU, ?_⟩
-              rintro rfl
-              exact h_U_le_t2 (tot_view.le_refl _)
-          have h_VL_lt_U : TotalOrderWithMinimum.lt VL U := le_lt_trans h_VL_le h_t2_lt_U
-          have h_U_lt_v : TotalOrderWithMinimum.lt U v := le_lt_trans h_U_le_V hlt
-          have h_no := h_no_lock_btw I th.precommit U h_VL_lt_U h_U_lt_v
-          exact absurd h_loc_U (fun h => by rw [h] at h_no; exact Bool.noConfusion h_no)
-  · have h_neq : n = NP → v = V2 → ¬ixn = J := by
-      intro hnNP hvV2 hixnJ
-      exact h_match ⟨hnNP.symm, hvV2.symm, hixnJ.symm⟩
-    exact h_lap V V2 I J NP hnbyz hpb hI_ng hJ_ng (h_prev_post h_neq) hlt
+-- #check_action propose          -- re-enable after restoring invariant tiers
+-- #check_invariants
 
 
-
-end IFPProtocolNTDPH
+end IFPProtocolV
