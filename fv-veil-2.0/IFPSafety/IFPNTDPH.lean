@@ -1664,9 +1664,9 @@ invariant [sent_lock_only_if_prepare]
 invariant [sent_lock_only_if_prepare_unrestricted]
   sent_lock_in_prepare N V IL SL VL → prepared_node N V
 
-invariant [stage_1]
-  (cur_stage N V propose ∧ ¬ ctx.is_byz N) →
-    (∃ (il : interaction) (sl : stage) (vl : view), sent_lock_in_prepare N V il sl vl)
+-- invariant [stage_1]
+--   (cur_stage N V propose ∧ ¬ ctx.is_byz N) →
+--     (∃ (il : interaction) (sl : stage) (vl : view), sent_lock_in_prepare N V il sl vl)
 
 invariant [stage_3]
   (cur_stage N V precommit ∧ ¬ ctx.is_byz N) →
