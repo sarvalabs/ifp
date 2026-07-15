@@ -1752,6 +1752,14 @@ invariant [decided_height_positive]
 invariant [prevoted_height_positive]
   (¬ ctx.is_byz N ∧ prevoted_node N V I ∧ I ≠ genesis) → height I ≥ 1
 
+-- By-construction bridge: precommit_backed is written ONLY by respond_precommit,
+-- which co-fires `decided n v ixn`, so every precommit-backed (V, I) is witnessed
+-- by an actual decision at V. Leaf (monotone; both sets only grow in lockstep).
+-- Supplies the `decided` witness that committed_implies_parent_committed needs
+-- when routing a fresh decision's parent through the precommit-QC chain.
+invariant [precommit_backed_implies_decided]
+  precommit_backed V I → ∃ (n : node), decided n V I
+
 
 set_option veil.smt.timeout 15000
 set_option maxHeartbeats 4000000
@@ -1881,7 +1889,22 @@ theorem respond_precommit_committed_descendant_height_bound (ρ : Type) (σ : Ty
           stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
   by
   veil_human
-  sorry
+  intro hv_nz hcv hcs x hop hpo hsm hmem hdec1 N A H h_byz h_cdah
+  -- pre-state committed_descendant_height_bound (conjunct #87)
+  have h_cb := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  -- ancestor_height_strict (conjunct #101)
+  have h_ahs := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  by_cases hN : n = N
+  · -- ghost marker for N is the just-written set: pre-existing or the new (ancestor A ixn, H = height ixn)
+    rw [if_pos hN] at h_cdah
+    rcases h_cdah with h_old | ⟨h_anc, h_H⟩
+    · rw [hN] at h_old
+      exact h_cb N A H h_byz h_old
+    · by_cases h_eq : A = ixn
+      · rw [h_eq]; omega
+      · have := h_ahs A ixn h_anc h_eq; omega
+  · rw [if_neg hN] at h_cdah
+    exact h_cb N A H h_byz h_cdah
 
 theorem respond_precommit_locked_descendant_height_bound (ρ : Type) (σ : Type) (view : Type)
     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
@@ -1925,7 +1948,21 @@ theorem respond_precommit_locked_descendant_height_bound (ρ : Type) (σ : Type)
           stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
   by
   veil_human
-  sorry
+  intro hv_nz hcv hcs x hop hpo hsm hmem hdec1 N A H h_byz h_ldah
+  -- pre-state locked_descendant_height_bound (conjunct #86)
+  have h_lb := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  -- ancestor_height_strict (conjunct #101)
+  have h_ahs := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  by_cases hN : n = N
+  · rw [if_pos hN] at h_ldah
+    rcases h_ldah with h_old | ⟨h_anc, h_H⟩
+    · rw [hN] at h_old
+      exact h_lb N A H h_byz h_old
+    · by_cases h_eq : A = ixn
+      · rw [h_eq]; omega
+      · have := h_ahs A ixn h_anc h_eq; omega
+  · rw [if_neg hN] at h_ldah
+    exact h_lb N A H h_byz h_ldah
 
 theorem respond_precommit_committed_descendant_at_height_bwd (ρ : Type) (σ : Type) (view : Type)
     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
@@ -1969,7 +2006,21 @@ theorem respond_precommit_committed_descendant_at_height_bwd (ρ : Type) (σ : T
           stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
   by
   veil_human
-  sorry
+  intro hv_nz hcv hcs x hop hpo hsm hmem hdec1 N A H h_byz h_cdah
+  -- pre-state committed_descendant_at_height_bwd (conjunct #85)
+  have h_bwd := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  by_cases hN : n = N
+  · rw [if_pos hN] at h_cdah
+    rcases h_cdah with h_old | ⟨h_anc, h_H⟩
+    · -- pre-existing ghost bit ⇒ pre-state witness, decided survives (monotone)
+      rw [hN] at h_old
+      obtain ⟨V, I, h_dec, h_anc2, h_ht⟩ := h_bwd N A H h_byz h_old
+      exact ⟨V, I, fun _ => h_dec, h_anc2, h_ht⟩
+    · -- new marker: the just-decided ixn is the witness (N = n, decided n v ixn)
+      exact ⟨v, ixn, fun hguard => absurd rfl (hguard hN rfl), h_anc, h_H.symm⟩
+  · rw [if_neg hN] at h_cdah
+    obtain ⟨V, I, h_dec, h_anc2, h_ht⟩ := h_bwd N A H h_byz h_cdah
+    exact ⟨V, I, fun _ => h_dec, h_anc2, h_ht⟩
 
 theorem respond_precommit_locked_descendant_at_height_bwd (ρ : Type) (σ : Type) (view : Type)
     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
@@ -2013,7 +2064,20 @@ theorem respond_precommit_locked_descendant_at_height_bwd (ρ : Type) (σ : Type
           stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
   by
   veil_human
-  sorry
+  intro hv_nz hcv hcs x hop hpo hsm hmem hdec1 N A H h_byz h_ldah
+  -- pre-state locked_descendant_at_height_bwd (conjunct #84)
+  have h_bwd := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  by_cases hN : n = N
+  · rw [if_pos hN] at h_ldah
+    rcases h_ldah with h_old | ⟨h_anc, h_H⟩
+    · rw [hN] at h_old
+      obtain ⟨I, ⟨S, V, h_lock⟩, h_anc2, h_ht⟩ := h_bwd N A H h_byz h_old
+      exact ⟨I, ⟨S, V, fun _ => h_lock⟩, h_anc2, h_ht⟩
+    · -- new marker: the just-created precommit lock on ixn at v is the witness
+      exact ⟨ixn, ⟨th.precommit, v, fun hguard => absurd rfl (hguard hN rfl rfl)⟩, h_anc, h_H.symm⟩
+  · rw [if_neg hN] at h_ldah
+    obtain ⟨I, ⟨S, V, h_lock⟩, h_anc2, h_ht⟩ := h_bwd N A H h_byz h_ldah
+    exact ⟨I, ⟨S, V, fun _ => h_lock⟩, h_anc2, h_ht⟩
 
 theorem respond_precommit_committed_implies_parent_committed (ρ : Type) (σ : Type) (view : Type)
     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
