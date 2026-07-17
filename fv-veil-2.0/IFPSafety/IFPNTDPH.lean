@@ -1781,6 +1781,22 @@ invariant [parent_implies_parent_precommit_backed]
   (parent I J ∧ I ≠ genesis) → ∃ (W : view), precommit_backed W I
 
 
+-- Bridge leaf (#181, keep LAST — active positional proofs reference ≤ #88; the
+-- commented respond_precommit drafts' #180 chains need a trailing `.1` if revived):
+-- a reproposal row carries the operator's frozen argmax cache. By construction
+-- at propose_repropose — its requires are literally this conclusion
+-- (prepares_collected, op_argmax_ixn op v ixn_max, op_argmax_stage op v s_max
+-- with s_max = prevote, op_argmax_view op v v_max). Preserved everywhere else:
+-- op_argmax_* is written only by collect_prepares under `require
+-- ¬ prepares_collected op v`, and the prepares_collected conjunct here rules
+-- that out at any reproposal row (prepares_collected is monotone and
+-- proposed_repropose has no other writer).
+invariant [reproposed_implies_argmax]
+  proposed_repropose OP V I →
+    (prepares_collected OP V ∧ op_argmax_ixn OP V I ∧
+     op_argmax_stage OP V prevote ∧ ∃ (VM : view), op_argmax_view OP V VM)
+
+
 set_option veil.smt.timeout 15000
 set_option maxHeartbeats 4000000
 #gen_spec
@@ -1789,6 +1805,239 @@ set_option veil.printCounterexamples true
 
 --  #check_action respond_prevote
 
+
+
+theorem respond_prevote_op_argmax_is_highest_lock (ρ : Type) (σ : Type) (view : Type)
+    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+    [χ_rep :
+      ∀ __veil_f,
+        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+    [χ_rep_lawful :
+      ∀ __veil_f,
+        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+    [respond_prevote_dec_0 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532375 view interaction χ node nodeset stage χ_rep]
+    [respond_prevote_dec_1 : delta% @IFPProtocolNTDPH._veil_dec_type_1532428 nodeset node ctx]
+    [respond_prevote_dec_2 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532505 view interaction nodeset χ node ctx stage χ_rep]
+    [respond_prevote_dec_3 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532590 node view interaction χ nodeset stage tot_view χ_rep] :
+    ∀ (n : node) (v : view) (ixn : interaction) (s : nodeset),
+      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+        (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_prevote_dec_0 respond_prevote_dec_1
+          respond_prevote_dec_2 respond_prevote_dec_3 n v ixn s)
+        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          ρ_sub)
+        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+        (@op_argmax_is_highest_lock ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+  by
+  veil_human
+  -- Operator-side mirror of respond_prevote_argmax_recvd_is_highest_lock.
+  -- op_argmax_* and sent_lock_in_prepare are frame-unchanged at respond_prevote;
+  -- only `locked` grows (guarded prevote-lock add), so the pre-state instance of
+  -- THIS invariant (hinv position 26) closes both `split_ifs` branches:
+  --   then (no lock written): `exact h_self`.
+  --   else (new lock added): witness lock discharges the new-tuple guard via `fun _ => h_lock`.
+  intro hv_nz hcv hcs x hop hpr hsm hmem
+  obtain ⟨_, _, _, _, _,
+          _, _, _, _, _,
+          _, _, _, _, _,
+          _, _, _, _, _,
+          _, _, _, _, _,
+          h_self, _⟩ := hinv
+  split_ifs
+  · exact h_self
+  · intro OP V IM SM VM h_byz h_ai h_as h_av
+    obtain ⟨M, h_sent, h_lock⟩ := h_self OP V IM SM VM h_byz h_ai h_as h_av
+    exact ⟨M, h_sent, fun _ => h_lock⟩
+
+
+
+-- theorem respond_prevote_argmax_recvd_is_highest_lock (ρ : Type) (σ : Type) (view : Type)
+--     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+--     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+--     [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+--     (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+--     (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+--     [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+--     [χ_rep :
+--       ∀ __veil_f,
+--         Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+--           (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+--     [χ_rep_lawful :
+--       ∀ __veil_f,
+--         Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+--           (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+--     [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+--     [respond_prevote_dec_0 :
+--       delta% @IFPProtocolNTDPH._veil_dec_type_1532375 view interaction χ node nodeset stage χ_rep]
+--     [respond_prevote_dec_1 : delta% @IFPProtocolNTDPH._veil_dec_type_1532428 nodeset node ctx]
+--     [respond_prevote_dec_2 :
+--       delta% @IFPProtocolNTDPH._veil_dec_type_1532505 view interaction nodeset χ node ctx stage χ_rep]
+--     [respond_prevote_dec_3 :
+--       delta% @IFPProtocolNTDPH._veil_dec_type_1532590 node view interaction χ nodeset stage tot_view χ_rep] :
+--     ∀ (n : node) (v : view) (ixn : interaction) (s : nodeset),
+--       Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+--         (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+--           interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+--           stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_prevote_dec_0 respond_prevote_dec_1
+--           respond_prevote_dec_2 respond_prevote_dec_3 n v ixn s)
+--         (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+--           interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+--           ρ_sub)
+--         (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+--           interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+--           χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+--         (@argmax_recvd_is_highest_lock ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+--           interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+--           stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+--   by
+--   veil_human
+--   -- veil_wp presents respond_prevote's guarded prevote-lock add as an `if ∃u… then A else
+--   -- B` in the GOAL, with the invariant's ∀-binders INSIDE each branch. argmax_recvd_* and
+--   -- sent_lock_in_prepare are frame-unchanged, so the pre-state instance of THIS invariant
+--   -- (hinv position 27) closes both branches:
+--   --   then (∃u holds ⇒ ¬(∃u) is false ⇒ no lock written ⇒ st.locked unchanged): `exact h_self`.
+--   --   else (new lock added): witness lock discharges the new-tuple guard via `fun _ => h_lock`.
+--   intro hv_nz hcv hcs x hop hpr hsm hmem
+--   obtain ⟨_, _, _, _, _,
+--           _, _, _, _, _,
+--           _, _, _, _, _,
+--           _, _, _, _, _,
+--           _, _, _, _, _,
+--           _, h_self, _⟩ := hinv
+--   split_ifs
+--   · exact h_self
+--   · intro N V IM SM VM h_byz h_ai h_as h_av
+--     obtain ⟨M, h_sent, h_lock⟩ := h_self N V IM SM VM h_byz h_ai h_as h_av
+--     exact ⟨M, h_sent, fun _ => h_lock⟩
+
+theorem respond_prevote_committed_descendant_at_height_implies_locked_descendant (ρ : Type) (σ : Type) (view : Type)
+    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+    [χ_rep :
+      ∀ __veil_f,
+        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+    [χ_rep_lawful :
+      ∀ __veil_f,
+        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+    [respond_prevote_dec_0 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532375 view interaction χ node nodeset stage χ_rep]
+    [respond_prevote_dec_1 : delta% @IFPProtocolNTDPH._veil_dec_type_1532428 nodeset node ctx]
+    [respond_prevote_dec_2 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532505 view interaction nodeset χ node ctx stage χ_rep]
+    [respond_prevote_dec_3 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532590 node view interaction χ nodeset stage tot_view χ_rep] :
+    ∀ (n : node) (v : view) (ixn : interaction) (s : nodeset),
+      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+        (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_prevote_dec_0 respond_prevote_dec_1
+          respond_prevote_dec_2 respond_prevote_dec_3 n v ixn s)
+        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          ρ_sub)
+        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+        (@committed_descendant_at_height_implies_locked_descendant ρ σ view view_dec_eq view_inhabited node node_dec_eq
+          node_inhabited interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited
+          stage stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+  by
+  veil_human
+  -- committed_descendant_at_height is frame-unchanged at respond_prevote; the
+  -- locked_descendant_at_height ghost only GROWS (row-rewrite
+  -- `decide (old ∨ (ancestor A ixn ∧ H = height ixn))` under the relock guard), so
+  -- the pre-state instance (hinv position 88) supplies the old bit in both branches.
+  intro hv_nz hcv hcs x hop hpr hsm hmem
+  have h_self := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  split_ifs
+  · exact h_self
+  · intro N A H h_cd
+    have h_pre := h_self N A H h_cd
+    by_cases hN : n = N
+    · rw [if_pos hN, hN]
+      exact Or.inl h_pre
+    · rw [if_neg hN]
+      exact h_pre
+
+theorem respond_prevote_reproposed_relock_at_view_implies_argmax (ρ : Type) (σ : Type) (view : Type)
+    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
+    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
+    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
+    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
+    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
+    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
+    [χ_rep :
+      ∀ __veil_f,
+        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
+    [χ_rep_lawful :
+      ∀ __veil_f,
+        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
+          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
+    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
+    [respond_prevote_dec_0 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532375 view interaction χ node nodeset stage χ_rep]
+    [respond_prevote_dec_1 : delta% @IFPProtocolNTDPH._veil_dec_type_1532428 nodeset node ctx]
+    [respond_prevote_dec_2 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532505 view interaction nodeset χ node ctx stage χ_rep]
+    [respond_prevote_dec_3 :
+      delta% @IFPProtocolNTDPH._veil_dec_type_1532590 node view interaction χ nodeset stage tot_view χ_rep] :
+    ∀ (n : node) (v : view) (ixn : interaction) (s : nodeset),
+      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
+        (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
+          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
+          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_prevote_dec_0 respond_prevote_dec_1
+          respond_prevote_dec_2 respond_prevote_dec_3 n v ixn s)
+        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          ρ_sub)
+        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
+          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
+          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
+        (@reproposed_relock_at_view_implies_argmax ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited
+          interaction interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage
+          stage_dec_eq stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
+  by
+  veil_human
+  -- The bridge leaf (reproposed_implies_argmax, #181 = last conjunct) closes both
+  -- split_ifs branches from the proposed_repropose antecedent alone:
+  -- proposed_repropose and the op_argmax_* cache are frame-unchanged at
+  -- respond_prevote, so the (possibly new) prevote-lock hypothesis is never
+  -- consulted. Goal conclusion is the exists_and_left-narrowed form
+  -- `op_argmax_ixn ∧ (∃ x, op_argmax_view x) ∧ op_argmax_stage`.
+  intro hv_nz hcv hcs x hop hpr hsm hmem
+  have h_bridge := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  split_ifs
+  · intro OP V I N h_pr _h_lk
+    obtain ⟨_h_pc, h_ai, h_as, VM, h_av⟩ := h_bridge OP V I h_pr
+    exact ⟨h_ai, ⟨VM, h_av⟩, h_as⟩
+  · intro OP V I N h_pr _h_lk
+    obtain ⟨_h_pc, h_ai, h_as, VM, h_av⟩ := h_bridge OP V I h_pr
+    exact ⟨h_ai, ⟨VM, h_av⟩, h_as⟩
 
 
 theorem propose_repropose_proposed_repropose_parent_matches_committed (ρ : Type) (σ : Type) (view : Type)
@@ -2428,65 +2677,6 @@ theorem respond_propose_repropose_locks_analog_precommit (ρ : Type) (σ : Type)
     exact h_lap V V2 I J NP hnbyz hpb hI_ng hJ_ng (h_prev_post h_neq) hlt
 
 
-theorem respond_prevote_argmax_recvd_is_highest_lock (ρ : Type) (σ : Type) (view : Type)
-    [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
-    [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
-    [interaction_dec_eq : DecidableEq.{1} interaction] [interaction_inhabited : Inhabited.{1} interaction]
-    (nodeset : Type) [nodeset_dec_eq : DecidableEq.{1} nodeset] [nodeset_inhabited : Inhabited.{1} nodeset]
-    (stage : Type) [stage_dec_eq : DecidableEq.{1} stage] [stage_inhabited : Inhabited.{1} stage]
-    [tot_view : TotalOrderWithMinimum view] [ctx : IFPByzQuorum node nodeset] (χ : State.Label → Type)
-    [χ_rep :
-      ∀ __veil_f,
-        Veil.FieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
-          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f)]
-    [χ_rep_lawful :
-      ∀ __veil_f,
-        Veil.LawfulFieldRepresentation (State.Label.toDomain view node interaction nodeset stage __veil_f)
-          (State.Label.toCodomain view node interaction nodeset stage __veil_f) (χ __veil_f) (χ_rep __veil_f)]
-    [σ_sub : IsSubStateOf (@State χ) σ] [ρ_sub : IsSubReaderOf (@Theory view node interaction nodeset stage) ρ]
-    [respond_prevote_dec_0 :
-      delta% @IFPProtocolNTDPH._veil_dec_type_1532375 view interaction χ node nodeset stage χ_rep]
-    [respond_prevote_dec_1 : delta% @IFPProtocolNTDPH._veil_dec_type_1532428 nodeset node ctx]
-    [respond_prevote_dec_2 :
-      delta% @IFPProtocolNTDPH._veil_dec_type_1532505 view interaction nodeset χ node ctx stage χ_rep]
-    [respond_prevote_dec_3 :
-      delta% @IFPProtocolNTDPH._veil_dec_type_1532590 node view interaction χ nodeset stage tot_view χ_rep] :
-    ∀ (n : node) (v : view) (ixn : interaction) (s : nodeset),
-      Veil.VeilM.meetsSpecificationIfSuccessfulAssuming
-        (@respond_prevote.ext ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
-          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
-          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub respond_prevote_dec_0 respond_prevote_dec_1
-          respond_prevote_dec_2 respond_prevote_dec_3 n v ixn s)
-        (@Assumptions ρ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
-          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
-          ρ_sub)
-        (@Invariants ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction interaction_dec_eq
-          interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq stage_inhabited tot_view ctx
-          χ χ_rep χ_rep_lawful σ_sub ρ_sub)
-        (@argmax_recvd_is_highest_lock ρ σ view view_dec_eq view_inhabited node node_dec_eq node_inhabited interaction
-          interaction_dec_eq interaction_inhabited nodeset nodeset_dec_eq nodeset_inhabited stage stage_dec_eq
-          stage_inhabited tot_view ctx χ χ_rep χ_rep_lawful σ_sub ρ_sub) :=
-  by
-  veil_human
-  -- veil_wp presents respond_prevote's guarded prevote-lock add as an `if ∃u… then A else
-  -- B` in the GOAL, with the invariant's ∀-binders INSIDE each branch. argmax_recvd_* and
-  -- sent_lock_in_prepare are frame-unchanged, so the pre-state instance of THIS invariant
-  -- (hinv position 27) closes both branches:
-  --   then (∃u holds ⇒ ¬(∃u) is false ⇒ no lock written ⇒ st.locked unchanged): `exact h_self`.
-  --   else (new lock added): witness lock discharges the new-tuple guard via `fun _ => h_lock`.
-  intro hv_nz hcv hcs x hop hpr hsm hmem
-  obtain ⟨_, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, _, _, _, _,
-          _, h_self, _⟩ := hinv
-  split_ifs
-  · exact h_self
-  · intro N V IM SM VM h_byz h_ai h_as h_av
-    obtain ⟨M, h_sent, h_lock⟩ := h_self N V IM SM VM h_byz h_ai h_as h_av
-    exact ⟨M, h_sent, fun _ => h_lock⟩
-
 theorem respond_prevote_recvd_collected_implies_bounded_prepare_quorum (ρ : Type) (σ : Type) (view : Type)
     [view_dec_eq : DecidableEq.{1} view] [view_inhabited : Inhabited.{1} view] (node : Type)
     [node_dec_eq : DecidableEq.{1} node] [node_inhabited : Inhabited.{1} node] (interaction : Type)
@@ -2909,8 +3099,8 @@ theorem respond_precommit_committed_implies_parent_committed (ρ : Type) (σ : T
   have h_gz := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
   -- precommit_backed_implies_decided bridge (#178)
   have h_pbd := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-  -- parent_implies_parent_precommit_backed (#180, last conjunct)
-  have h_pipb := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  -- parent_implies_parent_precommit_backed (#180; #181 reproposed_implies_argmax follows, hence trailing .1)
+  have h_pipb := hinv.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
   by_cases h_new : n = M ∧ v = V ∧ ixn = J
   · -- CASE B: the tuple (M, V, J) is the new decision (n, v, ixn).
     obtain ⟨hM, hV, hJ⟩ := h_new
