@@ -143,8 +143,13 @@ private def Module.assembleLabelCasesLemma [Monad m] [MonadQuotation m] [MonadEr
       $(← repeatedOr exs) :=
     by
       constructor
-      { rintro ⟨$(mkIdent `l), $(mkIdent `r)⟩; rcases $(mkIdent `l):ident <;> aesop }
-      { aesop })
+      -- Aesop's default search limits (depth 30, 200 rule applications) are
+      -- exceeded once the module has ~25+ actions: picking the k-th disjunct
+      -- takes k `Or.inr` applications, so the deepest cases become unprovable.
+      -- The goal space here is finite and directed, so unlimited search is safe.
+      { rintro ⟨$(mkIdent `l), $(mkIdent `r)⟩; rcases $(mkIdent `l):ident <;>
+          aesop (config := { maxRuleApplicationDepth := 0, maxRuleApplications := 0 }) }
+      { aesop (config := { maxRuleApplicationDepth := 0, maxRuleApplications := 0 }) })
   let derivedDef : DerivedDefinition := { name := labelCasesName, kind := .stateLike, params := #[], extraParams := #[], derivedFrom := {labelTypeName}, stx := casesLemma }
   let mod ← mod.registerDerivedDefinition derivedDef
   return (casesLemma, mod)

@@ -370,6 +370,14 @@ def elabTransition : CommandElab := fun stx => do
       let (changedFields, unchangedFields) := fields.partition changedFn
       for f in changedFields do
         mod.throwIfImmutable f (isTransition := true)
+      -- Immutable fields need no frame condition (they cannot change), and
+      -- their primed names are not bound by the state term template — framing
+      -- them would generate unknown identifiers (e.g. an immutable individual
+      -- `c` would yield an unbound `c'`).
+      let unchangedFields := unchangedFields.filter (fun f =>
+        match mod.signature.find? (·.name == f.getRoot) with
+        | some sc => !sc.isImmutable
+        | none => true)
       -- obtain the "real" transition term
       let trStx ← do
         let (th, st, st') := (mkIdent `th, mkIdent `st, mkIdent `st')
